@@ -48,9 +48,33 @@ dit au lieu de le masquer :
 | **Codex CLI / Desktop** | ✅ | ✅ | Rollouts `~/.codex/sessions`. Le serveur y écrit déjà un pourcentage d'utilisation par fenêtre. |
 | **API Anthropic** | ✅ | — | Rapports d'usage et de coût de l'organisation. Chiffres **facturés**, toutes machines confondues. Clé Admin requise. |
 | **API OpenAI** | ✅ | — | Rapport d'usage de l'organisation. Clé Admin requise. |
-| **Gemini CLI** | ❌ | ❌ | Ne journalise que les prompts en local, aucun compteur de tokens. Seule l'activité est remontée. |
+| **Gemini CLI** | ✅¹ | ❌ | Via sa télémétrie locale, une fois activée (voir plus bas). Sans elle, seule l'activité est remontée. |
 | **Grok CLI** | ❌ | ❌ | `unified.jsonl` ne contient que des diagnostics d'authentification, et `session_search.sqlite` n'est qu'un index plein-texte. Le binaire n'expose aucun endpoint d'usage. Seule l'activité est remontée. |
 | **Ollama** | ❌ | — | Renvoie `eval_count` dans chaque réponse mais n'en garde aucune trace. Seul l'état courant (modèles chargés) est lisible. |
+
+¹ **Activer les tokens Gemini.** Gemini CLI compte ses tokens depuis toujours,
+il ne les écrivait simplement pas. Sa télémétrie OpenTelemetry en mode `local`
+les dépose dans un fichier, **sans rien envoyer à Google**. Ajoutez dans
+`~/.gemini/settings.json` :
+
+```json
+"telemetry": {
+  "enabled": true,
+  "target": "local",
+  "outfile": "/Users/vous/.gemini/telemetry.log",
+  "logPrompts": false
+}
+```
+
+`logPrompts: false` est délibéré : on veut les compteurs, pas le contenu de vos
+conversations écrit en clair. TRACE lit ensuite le chemin déclaré dans vos
+réglages Gemini, sans en imposer un.
+
+Le format n'est pas du JSONL mais des objets JSON **indentés et concaténés** :
+le lecteur équilibre les accolades — en ignorant celles situées dans des
+chaînes — et s'arrête au dernier objet complet, le fichier étant écrit pendant
+qu'on le lit. À noter, ces enregistrements contiennent l'adresse e-mail du
+compte : TRACE ne la reprend nulle part, et un test le vérifie.
 
 Les modèles Grok sont malgré tout déclarés dans le registre, avec un tarif
 `null` — « coût inconnu », ce qui reste visible dans l'interface, et non
