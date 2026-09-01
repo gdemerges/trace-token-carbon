@@ -287,5 +287,5 @@ module.exports = {
   splitObjects,
   outfilePath,
   unavailableReason:
-    "Gemini CLI ne journalise pas ses tokens par défaut. Activez sa télémétrie locale (telemetry: target « local » + outfile dans ~/.gemini/settings.json) — les données restent sur votre machine.",
+    "Aucun client Gemini n'écrit ses tokens en local. Le CLI historique le permettait via sa télémétrie, mais il n'est plus supporté ; Antigravity, qui le remplace, ne persiste ni compteurs ni quota. Seule l'activité est remontée.",
 };
