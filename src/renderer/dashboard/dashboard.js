@@ -334,8 +334,16 @@ function render() {
   if (!snap) return;
   $('#updated').textContent = snap.staleError ? 'données figées' : ago(snap.generatedAt);
   for (const b of document.querySelectorAll('#range-seg button')) {
-    b.setAttribute('aria-pressed', String(Number(b.dataset.days) === days));
+    const v = b.dataset.days === 'all' ? 'all' : Number(b.dataset.days);
+    b.setAttribute('aria-pressed', String(v === days));
   }
+
+  // L'horizon est écrit noir sur blanc : une période longue qui semble vide
+  // doit s'expliquer par la source, pas laisser croire à une perte de données.
+  const h = snap.dataHorizon;
+  $('#horizon').textContent = h && h.from
+    ? `données depuis le ${new Date(h.from).toLocaleDateString('fr-FR')}`
+    : '';
 
   renderHero();
   const main = $('#main');
@@ -449,7 +457,7 @@ async function openSettings() {
 $('#range-seg').onclick = async (e) => {
   const b = e.target.closest('button');
   if (!b) return;
-  days = Number(b.dataset.days);
+  days = b.dataset.days === 'all' ? 'all' : Number(b.dataset.days);
   snap = await window.trace.getSnapshot({ days });
   render();
 };

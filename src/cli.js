@@ -41,14 +41,15 @@ function until(ts) {
 async function main() {
   const args = process.argv.slice(2);
   const json = args.includes('--json');
-  const daysArg = args.find((a) => /^--days=\d+$/.test(a));
-  const days = daysArg ? Number(daysArg.split('=')[1]) : 30;
+  const daysArg = args.find((a) => /^--days=(\d+|all)$/.test(a));
+  const raw = daysArg ? daysArg.split('=')[1] : '30';
+  const days = raw === 'all' ? 'all' : Number(raw);
 
   if (args.includes('--help') || args.includes('-h')) {
     console.log(`TRACE — consommation de tokens, limites et empreinte carbone
 
   trace              jauges et totaux sur 30 jours
-  trace --days=7     change la période
+  trace --days=7     change la période (--days=all remonte au plus loin)
   trace --json       sortie machine, pour un script ou une barre de statut
   trace --models     détail par modèle
   trace --sources    état des sources de données
@@ -63,7 +64,9 @@ async function main() {
   if (json) {
     console.log(JSON.stringify({
       generatedAt: snap.generatedAt,
-      days,
+      days: snap.range.days,
+      from: snap.range.from,
+      dataHorizon: snap.dataHorizon.from,
       tokens: t.tokens.total,
       requests: t.requests,
       costUSD: Number(t.costUSD.toFixed(4)),
@@ -97,7 +100,7 @@ async function main() {
 
   const c = t.carbon.gramsCO2e;
   console.log('');
-  console.log(` ${C.dim}${String(days).padStart(2)} jours${C.off}   ${C.amber}${tok(t.tokens.total).padEnd(9)}${C.off} ${C.dim}tokens${C.off}   ${C.blue}${usd(t.costUSD).padEnd(9)}${C.off} ${C.dim}coût${C.off}   ${C.teal}${co2(c.mid).padEnd(8)}${C.off} ${C.dim}CO₂e${C.off}`);
+  console.log(` ${C.dim}${String(snap.range.days).padStart(3)} jours${C.off}   ${C.amber}${tok(t.tokens.total).padEnd(9)}${C.off} ${C.dim}tokens${C.off}   ${C.blue}${usd(t.costUSD).padEnd(9)}${C.off} ${C.dim}coût${C.off}   ${C.teal}${co2(c.mid).padEnd(8)}${C.off} ${C.dim}CO₂e${C.off}`);
   console.log(` ${C.dim}          ${nf(t.requests).padEnd(9)} requêtes  ${usd(t.cacheSavingsUSD).padEnd(9)} évités   ${co2(c.min)} – ${co2(c.max)}${C.off}`);
 
   if (args.includes('--models')) {

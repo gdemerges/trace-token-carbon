@@ -37,7 +37,7 @@ const quotaKey = (q) => `${q.source}|${q.ts}|${q.type}|${q.resetsAt || ''}`;
  */
 async function refresh(options = {}) {
   const config = options.config || store.loadConfig();
-  const idx = options.index || store.loadIndex();
+  const idx = options.index || store.loadIndex(config);
 
   const collected = await collectAll(config, idx.collectors || {});
 
@@ -86,9 +86,22 @@ async function refresh(options = {}) {
 /** Construit l'instantané destiné à l'affichage (jauges + rapport). */
 function snapshot(state, options = {}) {
   const config = state.config || store.loadConfig();
-  const days = options.days || config.defaultRangeDays || 30;
   const to = options.to || Date.now();
-  const from = options.from || to - days * 86400000;
+
+  // Horizon réel : jusqu'où les sources permettent de remonter. Sans cette
+  // information, une période d'un an paraît vide « à cause de TRACE », alors
+  // que c'est Claude Code qui purge ses sessions au bout de deux mois.
+  const horizon = { from: null, bySource: {} };
+  for (const e of state.events || []) {
+    if (horizon.from == null || e.ts < horizon.from) horizon.from = e.ts;
+    const cur = horizon.bySource[e.source];
+    if (cur == null || e.ts < cur) horizon.bySource[e.source] = e.ts;
+  }
+
+  // `days: 'all'` remonte aussi loin que les données le permettent.
+  const all = options.days === 'all';
+  const days = all ? null : options.days || config.defaultRangeDays || 30;
+  const from = options.from || (all ? horizon.from || to - 30 * 86400000 : to - days * 86400000);
 
   const opts = {
     from,
@@ -136,7 +149,8 @@ function snapshot(state, options = {}) {
 
   return {
     generatedAt: Date.now(),
-    range: { from, to, days },
+    range: { from, to, days: days || Math.round((to - from) / 86400000), all },
+    dataHorizon: horizon,
     liveStatus,
     report: rep,
     gauges,

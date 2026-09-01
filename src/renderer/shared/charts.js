@@ -130,8 +130,11 @@ export function bars(container, data, opts = {}) {
   const h = opts.height || container.clientHeight || 120;
   const w = opts.width || container.clientWidth || 600;
   const max = Math.max(1, ...data.map((d) => d.value));
-  const gap = data.length > 40 ? 1 : 2;
-  const bw = Math.max(1, (w - gap * (data.length - 1)) / data.length);
+  // Au-delà de ~120 barres (un an de série journalière), l'écart entre barres
+  // mange toute la largeur : on le supprime plutôt que de rendre les barres
+  // plus fines qu'un pixel.
+  const gap = data.length > 120 ? 0 : data.length > 40 ? 1 : 2;
+  const bw = Math.max(0.7, (w - gap * (data.length - 1)) / data.length);
 
   const svg = el('svg', { viewBox: `0 0 ${w} ${h}`, width: '100%', height: '100%', preserveAspectRatio: 'none' });
   data.forEach((d, i) => {

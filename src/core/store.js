@@ -61,7 +61,10 @@ const DEFAULT_CONFIG = {
   trayMetric: 'session', // 'session' | 'tokens' | 'cost' | 'carbon'
   currency: 'USD',
   defaultRangeDays: 30,
-  retentionDays: 365,
+  // Assez large pour ne jamais élaguer avant les outils eux-mêmes : Claude
+  // Code purge ses sessions au bout de ~2 mois, Codex garde ses rollouts bien
+  // plus longtemps. C'est la source qui doit limiter l'historique, pas TRACE.
+  retentionDays: 1095,
   modelOverrides: {},
 };
 
@@ -88,9 +91,17 @@ function saveConfig(config) {
   return config;
 }
 
-function loadIndex() {
+function loadIndex(config = {}) {
   const idx = readJson(indexPath(), null);
   if (!idx || idx.version !== 2) return { version: 2, collectors: {}, events: [], quota: [] };
+
+  // Rétention élargie : l'historique élagué ne reviendra pas tout seul, les
+  // collecteurs reprenant leur lecture à un offset. On remet les offsets à
+  // zéro pour forcer une relecture complète — 380 ms sur 116 Mo, c'est indolore.
+  const want = Number.isFinite(config.retentionDays) ? config.retentionDays : DEFAULT_CONFIG.retentionDays;
+  if ((idx.retentionDays || 0) < want) {
+    return { version: 2, collectors: {}, events: idx.events || [], quota: idx.quota || [], reindexed: true };
+  }
   return idx;
 }
 
@@ -105,6 +116,9 @@ function saveIndex(idx, retentionDays) {
   const trimmed = {
     version: 2,
     updatedAt: Date.now(),
+    // Mémorisée pour détecter un élargissement : les événements déjà élagués
+    // ne reviendraient pas d'eux-mêmes, il faut relire les sources.
+    retentionDays,
     collectors: idx.collectors || {},
     events: (idx.events || []).filter((e) => e.ts >= cutoff),
     quota: (idx.quota || []).filter((q) => q.ts >= cutoff),

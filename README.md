@@ -195,6 +195,36 @@ octets, et les lignes incomplètes — Claude Code écrit pendant qu'on lit — 
 reprises au passage suivant. Sur 116 Mo de journaux : **291 ms à froid, 18 ms
 ensuite**.
 
+## Jusqu'où remonte l'historique
+
+Périodes disponibles : 24 h, 7 j, 30 j, 90 j, 1 an, et **Tout** — qui remonte
+aussi loin que les sources le permettent. La date du plus ancien événement
+indexé est affichée à côté du sélecteur : une période longue qui paraît vide
+s'explique alors par la source, et non par une perte de données.
+
+Car la limite ne vient pas de TRACE, qui garde trois ans, mais des outils :
+
+- **Claude Code** purge ses sessions au bout de ~2 mois. Rien avant n'est
+  récupérable — `stats-cache.json` conserve une activité plus ancienne, mais
+  sans aucun compteur de tokens.
+- **Codex** garde ses rollouts bien plus longtemps ; ses plus anciens fichiers
+  (format `.json`, avant 2026) ne contiennent en revanche aucun compteur.
+
+Élargir la rétention dans la configuration déclenche automatiquement une
+relecture complète des sources : l'historique déjà élagué ne reviendrait pas
+tout seul, les collecteurs reprenant leur lecture à un offset.
+
+## Recoupement : pourquoi les chiffres diffèrent de `stats-cache.json`
+
+Claude Code tient son propre compteur dans `~/.claude/stats-cache.json`. Il
+annonce **1,69× le total de TRACE**, de façon constante jour après jour.
+
+Ce n'est pas TRACE qui sous-compte : ce cache additionne les réécritures de
+streaming. Vérification directe sur les mêmes journaux — 2,33 Md de tokens
+sans déduplication, 1,38 Md avec, soit un rapport de 1,69× qui correspond
+exactement à l'écart observé. Un même message écrit trois fois pendant sa
+génération n'est facturé qu'une fois.
+
 ## Logos de fournisseurs
 
 Déposez un fichier dans `logo/` (PNG ou WebP, fond transparent) puis lancez
