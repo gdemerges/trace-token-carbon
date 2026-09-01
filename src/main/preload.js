@@ -18,6 +18,7 @@ contextBridge.exposeInMainWorld('trace', {
   openDashboard: () => ipcRenderer.invoke('trace:dashboard:open'),
   closePopover: () => ipcRenderer.invoke('trace:popover:close'),
   exportCsv: (options) => ipcRenderer.invoke('trace:export', options),
+  shortcutStatus: () => ipcRenderer.invoke('trace:shortcut:status'),
   openExternal: (url) => ipcRenderer.invoke('trace:external', url),
   quit: () => ipcRenderer.invoke('trace:quit'),
   onUpdate: (cb) => {

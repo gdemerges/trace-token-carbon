@@ -195,4 +195,59 @@ function report(events, opts = {}) {
   };
 }
 
-module.exports = { report, groupBy, dailySeries, hourHistogram };
+/**
+ * Lignes d'export, en format long : une ligne par (jour, source, modèle,
+ * projet), toutes colonnes renseignées.
+ *
+ * La première version mélangeait deux tables dans un même fichier — des lignes
+ * journalières dont huit colonnes sur treize restaient vides, suivies de
+ * lignes « TOTAL » par modèle. Illisible par un tableur, et inexploitable en
+ * tableau croisé. Un format long se pivote, se filtre et se somme sans
+ * retraitement.
+ */
+function exportRows(events, opts = {}) {
+  const to = opts.to || Date.now();
+  const from = opts.from || to - 30 * 86400000;
+  const inRange = events.filter((e) => e.ts >= from && e.ts <= to);
+
+  const groups = groupBy(
+    inRange,
+    (e) => `${dayKey(e.ts)}\u0000${e.source}\u0000${e.model}\u0000${e.project || ''}`,
+    opts
+  );
+
+  const rows = [[
+    'date', 'source', 'modele', 'fournisseur', 'projet',
+    'requetes', 'tokens_entree', 'tokens_sortie', 'cache_ecrit', 'cache_lu', 'tokens_total',
+    'cout_usd', 'cout_sans_cache_usd', 'gco2e_min', 'gco2e_median', 'gco2e_max', 'energie_wh',
+  ]];
+
+  for (const g of groups) {
+    const [date, source, model, project] = g.key.split('\u0000');
+    const m = g.models[0];
+    rows.push([
+      date, source, m ? m.label : model, m ? m.provider : '', project,
+      g.requests,
+      g.tokens.input, g.tokens.output, g.tokens.cacheWrite, g.tokens.cacheRead, g.tokens.total,
+      g.costUnknown ? '' : g.costUSD.toFixed(6),
+      g.costWithoutCacheUSD.toFixed(6),
+      g.carbon.gramsCO2e.min.toFixed(3),
+      g.carbon.gramsCO2e.mid.toFixed(3),
+      g.carbon.gramsCO2e.max.toFixed(3),
+      g.carbon.energyWh.mid.toFixed(3),
+    ]);
+  }
+
+  // Ordre chronologique puis décroissant en volume : lisible tel quel.
+  const body = rows.slice(1).sort((a, b) => String(a[0]).localeCompare(String(b[0])) || b[10] - a[10]);
+  return [rows[0], ...body];
+}
+
+/** Sérialise en CSV, avec échappement RFC 4180. */
+function toCsv(rows) {
+  return rows
+    .map((r) => r.map((c) => (/[",;\n\r]/.test(String(c)) ? `"${String(c).replace(/"/g, '""')}"` : c)).join(','))
+    .join('\n');
+}
+
+module.exports = { report, groupBy, dailySeries, hourHistogram, exportRows, toCsv };

@@ -1,7 +1,7 @@
 'use strict';
 
 const { collectAll } = require('./collectors');
-const { report } = require('./aggregate');
+const { report, exportRows, toCsv } = require('./aggregate');
 const { computeGauges, applyUserCalibration } = require('./ratelimits');
 const store = require('./store');
 const carbon = require('./carbon');
@@ -176,4 +176,4 @@ function calibrate(state, gaugeId, percent) {
   return updated;
 }
 
-module.exports = { refresh, snapshot, store, carbon, resolveModel, report, computeGauges, calibrate };
+module.exports = { refresh, snapshot, store, carbon, resolveModel, report, computeGauges, calibrate, exportRows, toCsv };

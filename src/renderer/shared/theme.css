@@ -23,7 +23,10 @@
 
   --ink: #e9e7e2;
   --ink-dim: #939aa6;
-  --ink-faint: #626a77;
+  /* Mesuré à 3,06:1 sur le fond des panneaux, insuffisant pour du texte de
+     10 px. Relevé à ~4,6:1 : les métadonnées restent secondaires à l'œil mais
+     redeviennent lisibles. */
+  --ink-faint: #7b8492;
 
   /* Les trois grandeurs mesurées */
   --tokens: #ffb454;
@@ -57,7 +60,7 @@
 
     --ink: #12151a;
     --ink-dim: #4a515c;
-    --ink-faint: #757d89;
+    --ink-faint: #656d79; /* 3,98:1 -> ~5,2:1 */
 
     --tokens: #a04e00;
     --tokens-soft: rgba(160, 78, 0, 0.14);

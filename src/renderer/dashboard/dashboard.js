@@ -382,6 +382,7 @@ async function openSettings() {
       <label for="sc">Raccourci des jauges</label>
       <div class="help">Ouvre le panneau depuis n'importe quelle application.</div>
       <input type="text" id="sc" value="${esc(cfg.shortcut)}" />
+      <div class="msg" id="sc-msg"></div>
     </div>
     <div class="field">
       <label for="grid">Mix électrique du calcul carbone</label>
@@ -426,33 +427,82 @@ async function openSettings() {
       <button class="btn" id="quit">Quitter TRACE</button>
     </div>`;
 
-  const saveKey = async (provider, inputId, msgId) => {
-    const input = document.getElementById(inputId);
-    const msg = document.getElementById(msgId);
-    const res = await window.trace.setKey(provider, input.value.trim() || null);
-    msg.textContent = res.ok ? 'Clé enregistrée.' : res.error;
-    msg.className = `msg ${res.ok ? 'c-carbon' : 'c-hot'}`;
-    if (res.ok) input.value = '';
-  };
-  $('#save-ak').onclick = () => saveKey('anthropic', 'ak', 'ak-msg');
-  $('#save-ok').onclick = () => saveKey('openai', 'ok', 'ok-msg');
+  const saveKey = (btn, provider, inputId, msgId) =>
+    withPending(btn, 'Envoi…', async () => {
+      const input = document.getElementById(inputId);
+      const msg = document.getElementById(msgId);
+      const res = await window.trace.setKey(provider, input.value.trim() || null);
+      msg.textContent = res.ok ? 'Clé enregistrée et chiffrée par le trousseau.' : res.error;
+      msg.className = `msg ${res.ok ? 'c-carbon' : 'c-hot'}`;
+      if (res.ok) input.value = '';
+    });
+  $('#save-ak').onclick = (e) => saveKey(e.currentTarget, 'anthropic', 'ak', 'ak-msg');
+  $('#save-ok').onclick = (e) => saveKey(e.currentTarget, 'openai', 'ok', 'ok-msg');
   $('#quit').onclick = () => window.trace.quit();
 
-  $('#save-settings').onclick = async () => {
-    await window.trace.setConfig({
-      shortcut: $('#sc').value.trim(),
-      carbon: { ...(cfg.carbon || {}), gridKey: $('#grid').value },
-      trayMetric: $('#tray').value,
-      refreshIntervalSec: Number($('#interval').value) || 60,
-      launchAtLogin: $('#login').checked,
+  $('#save-settings').onclick = (e) =>
+    withPending(e.currentTarget, 'Application…', async () => {
+      const res = await window.trace.setConfig({
+        shortcut: $('#sc').value.trim(),
+        carbon: { ...(cfg.carbon || {}), gridKey: $('#grid').value },
+        trayMetric: $('#tray').value,
+        refreshIntervalSec: Number($('#interval').value) || 60,
+        launchAtLogin: $('#login').checked,
+      });
+      // Un raccourci refusé — déjà pris par une autre application, ou de
+      // syntaxe invalide — partait auparavant dans un `console.warn` que
+      // personne ne lit, laissant un raccourci silencieusement inopérant.
+      if (res && res.shortcutOk === false) {
+        const msg = $('#sc-msg');
+        msg.textContent = 'Raccourci refusé : déjà utilisé par une autre application, ou syntaxe invalide.';
+        msg.className = 'msg c-hot';
+        return;
+      }
+      $('#settings').close();
+      toast('Réglages appliqués');
     });
-    $('#settings').close();
-  };
 
   $('#settings').showModal();
 }
 
 // ---------------------------------------------------------------------------
+
+/**
+ * Retour d'action.
+ *
+ * Plusieurs actions étaient totalement muettes — l'export notamment ne disait
+ * ni qu'il travaillait, ni où le fichier avait atterri, ni qu'il avait échoué.
+ * Une action sans réponse est indiscernable d'une action cassée.
+ */
+let toastTimer = null;
+function toast(message, kind = 'ok') {
+  let el = $('#toast');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'toast';
+    document.body.appendChild(el);
+  }
+  el.textContent = message;
+  el.className = `toast ${kind} shown`;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('shown'), kind === 'error' ? 7000 : 4000);
+}
+
+/** Exécute une action en désactivant son bouton le temps qu'elle dure. */
+async function withPending(button, label, fn) {
+  if (button.disabled) return;
+  const previous = button.textContent;
+  button.disabled = true;
+  button.classList.add('pending');
+  if (label) button.textContent = label;
+  try {
+    return await fn();
+  } finally {
+    button.disabled = false;
+    button.classList.remove('pending');
+    if (label) button.textContent = previous;
+  }
+}
 
 $('#range-seg').onclick = async (e) => {
   const b = e.target.closest('button');
@@ -461,13 +511,37 @@ $('#range-seg').onclick = async (e) => {
   snap = await window.trace.getSnapshot({ days });
   render();
 };
-$('#refresh').onclick = async () => { snap = await window.trace.refresh(); render(); };
-$('#export').onclick = () => window.trace.exportCsv({ days });
+$('#refresh').onclick = (e) =>
+  withPending(e.currentTarget, null, async () => {
+    snap = await window.trace.refresh();
+    render();
+    const ls = snap.liveStatus;
+    if (ls && !ls.ok) toast(`Relevé Claude indisponible — ${ls.error}`, 'error');
+  });
+
+$('#export').onclick = (e) =>
+  withPending(e.currentTarget, null, async () => {
+    const res = await window.trace.exportCsv({ days });
+    if (res.canceled) return;
+    if (res.ok) toast(`${nf(res.rows)} lignes exportées vers ${res.filePath.split('/').pop()}`);
+    else toast(res.error, 'error');
+  });
 $('#settings-btn').onclick = openSettings;
 $('#close-settings').onclick = () => $('#settings').close();
 
 window.trace.onUpdate((payload) => { snap = payload; render(); });
-window.addEventListener('resize', () => { if (snap) render(); });
+// Un redimensionnement émet des dizaines d'événements par seconde ; chacun
+// déclenchait un rendu complet avec régénération de tous les SVG. On coalesce
+// sur une frame d'affichage : au plus un rendu par rafraîchissement écran.
+let resizePending = false;
+window.addEventListener('resize', () => {
+  if (resizePending || !snap) return;
+  resizePending = true;
+  requestAnimationFrame(() => {
+    resizePending = false;
+    render();
+  });
+});
 
 (async () => {
   snap = await window.trace.getSnapshot({ days });

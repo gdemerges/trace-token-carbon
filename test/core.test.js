@@ -10,7 +10,7 @@ const { resolveModel, CACHE_MULTIPLIERS } = require('../src/core/models');
 const { cost, costWithoutCache } = require('../src/core/pricing');
 const carbon = require('../src/core/carbon');
 const { computeGauges, weightedUsage, applyUserCalibration, durationLabel } = require('../src/core/ratelimits');
-const { report } = require('../src/core/aggregate');
+const { report, exportRows, toCsv } = require('../src/core/aggregate');
 const claudeCode = require('../src/core/collectors/claude-code');
 const codex = require('../src/core/collectors/codex-cli');
 
@@ -610,4 +610,41 @@ test('limites : des fenêtres relevées ensemble sont toutes conservées', () =>
   ];
   const codex = computeGauges([], quota, {}, now).filter((g) => g.id.startsWith('codex-'));
   assert.equal(codex.length, 2);
+});
+
+// ---------------------------------------------------------------------------
+test('export : format long, une ligne par jour/source/modèle/projet', () => {
+  const now = Date.now();
+  const mk = (model, project, tokens) => ({
+    ts: now - 3600000, source: 'claude-code', model, project, session: 's', requests: 1,
+    tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cacheWrite5m: 0, cacheWrite1h: 0, thinking: 0, ...tokens,
+      total: (tokens.input || 0) + (tokens.output || 0) + (tokens.cacheRead || 0) + (tokens.cacheWrite || 0) },
+  });
+  const rows = exportRows([mk('claude-opus-5', 'a', { output: 100 }), mk('claude-sonnet-5', 'b', { output: 50 })],
+    { from: now - 86400000, to: now });
+
+  assert.equal(rows.length, 3, 'un en-tête et deux lignes');
+  assert.equal(rows[0].length, 17);
+  // Régression : la première version laissait huit colonnes sur treize vides
+  // et mélangeait des lignes journalières avec des lignes « TOTAL ».
+  for (const r of rows.slice(1)) {
+    assert.equal(r.length, rows[0].length, 'toutes les lignes ont le même nombre de colonnes');
+    assert.ok(r.every((c) => c !== '' && c != null), `cellule vide dans ${JSON.stringify(r)}`);
+  }
+  assert.ok(!rows.some((r) => r[0] === 'TOTAL'), 'aucune ligne de total mélangée aux données');
+});
+
+test('export : le CSV échappe les séparateurs et les guillemets', () => {
+  const csv = toCsv([['a', 'b'], ['virgule, ici', 'guillemet " ici']]);
+  const lines = csv.split('\n');
+  assert.equal(lines[1], '"virgule, ici","guillemet "" ici"');
+});
+
+test('export : hors période, aucune ligne de données', () => {
+  const now = Date.now();
+  const old = {
+    ts: now - 90 * 86400000, source: 'claude-code', model: 'claude-opus-5', project: 'p', session: 's', requests: 1,
+    tokens: { input: 0, output: 10, cacheRead: 0, cacheWrite: 0, cacheWrite5m: 0, cacheWrite1h: 0, thinking: 0, total: 10 },
+  };
+  assert.equal(exportRows([old], { from: now - 86400000, to: now }).length, 1);
 });

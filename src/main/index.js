@@ -19,6 +19,18 @@ let state = null;
 let snap = null;
 let refreshing = false;
 
+/**
+ * Période demandée par chaque fenêtre.
+ *
+ * Le popover et le tableau de bord regardent des périodes différentes, et le
+ * tableau de bord change la sienne à la demande. Sans cette mémoire, le
+ * rafraîchissement de fond recalculait un instantané avec la période PAR
+ * DÉFAUT et le diffusait à tout le monde : une vue « 1 an » repassait
+ * silencieusement à 30 jours au bout d'une minute, le sélecteur continuant
+ * d'afficher « 1 an ». L'interface mentait sur ce qu'elle montrait.
+ */
+const viewRange = new Map(); // webContents.id -> période demandée
+
 // ---------------------------------------------------------------------------
 // Configuration & secrets
 // ---------------------------------------------------------------------------
@@ -93,9 +105,13 @@ async function refresh(reason = 'timer') {
   }
 }
 
+/** Chaque fenêtre reçoit un instantané calculé pour SA période. */
 function broadcast() {
   for (const w of [popover, dashboard]) {
-    if (w && !w.isDestroyed()) w.webContents.send('trace:update', snap);
+    if (!w || w.isDestroyed()) continue;
+    const days = viewRange.get(w.webContents.id);
+    const payload = state && days != null && days !== snap.range.days ? core.snapshot(state, { days }) : snap;
+    w.webContents.send('trace:update', payload);
   }
 }
 
@@ -221,7 +237,10 @@ function createPopover() {
   popover.on('blur', () => {
     if (!isDev && popover && !popover.webContents.isDevToolsOpened()) popover.hide();
   });
-  popover.on('closed', () => (popover = null));
+  popover.on('closed', () => {
+    if (popover) viewRange.delete(popover.webContents.id);
+    popover = null;
+  });
 }
 
 /** Positionne le popover sous l'icône de la barre d'état, en restant à l'écran. */
@@ -303,6 +322,7 @@ function openDashboard() {
     dashboard.setAlwaysOnTop(true, 'floating');
   }
   dashboard.on('closed', () => {
+    if (dashboard) viewRange.delete(dashboard.webContents.id);
     dashboard = null;
     syncDockVisibility();
   });
@@ -316,8 +336,13 @@ function registerShortcut() {
   globalShortcut.unregisterAll();
   const cfg = core.store.loadConfig();
   const accel = cfg.shortcut || 'CommandOrControl+Alt+T';
-  const ok = globalShortcut.register(accel, togglePopover);
-  if (!ok) console.warn(`[trace] raccourci « ${accel} » déjà pris par une autre application`);
+  let ok = false;
+  try {
+    ok = globalShortcut.register(accel, togglePopover);
+  } catch {
+    ok = false; // accélérateur syntaxiquement invalide
+  }
+  if (!ok) console.warn(`[trace] raccourci « ${accel} » refusé (déjà pris, ou syntaxe invalide)`);
   return ok;
 }
 
@@ -326,16 +351,21 @@ function registerShortcut() {
 // ---------------------------------------------------------------------------
 
 function registerIpc() {
-  ipcMain.handle('trace:snapshot', async (_e, options = {}) => {
+  ipcMain.handle('trace:snapshot', async (e, options = {}) => {
     if (!snap) await refresh('demande initiale');
-    if (options.days && state) snap = core.snapshot(state, { days: options.days });
-    return snap;
+    // La période demandée est mémorisée pour cette fenêtre : les diffusions
+    // suivantes la respecteront au lieu de retomber sur la valeur par défaut.
+    if (options.days != null) viewRange.set(e.sender.id, options.days);
+    const days = viewRange.get(e.sender.id);
+    return state && days != null && days !== snap.range.days ? core.snapshot(state, { days }) : snap;
   });
-  ipcMain.handle('trace:refresh', () => {
+  ipcMain.handle('trace:refresh', async (e) => {
     // Une demande explicite passe outre la cadence d'interrogation : c'est
     // précisément ce qu'attend quelqu'un qui clique sur « Actualiser ».
     require('../core/collectors/anthropic-oauth').forceRefresh();
-    return refresh('manuel');
+    await refresh('manuel');
+    const days = viewRange.get(e.sender.id);
+    return state && days != null && days !== snap.range.days ? core.snapshot(state, { days }) : snap;
   });
   ipcMain.handle('trace:config:get', () => {
     const cfg = core.store.loadConfig();
@@ -351,7 +381,8 @@ function registerIpc() {
     const cfg = { ...core.store.loadConfig(), ...patch };
     delete cfg.anthropicAdminKey_display;
     core.store.saveConfig(cfg);
-    if (patch.shortcut) registerShortcut();
+    let shortcutOk = true;
+    if (patch.shortcut) shortcutOk = registerShortcut();
     if (patch.refreshIntervalSec) scheduleRefresh();
     if (patch.launchAtLogin != null && process.platform !== 'linux') {
       app.setLoginItemSettings({ openAtLogin: !!patch.launchAtLogin });
@@ -388,30 +419,39 @@ function registerIpc() {
     if (/^https?:\/\//.test(url)) shell.openExternal(url);
   });
   ipcMain.handle('trace:quit', () => app.quit());
-  ipcMain.handle('trace:export', async (_e, options = {}) => {
-    if (!snap) return { ok: false, error: 'Aucune donnée à exporter' };
+  ipcMain.handle('trace:export', async (e, options = {}) => {
+    if (!state) return { ok: false, error: 'Aucune donnée à exporter' };
+
+    const days = options.days != null ? options.days : viewRange.get(e.sender.id);
+    const view = core.snapshot(state, { days });
+    const rows = core.exportRows(state.events, {
+      from: view.range.from,
+      to: view.range.to,
+      carbon: (view.config.carbon || {}),
+    });
+    if (rows.length <= 1) return { ok: false, error: 'Aucune consommation sur la période sélectionnée' };
+
+    const stamp = new Date().toISOString().slice(0, 10);
     const { canceled, filePath } = await dialog.showSaveDialog({
       title: 'Exporter la consommation',
-      defaultPath: `trace-${new Date().toISOString().slice(0, 10)}.csv`,
+      defaultPath: `trace-${stamp}-${view.range.days}j.csv`,
       filters: [{ name: 'CSV', extensions: ['csv'] }],
     });
     if (canceled || !filePath) return { ok: false, canceled: true };
 
-    const rows = [['date', 'modele', 'fournisseur', 'source', 'projet', 'entree', 'sortie', 'cache_ecrit', 'cache_lu', 'total', 'cout_usd', 'gco2e_min', 'gco2e_max']];
-    for (const day of snap.report.daily) {
-      for (const m of day.models) rows.push([day.date, m.label, '', '', '', '', '', '', '', m.total, '', '', '']);
+    try {
+      // BOM UTF-8 : sans lui, Excel sous Windows massacre les accents.
+      fs.writeFileSync(filePath, '\ufeff' + core.toCsv(rows), 'utf8');
+    } catch (err) {
+      return { ok: false, error: `Écriture impossible : ${err.message}` };
     }
-    for (const g of snap.report.byModel) {
-      rows.push([
-        'TOTAL', g.models[0].label, g.models[0].provider, '', '',
-        g.tokens.input, g.tokens.output, g.tokens.cacheWrite, g.tokens.cacheRead, g.tokens.total,
-        g.costUSD.toFixed(4), g.carbon.gramsCO2e.min.toFixed(1), g.carbon.gramsCO2e.max.toFixed(1),
-      ]);
-    }
-    const csv = rows.map((r) => r.map((c) => (/[",;\n]/.test(String(c)) ? `"${String(c).replace(/"/g, '""')}"` : c)).join(',')).join('\n');
-    fs.writeFileSync(filePath, '﻿' + csv, 'utf8'); // BOM : Excel lit correctement les accents
-    return { ok: true, filePath };
+    return { ok: true, filePath, rows: rows.length - 1 };
   });
+
+  ipcMain.handle('trace:shortcut:status', () => ({
+    accelerator: core.store.loadConfig().shortcut,
+    registered: globalShortcut.isRegistered(core.store.loadConfig().shortcut || ''),
+  }));
 }
 
 /**

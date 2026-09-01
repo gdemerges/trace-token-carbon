@@ -144,6 +144,25 @@
   .btn.primary { background: var(--tokens-soft); border-color: transparent; color: var(--tokens); font-weight: 600; }
   .msg { font-size: 11px; margin-top: 7px; }
 
+  /* Retour d'action : discret, en bas à droite, jamais bloquant. */
+  .toast { position: fixed; right: 22px; bottom: 22px; z-index: 40; max-width: 380px;
+           padding: 10px 14px; border-radius: 7px; font-size: 12px; line-height: 1.45;
+           background: var(--panel); border: 1px solid var(--rule);
+           box-shadow: 0 10px 30px rgba(0,0,0,.3);
+           opacity: 0; transform: translateY(6px); pointer-events: none;
+           transition: opacity 160ms ease, transform 160ms ease; }
+  .toast.shown { opacity: 1; transform: none; }
+  .toast.error { border-color: var(--hot); background: var(--hot-soft); }
+  @media (prefers-reduced-motion: reduce) { .toast { transition: none; } }
+
+  button[disabled] { opacity: .5; cursor: default; }
+  .icon-btn.pending { position: relative; color: transparent; }
+  .icon-btn.pending::after { content: ''; position: absolute; inset: 7px;
+    border: 1.5px solid var(--rule); border-top-color: var(--tokens);
+    border-radius: 50%; animation: spin 700ms linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .icon-btn.pending::after { animation: none; } }
+
   .empty-state { grid-column: span 12; text-align: center; padding: 70px 20px; }
   .empty-state h2 { font-size: 15px; margin: 0 0 7px; }
 </style>
