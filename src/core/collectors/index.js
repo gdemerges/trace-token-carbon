@@ -3,12 +3,13 @@
 const claudeCode = require('./claude-code');
 const codexCli = require('./codex-cli');
 const geminiCli = require('./gemini-cli');
+const grokCli = require('./grok-cli');
 const ollama = require('./ollama');
 const anthropicOauth = require('./anthropic-oauth');
 const anthropicApi = require('./anthropic-api');
 const openaiApi = require('./openai-api');
 
-const ALL = [claudeCode, anthropicOauth, codexCli, geminiCli, ollama, anthropicApi, openaiApi];
+const ALL = [claudeCode, anthropicOauth, codexCli, geminiCli, grokCli, ollama, anthropicApi, openaiApi];
 
 /**
  * Exécute tous les collecteurs activés et fusionne leurs résultats.

@@ -80,6 +80,13 @@ function durationLabel(hours) {
  */
 const OBSOLETE_AFTER_MS = 24 * 3600 * 1000;
 
+/**
+ * Durée au-delà de laquelle un relevé serveur cesse d'être présenté comme du
+ * direct. Elle suit la cadence d'interrogation : à un relevé tous les quarts
+ * d'heure, exiger moins marquerait « daté » un relevé parfaitement normal.
+ */
+const LIVE_FRESH_MS = 45 * 60 * 1000;
+
 /** Somme des tokens et requêtes sur un intervalle. */
 function consumptionBetween(events, from, to, filter) {
   const tokens = emptyTokens();
@@ -186,8 +193,9 @@ function computeGauges(events, quota, config = {}, now = Date.now()) {
       // Un relevé n'est « en direct » que tant qu'il est frais. Passé ce
       // délai on l'affiche encore — c'est la meilleure information
       // disponible — mais en disant son âge, jamais comme s'il venait
-      // d'arriver.
-      const LIVE_FRESH_MS = 20 * 60 * 1000;
+      // d'arriver. Le seuil suit la cadence d'interrogation : à un relevé
+      // tous les quarts d'heure, exiger moins de 20 minutes marquerait
+      // « daté » un relevé parfaitement normal.
       const live = quota
         .filter((q) => q.source === 'anthropic-oauth' && q.type === w.id && q.usedPercent != null)
         .sort((a, b) => b.ts - a.ts)[0];
@@ -367,6 +375,7 @@ function applyUserCalibration(config, events, quota, gaugeId, percent, now = Dat
 module.exports = {
   computeGauges,
   durationLabel,
+  LIVE_FRESH_MS,
   weightedUsage,
   consumptionBetween,
   applyUserCalibration,

@@ -47,6 +47,12 @@ const MARKS = {
           fill="none" stroke="currentColor" stroke-width="${s * 0.11}"/>
     <rect x="${s * 0.38}" y="${s * 0.38}" width="${s * 0.24}" height="${s * 0.24}" rx="${s * 0.05}" fill="currentColor"/>`,
 
+  // xAI : la marque est un monogramme anguleux ; on en garde la géométrie.
+  xai: (s) => `
+    <path d="M${s * 0.12} ${s * 0.88} L${s * 0.88} ${s * 0.12}" stroke="currentColor" stroke-width="${s * 0.14}" stroke-linecap="round"/>
+    <path d="M${s * 0.12} ${s * 0.12} L${s * 0.44} ${s * 0.46}" stroke="currentColor" stroke-width="${s * 0.14}" stroke-linecap="round"/>
+    <path d="M${s * 0.56} ${s * 0.58} L${s * 0.88} ${s * 0.88}" stroke="currentColor" stroke-width="${s * 0.14}" stroke-linecap="round"/>`,
+
   unknown: (s) => `
     <circle cx="${s * 0.5}" cy="${s * 0.5}" r="${s * 0.3}" fill="none"
             stroke="currentColor" stroke-width="${s * 0.11}" stroke-dasharray="${s * 0.16} ${s * 0.12}"/>`,
@@ -68,6 +74,7 @@ export const PROVIDER_COLOR = {
   anthropic: '#e0863c',
   openai: '#9aa4b2',
   google: '#b79bff',
+  xai: '#c2c8d2',
   local: '#f0a3bd',
   unknown: 'var(--ink-faint)',
 };
@@ -76,6 +83,7 @@ export const PROVIDER_LABEL = {
   anthropic: 'Anthropic',
   openai: 'OpenAI',
   google: 'Google',
+  xai: 'xAI',
   local: 'Local',
   unknown: 'Fournisseur inconnu',
 };

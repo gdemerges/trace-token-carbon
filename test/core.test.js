@@ -9,7 +9,7 @@ const path = require('path');
 const { resolveModel, CACHE_MULTIPLIERS } = require('../src/core/models');
 const { cost, costWithoutCache } = require('../src/core/pricing');
 const carbon = require('../src/core/carbon');
-const { computeGauges, weightedUsage, applyUserCalibration, durationLabel } = require('../src/core/ratelimits');
+const { computeGauges, weightedUsage, applyUserCalibration, durationLabel, LIVE_FRESH_MS } = require('../src/core/ratelimits');
 const { report, exportRows, toCsv } = require('../src/core/aggregate');
 const store = require('../src/core/store');
 const claudeCode = require('../src/core/collectors/claude-code');
@@ -474,10 +474,12 @@ test('usage direct : un relevé frais fait autorité', () => {
   assert.equal(g.stale, false);
 });
 
-test('usage direct : passé 20 min, le relevé n’est plus présenté comme du direct', () => {
+test('usage direct : passé le seuil de fraîcheur, le relevé n’est plus du direct', () => {
   const now = Date.now();
   const events = [ev(now - 3600 * 1000, 'claude-opus-5', withTotal({ output: 50000 }))];
-  const quota = [{ source: 'anthropic-oauth', ts: now - 35 * 60 * 1000, type: 'five_hour', usedPercent: 89, resetsAt: now + 3600000 }];
+  // Exprimé par rapport à la constante : un réglage de cadence ne doit pas
+  // casser ce test, il doit seulement déplacer le seuil.
+  const quota = [{ source: 'anthropic-oauth', ts: now - (LIVE_FRESH_MS + 60000), type: 'five_hour', usedPercent: 89, resetsAt: now + 3600000 }];
   const g = computeGauges(events, quota, {}, now).find((x) => x.id === 'anthropic-five_hour');
   // On continue de l'afficher — c'est la meilleure information disponible —
   // mais en disant son âge plutôt qu'en le faisant passer pour courant.
@@ -526,7 +528,7 @@ test('usage direct : un relevé daté vaut mieux qu’une estimation fausse', ()
   const quota = [
     { source: 'claude-code', ts: resetsAt - 60000, type: 'five_hour', status: 'rejected', resetsAt, cause: 'window' },
     // Un relevé serveur, même vieux d'une heure, reste la meilleure source.
-    { source: 'anthropic-oauth', ts: now - 60 * 60 * 1000, type: 'five_hour', usedPercent: 89, resetsAt: now + 3600000 },
+    { source: 'anthropic-oauth', ts: now - (LIVE_FRESH_MS + 60000), type: 'five_hour', usedPercent: 89, resetsAt: now + 3600000 },
   ];
   const g = computeGauges(events, quota, {}, now).find((x) => x.id === 'anthropic-five_hour');
   assert.equal(g.percent, 89, 'le relevé serveur doit primer même daté');
@@ -763,4 +765,35 @@ test('usage direct : une coupure passagère ne punit pas comme un 429', () => {
   // l'utilisateur devant un chiffre figé sans raison valable.
   assert.ok(col.BACKOFF_TRANSIENT_MS < col.BACKOFF_RATE_LIMIT_MS / 5);
   assert.ok(col.BACKOFF_TRANSIENT_MS >= 30000, 'mais pas de nouvelle tentative immédiate');
+});
+
+// ---------------------------------------------------------------------------
+test('registre : un modèle Grok a un coût INCONNU, pas nul', () => {
+  const m = resolveModel('grok-build');
+  assert.equal(m.provider, 'xai');
+  // Les tarifs xAI ne sont pas exposés par le CLI. `null` reste visible comme
+  // « coût inconnu » dans l'interface ; 0 aurait été un mensonge.
+  assert.equal(cost({ input: 1e6, output: 1e6 }, m), null);
+  assert.ok(m.params.active.max > 0, 'l’estimation carbone reste possible');
+});
+
+test('collecteur Grok : déclare ne pas fournir de tokens', () => {
+  const grok = require('../src/core/collectors/grok-cli');
+  assert.equal(grok.providesTokens, false);
+  // Aucun compteur n'existe côté Grok CLI : extrapoler depuis la longueur des
+  // messages produirait un chiffre faux présenté comme une mesure.
+  const r = grok.collect({ grokDir: tmpdir() });
+  assert.deepEqual(r.events, []);
+  assert.deepEqual(r.quota, []);
+});
+
+test('collecteur Grok : un index illisible ne fait pas tomber le collecteur', () => {
+  const grok = require('../src/core/collectors/grok-cli');
+  const dir = tmpdir();
+  fs.mkdirSync(path.join(dir, 'sessions'), { recursive: true });
+  fs.writeFileSync(path.join(dir, 'sessions', 'session_search.sqlite'), 'ceci n\'est pas une base');
+  const r = grok.collect({ grokDir: dir });
+  assert.equal(r.stats.sqlite, false, 'l’échec est signalé, pas propagé');
+  assert.deepEqual(r.events, []);
+  fs.rmSync(dir, { recursive: true, force: true });
 });

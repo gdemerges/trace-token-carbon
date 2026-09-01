@@ -49,9 +49,16 @@ dit au lieu de le masquer :
 | **API Anthropic** | ✅ | — | Rapports d'usage et de coût de l'organisation. Chiffres **facturés**, toutes machines confondues. Clé Admin requise. |
 | **API OpenAI** | ✅ | — | Rapport d'usage de l'organisation. Clé Admin requise. |
 | **Gemini CLI** | ❌ | ❌ | Ne journalise que les prompts en local, aucun compteur de tokens. Seule l'activité est remontée. |
+| **Grok CLI** | ❌ | ❌ | `unified.jsonl` ne contient que des diagnostics d'authentification, et `session_search.sqlite` n'est qu'un index plein-texte. Le binaire n'expose aucun endpoint d'usage. Seule l'activité est remontée. |
 | **Ollama** | ❌ | — | Renvoie `eval_count` dans chaque réponse mais n'en garde aucune trace. Seul l'état courant (modèles chargés) est lisible. |
 
-Les deux dernières lignes sont des limites des outils eux-mêmes, pas de TRACE.
+Les modèles Grok sont malgré tout déclarés dans le registre, avec un tarif
+`null` — « coût inconnu », ce qui reste visible dans l'interface, et non
+« gratuit », ce qui serait un mensonge. Renseignez-les via `modelOverrides` si
+vous les connaissez : le jour où une source fournit des tokens (API xAI, ou
+version ultérieure du CLI), ils seront correctement chiffrés.
+
+Les lignes sans token sont des limites des outils eux-mêmes, pas de TRACE.
 Plutôt que d'extrapoler un nombre de tokens à partir du nombre de caractères —
 ce qui produirait un chiffre faux présenté comme une mesure — ces collecteurs
 déclarent `providesTokens: false` et l'interface les affiche comme tels.

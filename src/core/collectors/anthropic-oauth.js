@@ -38,7 +38,15 @@ const KEYCHAIN_SERVICE = 'Claude Code-credentials';
  * marteler l'API pour rien : c'est exactement ce qui a valu un 429 à la
  * première version, avec une jauge figée à la dernière valeur connue.
  */
-const MIN_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes en régime normal
+// Cadence portée de 5 à 15 minutes après avoir repris un 429 à ce rythme.
+// Deux raisons de rester très en dessous de ce qu'on croit permis :
+//  - une fenêtre de cinq heures ne bouge pas en un quart d'heure, et une
+//    fenêtre hebdomadaire encore moins ;
+//  - TRACE partage le jeton, donc le quota de cet endpoint, avec Claude Code
+//    lui-même. Chaque appel de TRACE se cumule à ceux du client officiel.
+// Le bouton « Actualiser » court-circuite de toute façon cette cadence quand
+// l'utilisateur veut un chiffre à la seconde.
+const MIN_INTERVAL_MS = 15 * 60 * 1000;
 // Deux régimes de report, parce que deux causes très différentes :
 //  - un 429 signifie que le serveur nous a explicitement écartés, et en
 //    conditions réelles il reste fermé bien plus que quelques minutes ;
@@ -49,7 +57,7 @@ const BACKOFF_RATE_LIMIT_MS = 10 * 60 * 1000;
 const BACKOFF_TRANSIENT_MS = 45 * 1000;
 const BACKOFF_MAX_MS = 60 * 60 * 1000;
 // Au-delà, la valeur en cache cesse d'être présentée comme « en direct ».
-const FRESH_MS = 20 * 60 * 1000;
+const FRESH_MS = 45 * 60 * 1000;
 
 /**
  * État du collecteur, en mémoire uniquement.
