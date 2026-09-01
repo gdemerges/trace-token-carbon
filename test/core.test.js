@@ -9,7 +9,7 @@ const path = require('path');
 const { resolveModel, CACHE_MULTIPLIERS } = require('../src/core/models');
 const { cost, costWithoutCache } = require('../src/core/pricing');
 const carbon = require('../src/core/carbon');
-const { computeGauges, weightedUsage, applyUserCalibration } = require('../src/core/ratelimits');
+const { computeGauges, weightedUsage, applyUserCalibration, durationLabel } = require('../src/core/ratelimits');
 const { report } = require('../src/core/aggregate');
 const claudeCode = require('../src/core/collectors/claude-code');
 const codex = require('../src/core/collectors/codex-cli');
@@ -565,4 +565,49 @@ test('usage direct : le forçage ne passe pas outre un report après échec', as
   assert.equal(res.stats.note, 'en attente après un échec');
   assert.ok(res.stats.nextAttemptIn > 0, 'le délai restant doit être exposé à l’interface');
   col.resetCache();
+});
+
+// ---------------------------------------------------------------------------
+test('limites : le libellé suit la durée réelle de la fenêtre', () => {
+  // Régression : tout ce qui dépassait 168 h s'appelait « Hebdomadaire ».
+  // Le jour où Codex a ajouté une fenêtre de 43 200 min, deux lignes
+  // homonymes se sont retrouvées côte à côte dans l'interface.
+  assert.equal(durationLabel(5), 'Session 5 h');
+  assert.equal(durationLabel(24), 'Quotidienne');
+  assert.equal(durationLabel(168), 'Hebdomadaire');
+  assert.equal(durationLabel(720), 'Mensuelle');
+  assert.notEqual(durationLabel(720), durationLabel(168), 'deux durées ne doivent pas partager un libellé');
+  assert.equal(durationLabel(336), '14 jours', 'une durée inattendue reste nommable');
+});
+
+test('limites : une fenêtre que le fournisseur ne rapporte plus disparaît', () => {
+  const now = Date.now();
+  const events = [{
+    ts: now - 3600000, source: 'codex-cli', model: 'codex', project: null, session: null, requests: 1,
+    tokens: withTotal({ output: 1000 }),
+  }];
+  const quota = [
+    // Ancien jeu de fenêtres, plus rapporté depuis des semaines.
+    { source: 'codex-cli', ts: now - 54 * 86400000, type: '300min', windowMinutes: 300, usedPercent: 36, resetsAt: now - 54 * 86400000 + 3600000 },
+    { source: 'codex-cli', ts: now - 13 * 86400000, type: '10080min', windowMinutes: 10080, usedPercent: 5, resetsAt: now - 13 * 86400000 + 3600000 },
+    // Relevé du jour : c'est lui qui fait référence.
+    { source: 'codex-cli', ts: now - 60000, type: '43200min', windowMinutes: 43200, usedPercent: 14, resetsAt: now + 29 * 86400000 },
+  ];
+  const codex = computeGauges(events, quota, {}, now).filter((g) => g.id.startsWith('codex-'));
+  assert.equal(codex.length, 1, 'les fenêtres obsolètes ne doivent plus produire de jauge');
+  assert.equal(codex[0].label, 'Mensuelle');
+  assert.equal(codex[0].percent, 14);
+});
+
+test('limites : des fenêtres relevées ensemble sont toutes conservées', () => {
+  // Contre-épreuve : si Codex n'a pas servi depuis un mois, ses fenêtres sont
+  // toutes également anciennes et aucune ne doit disparaître.
+  const now = Date.now();
+  const old = now - 30 * 86400000;
+  const quota = [
+    { source: 'codex-cli', ts: old, type: '300min', windowMinutes: 300, usedPercent: 36, resetsAt: old + 3600000 },
+    { source: 'codex-cli', ts: old + 1000, type: '10080min', windowMinutes: 10080, usedPercent: 5, resetsAt: old + 3600000 },
+  ];
+  const codex = computeGauges([], quota, {}, now).filter((g) => g.id.startsWith('codex-'));
+  assert.equal(codex.length, 2);
 });

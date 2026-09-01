@@ -52,6 +52,34 @@ const WINDOWS = [
  */
 const PRODUCT = { anthropic: 'Claude', openai: 'Codex' };
 
+/**
+ * Nomme une fenêtre à partir de sa durée.
+ *
+ * La première version appelait « Hebdomadaire » tout ce qui dépassait 168 h.
+ * Le jour où Codex a ajouté une fenêtre mensuelle (43 200 min), deux lignes
+ * homonymes se sont retrouvées côte à côte. Le libellé doit suivre la durée
+ * réelle, y compris pour des durées qu'on n'avait pas anticipées.
+ */
+function durationLabel(hours) {
+  if (hours < 24) return `Session ${Math.round(hours)} h`;
+  const days = Math.round(hours / 24);
+  if (days === 1) return 'Quotidienne';
+  if (days === 7) return 'Hebdomadaire';
+  if (days >= 28 && days <= 31) return 'Mensuelle';
+  return `${days} jours`;
+}
+
+/**
+ * Écarte les fenêtres qu'un fournisseur ne rapporte plus.
+ *
+ * Codex publie toutes ses fenêtres dans le même événement : celles dont le
+ * dernier relevé est nettement antérieur au relevé le plus récent ont disparu
+ * de son jeu de limites (changement de formule, évolution de l'API). Les
+ * garder produisait des jauges fantômes — une fenêtre de 5 h vieille de
+ * 54 jours affichée à côté d'une fenêtre mensuelle du jour.
+ */
+const OBSOLETE_AFTER_MS = 24 * 3600 * 1000;
+
 /** Somme des tokens et requêtes sur un intervalle. */
 function consumptionBetween(events, from, to, filter) {
   const tokens = emptyTokens();
@@ -233,6 +261,13 @@ function computeGauges(events, quota, config = {}, now = Date.now()) {
     if (!cur || q.ts > cur.ts) byWindow.set(q.type, q);
   }
 
+  // Le relevé le plus récent fait référence : tout ce qui n'y figurait pas
+  // n'est plus rapporté par le fournisseur.
+  const newestReport = Math.max(0, ...[...byWindow.values()].map((q) => q.ts));
+  for (const [type, q] of byWindow) {
+    if (newestReport - q.ts > OBSOLETE_AFTER_MS) byWindow.delete(type);
+  }
+
   for (const [type, q] of byWindow) {
     const hours = q.windowMinutes ? q.windowMinutes / 60 : 5;
     const reportedResetsAt = q.resetsAt || q.ts + hours * 3600 * 1000;
@@ -276,8 +311,8 @@ function computeGauges(events, quota, config = {}, now = Date.now()) {
       id: `codex-${type}`,
       provider: 'openai',
       product: PRODUCT.openai,
-      label: hours >= 168 ? 'Hebdomadaire' : `Session ${Math.round(hours)} h`,
-      fullLabel: hours >= 168 ? 'Codex — hebdomadaire' : `Codex — session ${Math.round(hours)} h`,
+      label: durationLabel(hours),
+      fullLabel: `${PRODUCT.openai} — ${durationLabel(hours).toLowerCase()}`,
       windowHours: hours,
       startsAt,
       resetsAt,
@@ -331,6 +366,7 @@ function applyUserCalibration(config, events, quota, gaugeId, percent, now = Dat
 
 module.exports = {
   computeGauges,
+  durationLabel,
   weightedUsage,
   consumptionBetween,
   applyUserCalibration,
