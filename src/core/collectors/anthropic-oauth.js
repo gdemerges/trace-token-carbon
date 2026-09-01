@@ -39,11 +39,15 @@ const KEYCHAIN_SERVICE = 'Claude Code-credentials';
  * première version, avec une jauge figée à la dernière valeur connue.
  */
 const MIN_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes en régime normal
-const BACKOFF_BASE_MS = 10 * 60 * 1000; // premier report après un échec
-const BACKOFF_MAX_MS = 60 * 60 * 1000; // plafond du report
-// Observé en conditions réelles : après un 429, l'endpoint reste fermé
-// bien plus longtemps que quelques minutes. Réessayer trop tôt ne fait que
-// prolonger la sanction.
+// Deux régimes de report, parce que deux causes très différentes :
+//  - un 429 signifie que le serveur nous a explicitement écartés, et en
+//    conditions réelles il reste fermé bien plus que quelques minutes ;
+//  - une coupure réseau ou un délai dépassé est passager, et punir dix
+//    minutes une micro-coupure laisse l'utilisateur devant un chiffre figé
+//    sans raison valable.
+const BACKOFF_RATE_LIMIT_MS = 10 * 60 * 1000;
+const BACKOFF_TRANSIENT_MS = 45 * 1000;
+const BACKOFF_MAX_MS = 60 * 60 * 1000;
 // Au-delà, la valeur en cache cesse d'être présentée comme « en direct ».
 const FRESH_MS = 20 * 60 * 1000;
 
@@ -201,11 +205,23 @@ function cached(reason) {
       ageMs: age,
       stale: age != null && age > FRESH_MS,
       nextAttemptIn: Math.max(0, cache.retryAfter - Date.now()),
-      errors: cache.lastError ? [cache.lastError] : [],
+      // Un report sans motif connu — hérité d'un redémarrage — doit tout de
+      // même se dire : « rien ne bouge » sans explication est le pire cas.
+      errors: cache.lastError
+        ? [cache.lastError]
+        : cache.retryAfter > Date.now()
+          ? ['Relevé suspendu après un échec précédent']
+          : [],
       note: reason,
     },
     // Persisté pour que le prochain démarrage ne refrappe pas l'API.
-    state: { fetchedAt: cache.fetchedAt, quota: cache.quota, retryAfter: cache.retryAfter },
+    state: {
+      fetchedAt: cache.fetchedAt,
+      quota: cache.quota,
+      retryAfter: cache.retryAfter,
+      lastError: cache.lastError,
+      failures: cache.failures,
+    },
   };
 }
 
@@ -229,6 +245,10 @@ async function collect(config = {}, state = {}) {
     cache.fetchedAt = state.fetchedAt;
     cache.quota = state.quota || null;
     cache.retryAfter = state.retryAfter || 0;
+    // Le motif doit voyager avec le report. Sans lui, un redémarrage héritait
+    // d'une attente muette : plus de mise à jour, et rien pour l'expliquer.
+    cache.lastError = state.lastError || null;
+    cache.failures = state.failures || 0;
   }
 
   // Le report après échec s'applique MÊME à une demande explicite : insister
@@ -259,9 +279,10 @@ async function collect(config = {}, state = {}) {
       // `Retry-After` fait autorité quand le serveur le donne ; sinon report
       // exponentiel, plafonné.
       const retryAfterHeader = Number(res.headers.get('retry-after'));
+      const base = res.status === 429 ? BACKOFF_RATE_LIMIT_MS : BACKOFF_TRANSIENT_MS;
       const wait = Number.isFinite(retryAfterHeader) && retryAfterHeader > 0
         ? retryAfterHeader * 1000
-        : Math.min(BACKOFF_MAX_MS, BACKOFF_BASE_MS * 2 ** (cache.failures - 1));
+        : Math.min(BACKOFF_MAX_MS, base * 2 ** (cache.failures - 1));
       cache.retryAfter = Date.now() + wait;
 
       const hint =
@@ -274,7 +295,7 @@ async function collect(config = {}, state = {}) {
     payload = await res.json();
   } catch (e) {
     cache.failures++;
-    cache.retryAfter = Date.now() + Math.min(BACKOFF_MAX_MS, BACKOFF_BASE_MS * 2 ** (cache.failures - 1));
+    cache.retryAfter = Date.now() + Math.min(BACKOFF_MAX_MS, BACKOFF_TRANSIENT_MS * 2 ** (cache.failures - 1));
     cache.lastError = e.name === 'AbortError' ? "Délai dépassé en interrogeant l'API Anthropic" : e.message;
     return cached('échec du relevé');
   } finally {
@@ -308,7 +329,7 @@ async function collect(config = {}, state = {}) {
   return {
     events: [],
     quota,
-    state: { fetchedAt: cache.fetchedAt, quota, retryAfter: 0 },
+    state: { fetchedAt: cache.fetchedAt, quota, retryAfter: 0, lastError: null, failures: 0 },
     stats: {
       configured: true,
       events: 0,
@@ -352,6 +373,8 @@ module.exports = {
   forceRefresh,
   FRESH_MS,
   MIN_INTERVAL_MS,
+  BACKOFF_RATE_LIMIT_MS,
+  BACKOFF_TRANSIENT_MS,
   label: 'Claude — usage en direct',
   async: true,
   providesTokens: false,

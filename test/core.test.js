@@ -725,3 +725,42 @@ test('persistance : l’index n’est pas réécrit sans changement', () => {
   const c = store.indexSignature({ ...idx, events: [{ ts: 1000 }, { ts: 2000 }] }, 365);
   assert.notEqual(a, c, 'un nouvel événement doit forcer l’écriture');
 });
+
+// ---------------------------------------------------------------------------
+test('usage direct : un report hérité conserve son motif', async () => {
+  // Régression : `retryAfter` était persisté mais pas `lastError`. Au
+  // redémarrage, l'application héritait donc d'une attente MUETTE — plus de
+  // mise à jour, et rien pour l'expliquer.
+  const col = require('../src/core/collectors/anthropic-oauth');
+  col.resetCache();
+  const res = await col.collect({}, {
+    fetchedAt: Date.now() - 60000,
+    quota: [{ source: 'anthropic-oauth', ts: Date.now() - 60000, type: 'five_hour', usedPercent: 54 }],
+    retryAfter: Date.now() + 300000,
+    lastError: 'Anthropic 429',
+    failures: 1,
+  });
+  assert.equal(res.stats.note, 'en attente après un échec');
+  assert.deepEqual(res.stats.errors, ['Anthropic 429']);
+  assert.ok(res.stats.nextAttemptIn > 0);
+  assert.equal(res.quota.length, 1, 'le dernier relevé connu reste affiché');
+  col.resetCache();
+});
+
+test('usage direct : un report sans motif se signale quand même', async () => {
+  const col = require('../src/core/collectors/anthropic-oauth');
+  col.resetCache();
+  const res = await col.collect({}, {
+    fetchedAt: Date.now() - 60000, quota: [], retryAfter: Date.now() + 300000,
+  });
+  assert.equal(res.stats.errors.length, 1, '« rien ne bouge » sans explication est le pire cas');
+  col.resetCache();
+});
+
+test('usage direct : une coupure passagère ne punit pas comme un 429', () => {
+  const col = require('../src/core/collectors/anthropic-oauth');
+  // Dix minutes d'attente pour une micro-coupure réseau laisseraient
+  // l'utilisateur devant un chiffre figé sans raison valable.
+  assert.ok(col.BACKOFF_TRANSIENT_MS < col.BACKOFF_RATE_LIMIT_MS / 5);
+  assert.ok(col.BACKOFF_TRANSIENT_MS >= 30000, 'mais pas de nouvelle tentative immédiate');
+});

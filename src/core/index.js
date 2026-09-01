@@ -139,12 +139,19 @@ function snapshot(state, options = {}) {
   // est en cours, l'interface doit pouvoir dire pourquoi le chiffre ne bouge
   // pas, au lieu de laisser croire à un blocage inexpliqué.
   const liveSource = sources.find((x) => x.id === 'anthropic-oauth');
+  const liveStats = (liveSource && liveSource.stats) || {};
+  const waiting = (liveStats.nextAttemptIn || 0) > 0;
   const liveStatus = liveSource
     ? {
-        ok: !liveSource.error,
-        error: liveSource.error || null,
-        ageMs: (liveSource.stats || {}).ageMs,
-        nextAttemptIn: (liveSource.stats || {}).nextAttemptIn || 0,
+        // Une source en attente après un échec n'est PAS « ok » : la première
+        // version ne regardait que `error`, or un report hérité d'un
+        // redémarrage n'a pas de motif. L'interface n'affichait donc rien et
+        // l'utilisateur voyait un chiffre figé sans explication.
+        ok: !liveSource.error && !waiting,
+        waiting,
+        error: liveSource.error || (waiting ? 'Relevé suspendu après un échec précédent' : null),
+        ageMs: liveStats.ageMs,
+        nextAttemptIn: liveStats.nextAttemptIn || 0,
       }
     : null;
 

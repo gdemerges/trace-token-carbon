@@ -73,7 +73,8 @@ function render() {
     const warn = document.createElement('div');
     warn.className = 'live-warn';
     const wait = ls.nextAttemptIn > 0 ? ` Nouvelle tentative dans ${Math.ceil(ls.nextAttemptIn / 60000)} min.` : '';
-    warn.innerHTML = `<span class="c-hot">Relevé Claude indisponible.</span> <span class="faint">${esc(ls.error)}.${esc(wait)}</span>`;
+    const titre = ls.waiting ? 'Relevé Claude en attente.' : 'Relevé Claude indisponible.';
+    warn.innerHTML = `<span class="c-hot">${esc(titre)}</span> <span class="faint">${esc(ls.error)}.${esc(wait)}</span>`;
     body.appendChild(warn);
   }
 

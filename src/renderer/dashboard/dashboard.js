@@ -108,9 +108,10 @@ function gaugesCard() {
   const ls = snap.liveStatus;
   if (ls && !ls.ok) {
     const wait = ls.nextAttemptIn > 0 ? ` Nouvelle tentative dans ${Math.ceil(ls.nextAttemptIn / 60000)} min.` : '';
+    const titre = ls.waiting ? 'Relevé Claude en attente.' : 'Relevé Claude indisponible.';
     s.insertAdjacentHTML('beforeend',
       `<div class="note" style="margin-top:12px;padding:9px 10px;background:var(--hot-soft);border-radius:5px">
-        <strong class="c-hot">Relevé Claude indisponible.</strong> ${esc(ls.error)}.${esc(wait)}
+        <strong class="c-hot">${esc(titre)}</strong> ${esc(ls.error)}.${esc(wait)}
         Les chiffres affichés sont ceux du dernier relevé réussi.
       </div>`);
   }
@@ -530,10 +531,22 @@ $('#range-seg').onclick = async (e) => {
 };
 $('#refresh').onclick = (e) =>
   withPending(e.currentTarget, null, async () => {
+    const before = snap && snap.liveStatus ? snap.liveStatus.ageMs : null;
     snap = await window.trace.refresh();
     render();
+
+    // Une action ne doit jamais rester sans réponse. Un report en cours
+    // empêche le relevé : le dire, plutôt que de laisser croire à une panne.
     const ls = snap.liveStatus;
-    if (ls && !ls.ok) toast(`Relevé Claude indisponible — ${ls.error}`, 'error');
+    if (ls && ls.waiting) {
+      toast(`Relevé Claude en attente — nouvelle tentative dans ${Math.ceil(ls.nextAttemptIn / 60000)} min. ${ls.error}`, 'error');
+    } else if (ls && !ls.ok) {
+      toast(`Relevé Claude indisponible — ${ls.error}`, 'error');
+    } else if (ls && before != null && ls.ageMs >= before) {
+      toast('Relevé Claude déjà à jour');
+    } else {
+      toast('Données actualisées');
+    }
   });
 
 $('#export').onclick = (e) =>
