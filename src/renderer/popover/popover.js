@@ -1,48 +1,47 @@
 import { tokens, usd, co2, pct, windowLabel, ago, esc } from '../shared/format.js';
 import { gauge } from '../shared/charts.js';
 import { providerMark } from '../shared/marks.js';
+import { groupByProduct, originLabel, timingLabel } from '../shared/gauges.js';
 
 const $ = (id) => document.getElementById(id);
 
 let snap = null;
 
-function renderGauge(g) {
-  const wrap = document.createElement('div');
-  wrap.className = 'gauge-row';
+/** Une fenêtre, à l'intérieur d'un bloc produit. */
+function renderWindow(g) {
+  const row = document.createElement('div');
+  row.className = 'win';
 
-  const head = document.createElement('div');
-  head.className = 'gauge-head';
   const shown = g.percent == null
     ? `<span class="faint num" style="font-size:11px">${tokens(g.used)} consommés</span>`
     : `${g.approximate ? '≈ ' : ''}${pct(g.percent)}`;
-  head.innerHTML = `${providerMark(g.provider, 12)}<span class="legend">${esc(g.label)}</span>
-    <span class="val num ${g.percent >= 85 ? 'c-hot' : ''}${g.approximate ? ' faint' : ''}">${shown}</span>`;
-  wrap.appendChild(head);
 
-  const bar = document.createElement('div');
-  wrap.appendChild(bar);
+  row.innerHTML = `<div class="win-top">
+      <span class="wname">${esc(g.label)}</span>
+      <span class="val num ${g.percent >= 85 ? 'c-hot' : ''}${g.approximate ? ' faint' : ''}">${shown}</span>
+    </div><div class="bar"></div>
+    <div class="win-meta faint">${esc(timingLabel(g))}</div>`;
 
-  const sub = document.createElement('div');
-  sub.className = 'gauge-sub faint';
+  requestAnimationFrame(() => gauge(row.querySelector('.bar'), g.percent, { height: 8, approximate: g.approximate }));
+  return row;
+}
 
-  // On dit toujours D'OÙ vient l'échelle. Une jauge dont le plafond a été
-  // deviné ne doit pas se faire passer pour une mesure du fournisseur.
-  const origin = {
-    live: 'en direct',
-    'live-stale': `relevé ${g.reportedAt ? ago(g.reportedAt) : 'ancien'}`,
-    derived: 'déduit du dernier relevé',
-    reset: 'fenêtre réinitialisée',
-    provider: 'donné par le fournisseur',
-    user: 'calé sur votre relevé',
-    observed: 'estimé — ajustez dans le tableau de bord',
-    configured: 'plafond que vous avez renseigné',
-  }[g.limitSource] || 'échelle inconnue — à caler';
-
-  sub.innerHTML = `<span${g.stale ? ' class="c-hot"' : ''}>${esc(windowLabel(g))}</span>
-    <span class="right">${esc(origin)}</span>`;
-  wrap.appendChild(sub);
-
-  requestAnimationFrame(() => gauge(bar, g.percent, { height: 9, approximate: g.approximate }));
+/** Un produit : sa marque et son nom une seule fois, puis ses fenêtres. */
+function renderBlock(block) {
+  const wrap = document.createElement('div');
+  wrap.className = 'block';
+  wrap.innerHTML = `<div class="block-head">
+      ${providerMark(block.provider, 13)}
+      <span class="pname">${esc(block.product)}</span>
+      ${block.origin ? `<span class="origin faint">${esc(block.origin)}</span>` : ''}
+    </div>`;
+  for (const g of block.gauges) {
+    const row = renderWindow(g);
+    // Provenance hétérogène dans le bloc : on la remet sur chaque ligne.
+    if (!block.origin) row.querySelector('.win-meta').innerHTML +=
+      `<span class="right">${esc(originLabel(g))}</span>`;
+    wrap.appendChild(row);
+  }
   return wrap;
 }
 
@@ -65,15 +64,7 @@ function render() {
 
   body.replaceChildren();
 
-  // Toutes les jauges tiennent désormais : c'est ce que le popover doit
-  // montrer. Le relevé en direct passe devant, puis les fenêtres les plus
-  // remplies — on veut voir en premier ce qui est près de saturer.
-  const ranked = [...snap.gauges].sort((a, b) => {
-    const rank = (g) => (g.limitSource === 'live' ? 0 : g.percent == null ? 2 : 1);
-    if (rank(a) !== rank(b)) return rank(a) - rank(b);
-    return (b.percent || 0) - (a.percent || 0);
-  });
-  for (const g of ranked) body.appendChild(renderGauge(g));
+  for (const block of groupByProduct(snap.gauges)) body.appendChild(renderBlock(block));
 
   const triad = document.createElement('div');
   triad.className = 'triad';

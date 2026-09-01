@@ -74,15 +74,26 @@
                -webkit-mask-position: center; mask-position: center; }
   .name-cell span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-  .gauges { display: grid; gap: 14px; }
-  .gauge-row .top { display: flex; align-items: center; gap: 7px; margin-bottom: 5px; }
-  .gauge-row .top .val { margin-left: auto; font-size: 15px; font-weight: 600; }
-  .gauge-row .meta { display: flex; gap: 8px; margin-top: 5px; font-size: 10.5px; }
-  .gauge-row .meta .r { margin-left: auto; }
-  .gauge-row .calib { font-size: 10px; padding: 0 5px; border-radius: 3px; color: var(--ink-faint);
-                      border: 1px solid transparent; text-decoration: underline; text-underline-offset: 2px;
-                      text-decoration-color: var(--rule); }
-  .gauge-row .calib:hover { color: var(--ink); text-decoration-color: currentColor; }
+  .gauges { display: grid; gap: 18px; }
+
+  /* Un bloc par produit : la marque et le nom n'apparaissent qu'une fois. */
+  .block-head { display: flex; align-items: center; gap: 8px; padding-bottom: 7px;
+                margin-bottom: 10px; border-bottom: 1px solid var(--rule-soft); }
+  .block-head .pname { font-size: 12.5px; font-weight: 600; }
+  .block-head .origin { margin-left: auto; font-size: 10.5px; }
+
+  .win { margin-bottom: 12px; }
+  .win:last-child { margin-bottom: 0; }
+  .win-top { display: flex; align-items: baseline; gap: 8px; margin-bottom: 5px; }
+  .win-top .wname { font-size: 9.5px; font-weight: 600; letter-spacing: 0.11em;
+                    text-transform: uppercase; color: var(--ink-dim); }
+  .win-top .val { margin-left: auto; font-size: 14.5px; font-weight: 600; }
+  .win-meta { display: flex; gap: 8px; margin-top: 5px; font-size: 10.5px; }
+  .win-meta .right { margin-left: auto; }
+  .win .calib { font-size: 10px; padding: 0 5px; border-radius: 3px; color: var(--ink-faint);
+                border: 1px solid transparent; text-decoration: underline; text-underline-offset: 2px;
+                text-decoration-color: var(--rule); }
+  .win .calib:hover { color: var(--ink); text-decoration-color: currentColor; }
   .calib-form { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; margin-top: 9px;
                 padding: 9px 10px; background: var(--panel-hi); border-radius: 5px; font-size: 11px; }
   .calib-form > span:first-child { flex-basis: 100%; }

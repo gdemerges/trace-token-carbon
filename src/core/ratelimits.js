@@ -40,10 +40,17 @@ const { emptyTokens, addTokens } = require('./util');
  * une jauge vide en permanence serait du bruit.
  */
 const WINDOWS = [
-  { id: 'five_hour', label: 'Claude — session 5 h', hours: 5, providers: ['anthropic'] },
-  { id: 'weekly', label: 'Claude — hebdomadaire', hours: 168, providers: ['anthropic'] },
-  { id: 'weekly_opus', label: 'Claude — Opus hebdomadaire', hours: 168, providers: ['anthropic'], liveOnly: true },
+  { id: 'five_hour', label: 'Session 5 h', hours: 5, providers: ['anthropic'] },
+  { id: 'weekly', label: 'Hebdomadaire', hours: 168, providers: ['anthropic'] },
+  { id: 'weekly_opus', label: 'Opus hebdomadaire', hours: 168, providers: ['anthropic'], liveOnly: true },
 ];
+
+/**
+ * Nom du produit auquel la fenêtre se rattache. Distinct de `provider` : on
+ * dit « Codex » et non « OpenAI », parce que c'est le nom sous lequel
+ * l'utilisateur connaît la limite qu'il regarde.
+ */
+const PRODUCT = { anthropic: 'Claude', openai: 'Codex' };
 
 /** Somme des tokens et requêtes sur un intervalle. */
 function consumptionBetween(events, from, to, filter) {
@@ -184,7 +191,9 @@ function computeGauges(events, quota, config = {}, now = Date.now()) {
       gauges.push({
         id: `anthropic-${w.id}`,
         provider: 'anthropic',
+        product: PRODUCT.anthropic,
         label: w.label,
+        fullLabel: `${PRODUCT.anthropic} — ${w.label.toLowerCase()}`,
         windowHours: w.hours,
         startsAt,
         resetsAt: live && live.resetsAt ? live.resetsAt : resetsAt,
@@ -266,7 +275,9 @@ function computeGauges(events, quota, config = {}, now = Date.now()) {
     gauges.push({
       id: `codex-${type}`,
       provider: 'openai',
-      label: hours >= 168 ? 'Codex — hebdomadaire' : `Codex — ${Math.round(hours)} h`,
+      product: PRODUCT.openai,
+      label: hours >= 168 ? 'Hebdomadaire' : `Session ${Math.round(hours)} h`,
+      fullLabel: hours >= 168 ? 'Codex — hebdomadaire' : `Codex — session ${Math.round(hours)} h`,
       windowHours: hours,
       startsAt,
       resetsAt,

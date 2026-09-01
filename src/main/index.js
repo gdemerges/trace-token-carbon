@@ -160,7 +160,7 @@ function updateTray() {
   const lines = ['TRACE'];
   if (snap) {
     for (const gg of snap.gauges) {
-      lines.push(`${gg.label} : ${gg.percent != null ? Math.round(gg.percent) + ' %' : '—'}`);
+      lines.push(`${gg.fullLabel || gg.label} : ${gg.percent != null ? Math.round(gg.percent) + ' %' : '—'}`);
     }
     lines.push(`${snap.range.days} j : $${snap.report.totals.costUSD.toFixed(2)} · ${(snap.report.totals.carbon.gramsCO2e.mid / 1000).toFixed(1)} kg CO₂e`);
   }

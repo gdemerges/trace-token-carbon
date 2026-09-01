@@ -92,7 +92,7 @@ async function main() {
           : g.limitSource === 'user' ? 'calé par vous'
           : 'glissante') +
         C.off;
-    console.log(` ${C.b}${g.label.padEnd(21)}${C.off} ${bar(g.percent)} ${pctStr}  ${note}`);
+    console.log(` ${C.b}${(g.fullLabel || g.label).padEnd(21)}${C.off} ${bar(g.percent)} ${pctStr}  ${note}`);
   }
 
   const c = t.carbon.gramsCO2e;

@@ -1,6 +1,7 @@
 import { nf, tokens, usd, co2, energy, pct, windowLabel, ago, shortDate, esc } from '../shared/format.js';
 import { traceStrip, gauge, bars, rangeBar } from '../shared/charts.js';
 import { providerMark, PROVIDER_LABEL } from '../shared/marks.js';
+import { groupByProduct, originLabel, timingLabel } from '../shared/gauges.js';
 
 const $ = (s) => document.querySelector(s);
 
@@ -65,40 +66,41 @@ function gaugesCard() {
     wrap.innerHTML = '<div class="note">Aucune fenêtre de limitation détectée pour le moment.</div>';
   }
 
-  for (const g of snap.gauges) {
-    const row = document.createElement('div');
-    row.className = 'gauge-row';
-    const origin = {
-      live: 'relevé en direct auprès d’Anthropic',
-      'live-stale': `dernier relevé Anthropic ${g.reportedAt ? ago(g.reportedAt) : ''} — reprise en cours`,
-      derived: 'déduit du dernier relevé du fournisseur',
-      reset: 'fenêtre réinitialisée, aucune activité depuis',
-      provider: 'communiqué par le fournisseur',
-      user: g.calibratedAt ? `calé sur votre relevé du ${new Date(g.calibratedAt).toLocaleDateString('fr-FR')}` : 'calé sur votre relevé',
-      observed: 'estimé d’après un refus passé — approximatif',
-      configured: 'plafond que vous avez renseigné',
-    }[g.limitSource] || 'échelle inconnue — cliquez sur « ajuster »';
+  for (const block of groupByProduct(snap.gauges)) {
+    const b = document.createElement('div');
+    b.className = 'block';
+    b.innerHTML = `<div class="block-head">
+        ${providerMark(block.provider, 14)}
+        <span class="pname">${esc(block.product)}</span>
+        ${block.origin ? `<span class="origin faint">${esc(block.origin)}</span>` : ''}
+      </div>`;
 
-    // Le « ≈ » n'est pas cosmétique : une échelle déduite d'un refus peut
-    // s'écarter d'un facteur deux ou trois du plafond réel.
-    // Sans échelle fiable, on n'invente pas de pourcentage : on montre ce
-    // qu'on sait vraiment, la consommation pondérée de la fenêtre.
-    const shown = g.percent == null
-      ? `<span class="faint num" style="font-size:12px">${tokens(g.used)} consommés</span>`
-      : `${g.approximate ? '≈ ' : ''}${pct(g.percent)}`;
+    for (const g of block.gauges) {
+      const row = document.createElement('div');
+      row.className = 'win';
 
-    row.innerHTML = `<div class="top">
-        ${providerMark(g.provider, 12)}<span class="legend">${esc(g.label)}</span>
-        ${g.calibratable ? '<button class="calib" type="button">ajuster</button>' : ''}
-        <span class="val num ${g.percent >= 85 ? 'c-hot' : ''}${g.approximate ? ' faint' : ''}">${shown}</span>
-      </div><div class="bar"></div>
-      <div class="meta faint"><span${g.stale ? ' class="c-hot"' : ''}>${esc(windowLabel(g))}</span>
-        <span class="r">${esc(origin)}</span></div>`;
-    wrap.appendChild(row);
-    requestAnimationFrame(() => gauge(row.querySelector('.bar'), g.percent, { height: 10, approximate: g.approximate }));
+      // Sans échelle fiable, on n'invente pas de pourcentage : on montre ce
+      // qu'on sait vraiment, la consommation pondérée de la fenêtre.
+      const shown = g.percent == null
+        ? `<span class="faint num" style="font-size:12px">${tokens(g.used)} consommés</span>`
+        : `${g.approximate ? '≈ ' : ''}${pct(g.percent)}`;
 
-    const calibBtn = row.querySelector('.calib');
-    if (calibBtn) calibBtn.onclick = () => openCalibration(row, g);
+      row.innerHTML = `<div class="win-top">
+          <span class="wname">${esc(g.label)}</span>
+          ${g.calibratable ? '<button class="calib" type="button">ajuster</button>' : ''}
+          <span class="val num ${g.percent >= 85 ? 'c-hot' : ''}${g.approximate ? ' faint' : ''}">${shown}</span>
+        </div><div class="bar"></div>
+        <div class="win-meta faint"><span>${esc(timingLabel(g))}</span>${
+          block.origin ? '' : `<span class="right">${esc(originLabel(g))}</span>`
+        }</div>`;
+
+      b.appendChild(row);
+      requestAnimationFrame(() => gauge(row.querySelector('.bar'), g.percent, { height: 9, approximate: g.approximate }));
+
+      const calibBtn = row.querySelector('.calib');
+      if (calibBtn) calibBtn.onclick = () => openCalibration(row, g);
+    }
+    wrap.appendChild(b);
   }
   s.appendChild(wrap);
   return s;

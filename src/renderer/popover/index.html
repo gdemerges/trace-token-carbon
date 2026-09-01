@@ -26,17 +26,28 @@
   .body::-webkit-scrollbar { width: 7px; }
   .body::-webkit-scrollbar-thumb { background: var(--rule); border-radius: 4px; }
 
-  .gauge-row { margin-bottom: 15px; }
-  .gauge-head { display: flex; align-items: center; gap: 7px; margin-bottom: 5px; }
   .mark { flex: none; }
   /* Les logos sont peints à travers un masque : la silhouette vient du
      fichier, la couleur suit le thème. */
   .mark.logo { display: inline-block; -webkit-mask-size: contain; mask-size: contain;
                -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
                -webkit-mask-position: center; mask-position: center; }
-  .gauge-head .val { margin-left: auto; font-size: 14px; font-weight: 600; }
-  .gauge-sub { display: flex; gap: 6px; margin-top: 4px; font-size: 10.5px; }
-  .gauge-sub .right { margin-left: auto; }
+
+  /* Un bloc par produit : la marque et le nom n'apparaissent qu'une fois. */
+  .block { margin-bottom: 18px; }
+  .block-head { display: flex; align-items: center; gap: 7px; padding-bottom: 7px;
+                margin-bottom: 9px; border-bottom: 1px solid var(--rule-soft); }
+  .block-head .pname { font-size: 12px; font-weight: 600; letter-spacing: 0.01em; }
+  .block-head .origin { margin-left: auto; font-size: 10px; }
+
+  .win { margin-bottom: 11px; }
+  .win:last-child { margin-bottom: 0; }
+  .win-top { display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px; }
+  .win-top .wname { font-size: 9.5px; font-weight: 600; letter-spacing: 0.11em;
+                    text-transform: uppercase; color: var(--ink-dim); }
+  .win-top .val { margin-left: auto; font-size: 13.5px; font-weight: 600; }
+  .win-meta { display: flex; gap: 6px; margin-top: 4px; font-size: 10px; }
+  .win-meta .right { margin-left: auto; }
 
   .triad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--rule-soft);
            border: 1px solid var(--rule-soft); border-radius: var(--r); overflow: hidden; margin: 16px 0 14px; }
