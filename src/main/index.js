@@ -259,6 +259,9 @@ function createPopover() {
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false },
   });
   popover.loadFile(path.join(__dirname, '..', 'renderer', 'popover', 'index.html'));
+  // L'identifiant est capturé MAINTENANT : dans `closed`, la fenêtre est déjà
+  // détruite et tout accès à `webContents` lève « Object has been destroyed ».
+  const popoverContentsId = popover.webContents.id;
 
   // Un popover doit se comporter comme un popover : il disparaît dès qu'on
   // clique ailleurs. En développement on le garde ouvert pour pouvoir
@@ -267,7 +270,7 @@ function createPopover() {
     if (!isDev && popover && !popover.webContents.isDevToolsOpened()) popover.hide();
   });
   popover.on('closed', () => {
-    if (popover) viewRange.delete(popover.webContents.id);
+    viewRange.delete(popoverContentsId);
     popover = null;
   });
 }
@@ -344,6 +347,8 @@ function openDashboard() {
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false },
   });
   dashboard.loadFile(path.join(__dirname, '..', 'renderer', 'dashboard', 'index.html'));
+  // Idem : capturé à la création, pas lu à la fermeture.
+  const dashboardContentsId = dashboard.webContents.id;
   if (isDev) {
     dashboard.setPosition(60, 60, false);
     // Garde la fenêtre au premier plan pendant le développement : sans cela,
@@ -351,7 +356,7 @@ function openDashboard() {
     dashboard.setAlwaysOnTop(true, 'floating');
   }
   dashboard.on('closed', () => {
-    if (dashboard) viewRange.delete(dashboard.webContents.id);
+    viewRange.delete(dashboardContentsId);
     dashboard = null;
     syncDockVisibility();
   });
