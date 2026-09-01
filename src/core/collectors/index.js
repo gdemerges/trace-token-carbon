@@ -61,9 +61,16 @@ async function collectAll(config = {}, state = {}) {
         if (res.cost) extra[c.id] = { ...(extra[c.id] || {}), cost: res.cost };
 
         entry.events = (res.events || []).length;
+        // Certaines sources ne remontent pas de tokens mais des fenêtres de
+        // quota : les compter permet de dire qu'elles fonctionnent, au lieu
+        // de leur coller un message d'indisponibilité par défaut.
+        entry.quota = (res.quota || []).length;
         entry.stats = res.stats || {};
         if (res.stats && res.stats.errors && res.stats.errors.length) entry.error = res.stats.errors.join(' ; ');
-        if (c.providesTokens === false) entry.note = c.unavailableReason;
+        // Le motif d'indisponibilité ne s'affiche que si la source n'a
+        // effectivement rien produit — « connectez-vous » sous une source qui
+        // vient de répondre est un contresens.
+        if (c.providesTokens === false && !entry.events && !entry.quota) entry.note = c.unavailableReason;
       } catch (e) {
         entry.error = e && e.message ? e.message : String(e);
       } finally {

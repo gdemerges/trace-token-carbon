@@ -7,7 +7,8 @@ const $ = (s) => document.querySelector(s);
 
 let snap = null;
 let days = 30;
-let metric = 'tokens'; // grandeur affichée dans l'histogramme journalier
+let metric = 'tokens'; // grandeur affichée
+let grain = 'day'; // granularité : 'day' (série) ou 'hour' (profil)
 
 // ---------------------------------------------------------------------------
 // Héros
@@ -147,44 +148,75 @@ function openCalibration(row, g) {
   };
 }
 
-function dailyCard() {
-  const s = card('span-7', 'Consommation par jour');
-  const seg = document.createElement('div');
-  seg.className = 'seg';
-  seg.style.cssText = 'margin-left:auto';
-  for (const [k, label] of [['tokens', 'Tokens'], ['cost', 'Coût'], ['carbon', 'CO₂e']]) {
-    const b = document.createElement('button');
-    b.textContent = label;
-    b.setAttribute('aria-pressed', String(metric === k));
-    b.onclick = () => { metric = k; render(); };
-    seg.appendChild(b);
-  }
-  s.querySelector('h2').appendChild(seg);
+/**
+ * Consommation dans le temps — série journalière et profil horaire réunis.
+ *
+ * Les deux répondaient à deux questions voisines dans deux cartes séparées :
+ * « combien ai-je consommé au fil des jours » et « à quelles heures ». Un seul
+ * panneau avec une bascule de granularité les rapproche, et permet surtout
+ * d'appliquer la MÊME grandeur aux deux — le profil horaire ne montrait que
+ * les tokens, alors que savoir à quelle heure part l'argent ou le carbone est
+ * tout aussi parlant.
+ */
+function consumptionCard() {
+  const s = card('span-7 chart', 'Consommation');
 
+  const seg = (options, current, onPick) => {
+    const el = document.createElement('div');
+    el.className = 'seg';
+    for (const [k, label] of options) {
+      const b = document.createElement('button');
+      b.textContent = label;
+      b.setAttribute('aria-pressed', String(current === k));
+      b.onclick = () => { onPick(k); render(); };
+      el.appendChild(b);
+    }
+    return el;
+  };
+
+  const head = s.querySelector('h2');
+  const controls = document.createElement('div');
+  controls.className = 'card-controls';
+  controls.appendChild(seg([['day', 'Par jour'], ['hour', 'Par heure']], grain, (k) => { grain = k; }));
+  controls.appendChild(seg([['tokens', 'Tokens'], ['cost', 'Coût'], ['carbon', 'CO₂e']], metric, (k) => { metric = k; }));
+  head.appendChild(controls);
+
+  // Le graphe occupe la hauteur restante : les cartes d'une même ligne
+  // s'alignent, et celle-ci ne laisse plus un vide sous ses barres.
   const host = document.createElement('div');
-  host.style.height = '132px';
+  host.className = 'chart-host';
   s.appendChild(host);
 
   const axis = document.createElement('div');
-  axis.className = 'faint num';
-  axis.style.cssText = 'display:flex;justify-content:space-between;font-size:9.5px;margin-top:6px';
-  const d = snap.report.daily;
-  if (d.length) {
-    axis.innerHTML = `<span>${shortDate(d[0].date)}</span><span>${shortDate(d[Math.floor(d.length / 2)].date)}</span><span>${shortDate(d[d.length - 1].date)}</span>`;
-  }
+  axis.className = 'faint num chart-axis';
   s.appendChild(axis);
 
-  const pick = { tokens: (x) => x.tokens.total, cost: (x) => x.costUSD, carbon: (x) => x.gramsCO2e }[metric];
+  const pick = { tokens: (x) => x.tokens.total ?? x.tokens, cost: (x) => x.costUSD, carbon: (x) => x.gramsCO2e }[metric];
   const fmt = { tokens, cost: usd, carbon: co2 }[metric];
   const color = { tokens: 'var(--tokens)', cost: 'var(--cost)', carbon: 'var(--carbon)' }[metric];
 
-  requestAnimationFrame(() =>
-    bars(host, snap.report.daily.map((x) => ({
-      value: pick(x),
-      color,
-      title: `${x.date} — ${fmt(pick(x))}`,
-    })), { height: 132 })
-  );
+  if (grain === 'day') {
+    const d = snap.report.daily;
+    axis.innerHTML = d.length
+      ? `<span>${shortDate(d[0].date)}</span><span>${shortDate(d[Math.floor(d.length / 2)].date)}</span><span>${shortDate(d[d.length - 1].date)}</span>`
+      : '';
+    requestAnimationFrame(() =>
+      bars(host, d.map((x) => ({ value: pick(x), color, title: `${x.date} — ${fmt(pick(x))}` })))
+    );
+  } else {
+    const h = snap.report.hours;
+    // Les heures creuses restent visibles : un profil de travail se lit autant
+    // par ses trous que par ses pics.
+    axis.innerHTML = [0, 6, 12, 18, 23].map((n) => `<span>${String(n).padStart(2, '0')} h</span>`).join('');
+    requestAnimationFrame(() =>
+      bars(host, h.map((x) => ({
+        value: pick(x),
+        color,
+        highlight: x.hour === new Date().getHours(),
+        title: `${String(x.hour).padStart(2, '0')} h — ${fmt(pick(x))} · ${nf(x.requests)} requêtes`,
+      })))
+    );
+  }
   return s;
 }
 
@@ -233,7 +265,7 @@ function breakdownCard() {
 }
 
 function projectsCard() {
-  const s = card('span-6', 'Par projet');
+  const s = card('span-7', 'Par projet');
   const rows = snap.report.byProject.slice(0, 10).map((p) => `<tr>
       <td><div class="name-cell"><span>${esc(p.key)}</span></div></td>
       <td class="num">${tokens(p.tokens.total)}</td>
@@ -245,7 +277,7 @@ function projectsCard() {
 }
 
 function carbonCard() {
-  const s = card('span-6', 'Empreinte carbone', 'méthodologie EcoLogits');
+  const s = card('span-12', 'Empreinte carbone', 'méthodologie EcoLogits');
   const c = snap.report.totals.carbon;
   const g = c.gramsCO2e;
 
@@ -260,7 +292,7 @@ function carbonCard() {
       <div class="equiv"><div style="font-size:14px">${e.icon}</div>
         <div class="n num">${nf(e.amount, e.amount < 10 ? 1 : 0)}</div>
         <div class="l faint">${esc(e.label)}</div></div>`).join('')}</div>
-    <div class="note" style="margin-top:13px">
+    <div class="note" style="margin-top:13px;max-width:78ch">
       Estimation par la méthode <strong>EcoLogits / Boavizta</strong> : énergie par token issue du nombre de
       paramètres actifs, plus le PUE du centre de données et l'amortissement de la fabrication du matériel.
       La fourchette est large parce que les fournisseurs ne publient pas la taille de leurs modèles —
@@ -271,15 +303,17 @@ function carbonCard() {
 }
 
 function sourcesCard() {
-  const s = card('span-6', 'Sources');
+  const s = card('span-5', 'Sources');
   const wrap = document.createElement('div');
   for (const src of snap.sources) {
     const color = src.error ? 'var(--hot)'
-      : src.eventsInRange ? 'var(--carbon)'
+      : src.eventsInRange || src.quota ? 'var(--carbon)'
       : src.available ? 'var(--tokens)' : 'var(--rule)';
-    const detail = src.error || src.note
-      || (src.eventsInRange ? `${nf(src.eventsInRange)} requêtes sur la période`
-      : src.events ? 'aucune activité sur la période' : 'aucune donnée');
+    const detail = src.error
+      || (src.quota ? `${nf(src.quota)} fenêtre${src.quota > 1 ? 's' : ''} relevée${src.quota > 1 ? 's' : ''}`
+      : src.eventsInRange ? `${nf(src.eventsInRange)} requêtes sur la période`
+      : src.note
+      || (src.events ? 'aucune activité sur la période' : 'aucune donnée'));
     const provider = { 'claude-code': 'anthropic', 'anthropic-oauth': 'anthropic', 'anthropic-api': 'anthropic',
       'codex-cli': 'openai', 'openai-api': 'openai', 'gemini-cli': 'google', ollama: 'local' }[src.id] || 'unknown';
     wrap.insertAdjacentHTML('beforeend', `<div class="src">
@@ -289,21 +323,6 @@ function sourcesCard() {
         <span class="count num faint" title="Total indexé">${src.events ? nf(src.events) : ''}</span></div>`);
   }
   s.appendChild(wrap);
-  return s;
-}
-
-function hoursCard() {
-  const s = card('span-6', 'Répartition horaire', 'heure locale');
-  const max = Math.max(1, ...snap.report.hours.map((h) => h.tokens));
-  const grid = document.createElement('div');
-  grid.className = 'hours';
-  grid.innerHTML = snap.report.hours.map((h) => {
-    const pctH = Math.max(h.tokens > 0 ? 3 : 0, (h.tokens / max) * 100);
-    return `<i style="height:${pctH}%" title="${h.hour} h — ${tokens(h.tokens)}"></i>`;
-  }).join('');
-  s.appendChild(grid);
-  s.insertAdjacentHTML('beforeend',
-    `<div class="hours-axis">${snap.report.hours.map((h) => (h.hour % 6 === 0 ? h.hour : '')).join('</span><span>').replace(/^/, '<span>').replace(/$/, '</span>')}</div>`);
   return s;
 }
 
@@ -331,7 +350,7 @@ function render() {
     return;
   }
 
-  for (const c of [gaugesCard(), dailyCard(), modelsCard(), breakdownCard(), projectsCard(), carbonCard(), sourcesCard(), hoursCard()]) {
+  for (const c of [gaugesCard(), consumptionCard(), modelsCard(), breakdownCard(), projectsCard(), sourcesCard(), carbonCard()]) {
     main.appendChild(c);
   }
 }

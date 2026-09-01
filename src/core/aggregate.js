@@ -103,15 +103,26 @@ function dailySeries(events, from, to, opts) {
   return series;
 }
 
-/** Répartition par heure locale — révèle les rythmes de travail. */
-function hourHistogram(events) {
-  const hours = Array.from({ length: 24 }, (_, h) => ({ hour: h, tokens: 0, requests: 0 }));
-  for (const e of events) {
-    const h = new Date(e.ts).getHours();
-    hours[h].tokens += e.tokens.total;
-    hours[h].requests += e.requests || 1;
-  }
-  return hours;
+/**
+ * Répartition par heure locale — révèle les rythmes de travail.
+ *
+ * Passe par `groupBy` comme la série journalière, et non par une simple somme
+ * de tokens : le coût et le carbone doivent être calculés PAR MODÈLE puis
+ * sommés. Une heure où l'on a mélangé Opus et Sonnet n'a pas de tarif moyen
+ * qui veuille dire quelque chose.
+ */
+function hourHistogram(events, opts = {}) {
+  const byHour = new Map(groupBy(events, (e) => new Date(e.ts).getHours(), opts).map((g) => [g.key, g]));
+  return Array.from({ length: 24 }, (_, hour) => {
+    const g = byHour.get(hour);
+    return {
+      hour,
+      tokens: g ? g.tokens.total : 0,
+      requests: g ? g.requests : 0,
+      costUSD: g ? g.costUSD : 0,
+      gramsCO2e: g ? g.carbon.gramsCO2e.mid : 0,
+    };
+  });
 }
 
 /**
@@ -179,7 +190,7 @@ function report(events, opts = {}) {
     byProject: byProject.slice(0, 20),
     topSessions: bySession.slice(0, 10),
     daily: dailySeries(inRange, from, to, opts),
-    hours: hourHistogram(inRange),
+    hours: hourHistogram(inRange, opts),
     eventCount: inRange.length,
   };
 }

@@ -51,6 +51,12 @@
   .card > h2 { font-size: 10px; font-weight: 700; letter-spacing: 0.13em; text-transform: uppercase;
                color: var(--ink-faint); margin: 0 0 12px; display: flex; align-items: center; gap: 8px; }
   .card > h2 .aside { margin-left: auto; font-weight: 500; letter-spacing: 0.04em; text-transform: none; font-size: 10.5px; }
+  .card-controls { margin-left: auto; display: flex; gap: 6px; flex-wrap: wrap; }
+  /* La carte devient une colonne flex pour que son graphe prenne la place
+     restante quand la grille l'étire à la hauteur de sa voisine. */
+  .card.chart { display: flex; flex-direction: column; }
+  .chart-host { flex: 1; min-height: 132px; }
+  .chart-axis { display: flex; justify-content: space-between; font-size: 9.5px; margin-top: 6px; }
   .card.span-6 { grid-column: span 6; } .card.span-7 { grid-column: span 7; }
   .card.span-5 { grid-column: span 5; } .card.span-4 { grid-column: span 4; } .card.span-8 { grid-column: span 8; }
   @media (max-width: 980px) {
@@ -102,7 +108,7 @@
   .calib-form .btn { padding: 3px 9px; font-size: 11px; }
   .calib-msg { flex-basis: 100%; font-size: 10.5px; }
 
-  .equivs { display: grid; grid-template-columns: repeat(auto-fit, minmax(112px, 1fr)); gap: 9px; margin-top: 13px; }
+  .equivs { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 9px; margin-top: 13px; }
   .equiv { background: var(--panel-hi); border-radius: 5px; padding: 9px 10px; }
   .equiv .n { font-size: 14px; font-weight: 600; margin-top: 3px; }
   .equiv .l { font-size: 10px; line-height: 1.3; }
@@ -116,10 +122,6 @@
   .src .info { flex: 1; min-width: 0; }
   .src .sub { font-size: 10.5px; color: var(--ink-faint); }
   .src .count { font-size: 11px; }
-
-  .hours { display: grid; grid-template-columns: repeat(24, 1fr); gap: 2px; align-items: end; height: 78px; }
-  .hours i { background: var(--tokens); border-radius: 1.5px; display: block; opacity: .85; }
-  .hours-axis { display: grid; grid-template-columns: repeat(24, 1fr); gap: 2px; margin-top: 5px; font-size: 8.5px; color: var(--ink-faint); text-align: center; }
 
   dialog { border: 1px solid var(--rule); border-radius: 9px; background: var(--panel); color: var(--ink);
            padding: 0; width: min(520px, 92vw); box-shadow: 0 24px 60px rgba(0,0,0,.42); }

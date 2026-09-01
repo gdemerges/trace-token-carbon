@@ -127,13 +127,13 @@ export function stackedBar(container, parts, opts = {}) {
 
 /** Histogramme vertical (série journalière ou répartition horaire). */
 export function bars(container, data, opts = {}) {
-  const h = opts.height || 120;
+  const h = opts.height || container.clientHeight || 120;
   const w = opts.width || container.clientWidth || 600;
   const max = Math.max(1, ...data.map((d) => d.value));
   const gap = data.length > 40 ? 1 : 2;
   const bw = Math.max(1, (w - gap * (data.length - 1)) / data.length);
 
-  const svg = el('svg', { viewBox: `0 0 ${w} ${h}`, width: '100%', height: h, preserveAspectRatio: 'none' });
+  const svg = el('svg', { viewBox: `0 0 ${w} ${h}`, width: '100%', height: '100%', preserveAspectRatio: 'none' });
   data.forEach((d, i) => {
     const bh = Math.max(d.value > 0 ? 1.5 : 0, (d.value / max) * (h - 2));
     const rect = el('rect', {
