@@ -262,10 +262,27 @@ function togglePopover() {
   refresh('popover');
 }
 
+/**
+ * Présence dans le Dock, sur macOS.
+ *
+ * TRACE vit dans la barre de menus : pas d'icône au repos, c'est le propre
+ * d'une application d'arrière-plan. Mais dès qu'une vraie fenêtre est ouverte,
+ * l'absence d'icône devient un piège — le tableau de bord n'est plus atteignable
+ * au ⌘Tab, et disparaît définitivement s'il passe derrière une autre fenêtre.
+ * L'icône n'apparaît donc que tant qu'une fenêtre est ouverte.
+ */
+function syncDockVisibility() {
+  if (process.platform !== 'darwin' || !app.dock) return;
+  const hasWindow = dashboard && !dashboard.isDestroyed() && dashboard.isVisible();
+  if (hasWindow) app.dock.show();
+  else app.dock.hide();
+}
+
 function openDashboard() {
   if (dashboard && !dashboard.isDestroyed()) {
     dashboard.show();
     dashboard.focus();
+    syncDockVisibility();
     return;
   }
   dashboard = new BrowserWindow({
@@ -285,7 +302,13 @@ function openDashboard() {
     // toute capture d'écran attrape ce qui traîne au-dessus.
     dashboard.setAlwaysOnTop(true, 'floating');
   }
-  dashboard.on('closed', () => (dashboard = null));
+  dashboard.on('closed', () => {
+    dashboard = null;
+    syncDockVisibility();
+  });
+  dashboard.on('hide', syncDockVisibility);
+  dashboard.on('show', syncDockVisibility);
+  dashboard.once('ready-to-show', syncDockVisibility);
   if (process.argv.includes('--devtools')) dashboard.webContents.openDevTools({ mode: 'detach' });
 }
 
@@ -415,9 +438,13 @@ if (!app.requestSingleInstanceLock()) {
 } else {
   app.on('second-instance', () => togglePopover());
 
+  // Clic sur l'icône du Dock alors que la fenêtre est fermée : on la rouvre,
+  // comme le ferait n'importe quelle application macOS.
+  app.on('activate', () => openDashboard());
+
   app.whenReady().then(async () => {
-    // Sur macOS, TRACE vit dans la barre d'état : pas d'icône dans le Dock.
-    if (process.platform === 'darwin' && app.dock) app.dock.hide();
+    // Au démarrage, aucune fenêtre n'est ouverte : pas d'icône dans le Dock.
+    syncDockVisibility();
 
     buildAppMenu();
     registerIpc();

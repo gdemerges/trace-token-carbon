@@ -27,6 +27,7 @@ Empaqueter : `npm run dist:mac` · `dist:win` · `dist:linux`.
 | `⌘⌥T` (`Ctrl+Alt+T`) | Ouvre les jauges par-dessus n'importe quelle application |
 | Clic sur l'icône | Idem |
 | `Échap` | Referme le popover |
+| `⌘Tab` | Atteint le tableau de bord quand il est ouvert |
 | `⌘↩` | Ouvre le tableau de bord |
 | `trace --json` | Sortie machine, pour une barre de statut ou un script |
 
@@ -157,6 +158,21 @@ de session et un delta par tour — sommer le cumul multiplierait la
 consommation par le nombre de tours.
 
 ---
+
+## Présence dans le Dock (macOS)
+
+TRACE est une application d'arrière-plan : **aucune icône dans le Dock au
+repos**, c'est le propre d'un outil de barre de menus.
+
+L'icône apparaît en revanche tant que le tableau de bord est ouvert, et
+disparaît à sa fermeture. Sans cela la fenêtre devenait un piège : introuvable
+au `⌘Tab`, et définitivement perdue si elle passait derrière une autre. Un clic
+sur l'icône du Dock rouvre le tableau de bord, comme dans n'importe quelle
+application macOS.
+
+Effet de bord bienvenu : tant que l'icône est présente, le menu applicatif
+l'est aussi, et les raccourcis d'édition standard fonctionnent dans les champs
+de saisie des réglages.
 
 ## Confidentialité
 
