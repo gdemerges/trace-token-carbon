@@ -11,6 +11,7 @@ const { cost, costWithoutCache } = require('../src/core/pricing');
 const carbon = require('../src/core/carbon');
 const { computeGauges, weightedUsage, applyUserCalibration, durationLabel } = require('../src/core/ratelimits');
 const { report, exportRows, toCsv } = require('../src/core/aggregate');
+const store = require('../src/core/store');
 const claudeCode = require('../src/core/collectors/claude-code');
 const codex = require('../src/core/collectors/codex-cli');
 
@@ -647,4 +648,80 @@ test('export : hors période, aucune ligne de données', () => {
     tokens: { input: 0, output: 10, cacheRead: 0, cacheWrite: 0, cacheWrite5m: 0, cacheWrite1h: 0, thinking: 0, total: 10 },
   };
   assert.equal(exportRows([old], { from: now - 86400000, to: now }).length, 1);
+});
+
+// ---------------------------------------------------------------------------
+const alerts = require('../src/core/alerts');
+
+// Instants figés : `windowKey` dépend de `resetsAt`, donc un `Date.now()`
+// recalculé à chaque appel produirait une fenêtre différente à chaque étape et
+// rendrait le test non déterministe.
+const T0 = 1788000000000;
+const gauge = (over = {}) => ({
+  id: 'anthropic-five_hour', product: 'Claude', label: 'Session 5 h',
+  percent: 50, limitSource: 'live', approximate: false,
+  resetsAt: T0 + 3600000, startsAt: T0 - 4 * 3600000, ...over,
+});
+
+test('alertes : un seuil ne se déclenche qu’une fois par fenêtre', () => {
+  const now = T0;
+  let state = {};
+  const step = (percent) => {
+    const r = alerts.evaluate([gauge({ percent })], {}, state, now);
+    state = r.state;
+    return r.notifications.map((n) => n.threshold);
+  };
+  assert.deepEqual(step(40), []);
+  assert.deepEqual(step(82), [80]);
+  assert.deepEqual(step(84), [], 'répéter à chaque cycle de 60 s ferait de l’outil une nuisance');
+  assert.deepEqual(step(96), [95]);
+  assert.deepEqual(step(97), []);
+});
+
+test('alertes : jamais sur une échelle approximative', () => {
+  const now = T0;
+  // Cette estimation s'est révélée fausse d'un facteur 2,6 en conditions
+  // réelles. Une alerte fausse détruit la confiance dans toutes les autres.
+  const r = alerts.evaluate([gauge({ percent: 99, limitSource: 'observed', approximate: true })], {}, {}, now);
+  assert.equal(r.notifications.length, 0);
+});
+
+test('alertes : un bond de 0 à 96 % ne produit qu’une notification', () => {
+  const r = alerts.evaluate([gauge({ percent: 96 })], {}, {}, T0);
+  assert.equal(r.notifications.length, 1);
+  assert.equal(r.notifications[0].threshold, 95, 'le seuil le plus haut franchi');
+});
+
+test('alertes : une nouvelle fenêtre réarme les seuils', () => {
+  const now = T0;
+  const first = alerts.evaluate([gauge({ percent: 90, resetsAt: now + 1000 })], {}, {}, now);
+  assert.equal(first.notifications.length, 1);
+  // Même jauge, fenêtre suivante : le seuil doit pouvoir se redéclencher.
+  const second = alerts.evaluate([gauge({ percent: 90, resetsAt: now + 5 * 3600000 })], {}, first.state, now);
+  assert.equal(second.notifications.length, 1);
+});
+
+test('alertes : l’état des fenêtres mortes n’est pas conservé', () => {
+  const now = T0;
+  const r1 = alerts.evaluate([gauge({ percent: 90, resetsAt: now + 1000 })], {}, {}, now);
+  assert.equal(Object.keys(r1.state).length, 1);
+  // La jauge disparaît : son état ne doit pas s'accumuler indéfiniment.
+  const r2 = alerts.evaluate([], {}, r1.state, now);
+  assert.equal(Object.keys(r2.state).length, 0);
+});
+
+test('alertes : désactivables, et seuils personnalisables', () => {
+  const now = T0;
+  assert.equal(alerts.evaluate([gauge({ percent: 99 })], { alerts: { enabled: false } }, {}, now).notifications.length, 0);
+  const custom = alerts.evaluate([gauge({ percent: 55 })], { alerts: { thresholds: [50] } }, {}, now);
+  assert.deepEqual(custom.notifications.map((n) => n.threshold), [50]);
+});
+
+test('persistance : l’index n’est pas réécrit sans changement', () => {
+  const idx = { events: [{ ts: 1000 }], quota: [], collectors: { a: { offset: 1 } } };
+  const a = store.indexSignature(idx, 365);
+  const b = store.indexSignature({ ...idx }, 365);
+  assert.equal(a, b, 'même contenu, même signature');
+  const c = store.indexSignature({ ...idx, events: [{ ts: 1000 }, { ts: 2000 }] }, 365);
+  assert.notEqual(a, c, 'un nouvel événement doit forcer l’écriture');
 });

@@ -385,6 +385,17 @@ async function openSettings() {
       <div class="msg" id="sc-msg"></div>
     </div>
     <div class="field">
+      <label class="switch"><input type="checkbox" id="alerts-on" ${(cfg.alerts || {}).enabled !== false ? 'checked' : ''} />
+        Me prévenir avant d'atteindre une limite</label>
+      <div class="help" style="margin-top:6px">Notification système au franchissement des seuils.
+        Uniquement sur les jauges dont l'échelle est fiable — jamais sur une estimation.</div>
+      <div class="row2" style="margin-top:6px">
+        <input type="text" id="alerts-th" value="${esc(((cfg.alerts || {}).thresholds || [80, 95]).join(', '))}"
+               aria-label="Seuils d'alerte" placeholder="80, 95" />
+        <span class="faint">% (séparés par des virgules)</span>
+      </div>
+    </div>
+    <div class="field">
       <label for="grid">Mix électrique du calcul carbone</label>
       <div class="help">Intensité carbone du réseau qui alimente le centre de données.
         Les modèles fermés tournent le plus souvent aux États-Unis.</div>
@@ -442,7 +453,13 @@ async function openSettings() {
 
   $('#save-settings').onclick = (e) =>
     withPending(e.currentTarget, 'Application…', async () => {
+      const thresholds = $('#alerts-th').value.split(',')
+        .map((v) => Number(v.trim()))
+        .filter((v) => Number.isFinite(v) && v > 0 && v <= 100)
+        .sort((a, b) => a - b);
+
       const res = await window.trace.setConfig({
+        alerts: { enabled: $('#alerts-on').checked, thresholds: thresholds.length ? thresholds : [80, 95] },
         shortcut: $('#sc').value.trim(),
         carbon: { ...(cfg.carbon || {}), gridKey: $('#grid').value },
         trayMetric: $('#tray').value,

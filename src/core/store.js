@@ -54,6 +54,8 @@ const DEFAULT_CONFIG = {
   carbon: { gridKey: 'us-average', localGridKey: 'france', pue: null },
   // Limites connues de l'utilisateur (en tokens pondérés) ; null => auto-calibrage
   limits: {},
+  // Alertes
+  alerts: { enabled: true, thresholds: [80, 95] },
   // Interface
   shortcut: 'CommandOrControl+Alt+T',
   launchAtLogin: false,
@@ -81,6 +83,7 @@ function loadConfig() {
     ...DEFAULT_CONFIG,
     ...stored,
     carbon: { ...DEFAULT_CONFIG.carbon, ...(stored.carbon || {}) },
+    alerts: { ...DEFAULT_CONFIG.alerts, ...(stored.alerts || {}) },
     limits: { ...DEFAULT_CONFIG.limits, ...(stored.limits || {}) },
   };
 }
@@ -110,6 +113,30 @@ function loadIndex(config = {}) {
  * chaque démarrage. On borne la rétention : au-delà, le fichier grossirait
  * indéfiniment alors que le tableau de bord ne regarde jamais si loin.
  */
+/**
+ * Signature bon marché de l'état persistable.
+ *
+ * L'index était réécrit à chaque cycle de 60 s même sans le moindre nouvel
+ * événement : 2 Mo × 1440 = près de 3 Go écrits par jour pour une application
+ * au repos. Ce n'est pas un problème de vitesse — 2,5 ms — mais d'usure du
+ * disque et d'E/S sans objet.
+ */
+function indexSignature(idx, retentionDays) {
+  const last = (arr) => (arr && arr.length ? arr[arr.length - 1].ts : 0);
+  return [
+    retentionDays,
+    (idx.events || []).length,
+    last(idx.events),
+    (idx.quota || []).length,
+    last(idx.quota),
+    // Les offsets des collecteurs changent dès qu'un fichier grossit, même si
+    // aucune ligne exploitable n'en sort.
+    JSON.stringify(idx.collectors || {}).length,
+  ].join('|');
+}
+
+let lastSignature = null;
+
 function saveIndex(idx, retentionDays) {
   if (!Number.isFinite(retentionDays)) retentionDays = DEFAULT_CONFIG.retentionDays;
   const cutoff = Date.now() - retentionDays * 86400000;
@@ -123,8 +150,11 @@ function saveIndex(idx, retentionDays) {
     events: (idx.events || []).filter((e) => e.ts >= cutoff),
     quota: (idx.quota || []).filter((q) => q.ts >= cutoff),
   };
+  const signature = indexSignature(trimmed, retentionDays);
+  if (signature === lastSignature) return trimmed; // rien n'a bougé
   writeAtomic(indexPath(), JSON.stringify(trimmed));
+  lastSignature = signature;
   return trimmed;
 }
 
-module.exports = { baseDir, loadConfig, saveConfig, loadIndex, saveIndex, DEFAULT_CONFIG, configPath, indexPath };
+module.exports = { baseDir, loadConfig, saveConfig, loadIndex, saveIndex, DEFAULT_CONFIG, configPath, indexPath, indexSignature };

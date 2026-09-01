@@ -5,6 +5,7 @@ const { report, exportRows, toCsv } = require('./aggregate');
 const { computeGauges, applyUserCalibration } = require('./ratelimits');
 const store = require('./store');
 const carbon = require('./carbon');
+const alerts = require('./alerts');
 const { resolveModel } = require('./models');
 
 /**
@@ -176,4 +177,4 @@ function calibrate(state, gaugeId, percent) {
   return updated;
 }
 
-module.exports = { refresh, snapshot, store, carbon, resolveModel, report, computeGauges, calibrate, exportRows, toCsv };
+module.exports = { refresh, snapshot, store, carbon, alerts, resolveModel, report, computeGauges, calibrate, exportRows, toCsv };

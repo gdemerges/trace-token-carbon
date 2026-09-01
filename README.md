@@ -174,6 +174,24 @@ Effet de bord bienvenu : tant que l'icône est présente, le menu applicatif
 l'est aussi, et les raccourcis d'édition standard fonctionnent dans les champs
 de saisie des réglages.
 
+## Alertes
+
+TRACE prévient par une notification système au franchissement d'un seuil
+(80 % et 95 % par défaut, modifiables). Trois règles gouvernent ce
+comportement :
+
+- **Jamais sur une échelle approximative.** Seules les jauges dont l'échelle
+  vient du serveur ou de votre calage déclenchent une alerte. L'estimation
+  déduite d'un refus 429 s'était révélée fausse d'un facteur 2,6 — une alerte
+  fausse détruirait la confiance dans toutes les autres.
+- **Une fois par seuil et par fenêtre.** Le franchissement est un événement,
+  pas un état : répéter la notification à chaque cycle ferait de l'outil une
+  nuisance. Un bond de 0 à 96 % ne produit qu'une notification, celle du seuil
+  le plus haut franchi.
+- **Une nouvelle fenêtre réarme les seuils.** Une fenêtre glissante, qui n'a
+  pas de réinitialisation annoncée, se réarme une fois par heure : une
+  saturation qui dure mérite plus d'un rappel, mais pas un par minute.
+
 ## Confidentialité
 
 Tout est local. Les journaux analysés contiennent votre code et vos

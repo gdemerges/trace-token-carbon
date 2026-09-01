@@ -1,6 +1,6 @@
 'use strict';
 
-const { app, BrowserWindow, Tray, Menu, globalShortcut, ipcMain, nativeImage, screen, shell, dialog, safeStorage, nativeTheme } = require('electron');
+const { app, BrowserWindow, Tray, Menu, globalShortcut, ipcMain, nativeImage, screen, shell, dialog, safeStorage, nativeTheme, Notification } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
@@ -30,6 +30,9 @@ let refreshing = false;
  * d'afficher « 1 an ». L'interface mentait sur ce qu'elle montrait.
  */
 const viewRange = new Map(); // webContents.id -> période demandée
+
+/** Seuils déjà notifiés, par fenêtre. Volatil : rien à persister. */
+let alertState = {};
 
 // ---------------------------------------------------------------------------
 // Configuration & secrets
@@ -91,6 +94,7 @@ async function refresh(reason = 'timer') {
     state.config = config;
     snap = core.snapshot(state, { days: config.defaultRangeDays });
     updateTray();
+    notifyThresholds(config);
     broadcast();
     return snap;
   } catch (e) {
@@ -106,6 +110,31 @@ async function refresh(reason = 'timer') {
 }
 
 /** Chaque fenêtre reçoit un instantané calculé pour SA période. */
+/**
+ * Prévient quand une fenêtre franchit un seuil.
+ *
+ * C'est la raison d'être de l'outil : savoir qu'on approche d'une limite
+ * AVANT de la heurter. Le moteur (core/alerts.js) refuse d'alerter sur une
+ * échelle approximative — une alerte fausse ferait perdre confiance dans
+ * toutes les autres.
+ */
+function notifyThresholds(config) {
+  if (!snap || !Notification.isSupported()) return;
+  const { notifications, state: nextAlertState } = core.alerts.evaluate(snap.gauges, config, alertState);
+  alertState = nextAlertState;
+
+  for (const n of notifications) {
+    const notif = new Notification({
+      title: n.title,
+      body: n.body,
+      urgency: n.urgency, // Linux ; ignoré ailleurs
+      silent: n.urgency !== 'critical',
+    });
+    notif.on('click', () => openDashboard());
+    notif.show();
+  }
+}
+
 function broadcast() {
   for (const w of [popover, dashboard]) {
     if (!w || w.isDestroyed()) continue;
