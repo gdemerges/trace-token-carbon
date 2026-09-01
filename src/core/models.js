@@ -46,9 +46,6 @@ const PARAM_PROFILES = {
   'gpt-frontier': { total: range(300, 1000), active: range(50, 200), confidence: 'estimated' },
   'gpt-mid': { total: range(100, 400), active: range(20, 80), confidence: 'estimated' },
   'gpt-small': { total: range(8, 50), active: range(3, 20), confidence: 'estimated' },
-  'gemini-pro': { total: range(200, 800), active: range(30, 150), confidence: 'estimated' },
-  'gemini-flash': { total: range(20, 120), active: range(5, 30), confidence: 'estimated' },
-  grok: { total: range(300, 1500), active: range(50, 250), confidence: 'estimated' },
   unknown: { total: range(70, 400), active: range(15, 100), confidence: 'unknown' },
 };
 
@@ -91,41 +88,7 @@ const REGISTRY = [
   { match: /^gpt-4o/, id: 'gpt-4o', label: 'GPT-4o', provider: 'openai', family: 'gpt-mid', pricing: { input: 2.5, output: 10 }, context: 128_000 },
   { match: /^codex/, id: 'codex', label: 'Codex', provider: 'openai', family: 'gpt-frontier', pricing: { input: 1.25, output: 10 }, context: 400_000 },
 
-  // ---- xAI ----------------------------------------------------------------
-  // Les tarifs Grok ne sont pas exposés par le CLI et ne sont pas figés ici :
-  // `pricing: null` signifie « coût inconnu », ce qui reste visible dans
-  // l'interface — et non « gratuit », ce qui serait un mensonge. Renseignez-les
-  // via `modelOverrides` dans la configuration si vous les connaissez.
-  { match: /^grok-.*(code|build)/, id: 'grok-build', label: 'Grok Build', provider: 'xai', family: 'grok', pricing: null, context: 512_000 },
-  { match: /^grok-4|^grok-4\.\d/, id: 'grok-4', label: 'Grok 4', provider: 'xai', family: 'grok', pricing: null, context: 256_000 },
-  { match: /^grok/, id: 'grok', label: 'Grok', provider: 'xai', family: 'grok', pricing: null, context: 128_000 },
-
-  // ---- Google -------------------------------------------------------------
-  { match: /^gemini-.*flash/, id: 'gemini-flash', label: 'Gemini Flash', provider: 'google', family: 'gemini-flash', pricing: { input: 0.3, output: 2.5 }, context: 1_000_000 },
-  { match: /^gemini-.*pro/, id: 'gemini-pro', label: 'Gemini Pro', provider: 'google', family: 'gemini-pro', pricing: { input: 1.25, output: 10 }, context: 1_000_000 },
-  { match: /^gemini/, id: 'gemini', label: 'Gemini', provider: 'google', family: 'gemini-pro', pricing: { input: 1.25, output: 10 }, context: 1_000_000 },
 ];
-
-/**
- * Modèles locaux (Ollama & co) : le nom porte souvent la taille réelle, ce qui
- * est la seule situation où le nombre de paramètres est *connu* plutôt
- * qu'estimé. `llama3.1:70b` -> 70 milliards, confidence 'disclosed'.
- */
-function parseLocalModel(raw) {
-  const m = /[:\-_](\d+(?:\.\d+)?)\s*b\b/i.exec(raw);
-  if (!m) return null;
-  const b = parseFloat(m[1]);
-  // Un modèle local dense a autant de paramètres actifs que totaux.
-  return {
-    id: raw,
-    label: raw,
-    provider: 'local',
-    family: 'local',
-    pricing: null,
-    context: null,
-    params: { total: range(b, b), active: range(b, b), confidence: 'disclosed' },
-  };
-}
 
 const _cache = new Map();
 
@@ -149,8 +112,6 @@ function resolveModel(raw, overrides = null) {
     if (hit) {
       const { match, family, ...rest } = hit;
       record = { ...rest, family, params: PARAM_PROFILES[family] || PARAM_PROFILES.unknown };
-    } else {
-      record = parseLocalModel(key);
     }
   }
 

@@ -48,32 +48,20 @@ dit au lieu de le masquer :
 | **Codex CLI / Desktop** | ✅ | ✅ | Rollouts `~/.codex/sessions`. Le serveur y écrit déjà un pourcentage d'utilisation par fenêtre. |
 | **API Anthropic** | ✅ | — | Rapports d'usage et de coût de l'organisation. Chiffres **facturés**, toutes machines confondues. Clé Admin requise. |
 | **API OpenAI** | ✅ | — | Rapport d'usage de l'organisation. Clé Admin requise. |
-| **Gemini CLI** | ❌¹ | ❌ | Aucun client Gemini n'écrit ses tokens en local. Seule l'activité est remontée. |
-| **Grok CLI** | ❌ | ❌ | `unified.jsonl` ne contient que des diagnostics d'authentification, et `session_search.sqlite` n'est qu'un index plein-texte. Le binaire n'expose aucun endpoint d'usage. Seule l'activité est remontée. |
-| **Ollama** | ❌ | — | Renvoie `eval_count` dans chaque réponse mais n'en garde aucune trace. Seul l'état courant (modèles chargés) est lisible. |
 
-¹ **Pourquoi Gemini reste sans tokens.** Le CLI historique comptait bien ses
-tokens et savait les écrire via sa télémétrie OpenTelemetry en mode `local` —
-le collecteur correspondant existe toujours dans TRACE. Mais ce client n'est
-plus supporté (`IneligibleTierError`), et **Antigravity, qui le remplace, ne
-persiste rien d'exploitable** : ses transcripts et sa base de conversations ne
-contiennent que du contenu et de la configuration, et son gestionnaire de
-quota (`quota_manager.go`) recharge les valeurs depuis le serveur sans jamais
-les écrire sur disque. Aucun cache local, aucun compteur.
+**Gemini, Grok et Ollama ont été retirés.** Ils avaient été ajoutés puis
+inspectés en profondeur : aucun des trois n'écrit de compteur de tokens
+exploitable en local. Gemini CLI le permettait via sa télémétrie
+OpenTelemetry, mais ce client n'est plus supporté, et Antigravity qui le
+remplace ne persiste ni compteurs ni quota — son gestionnaire de quota
+recharge depuis le serveur sans rien écrire. Grok CLI ne journalise que des
+diagnostics d'authentification. Ollama ne conserve pas les compteurs que son
+API renvoie pourtant à chaque appel.
 
-Le collecteur reste en place : si un client Gemini réécrit ses tokens un jour,
-il suffira de rebrancher la télémétrie.
-
-Les modèles Grok sont malgré tout déclarés dans le registre, avec un tarif
-`null` — « coût inconnu », ce qui reste visible dans l'interface, et non
-« gratuit », ce qui serait un mensonge. Renseignez-les via `modelOverrides` si
-vous les connaissez : le jour où une source fournit des tokens (API xAI, ou
-version ultérieure du CLI), ils seront correctement chiffrés.
-
-Les lignes sans token sont des limites des outils eux-mêmes, pas de TRACE.
-Plutôt que d'extrapoler un nombre de tokens à partir du nombre de caractères —
-ce qui produirait un chiffre faux présenté comme une mesure — ces collecteurs
-déclarent `providesTokens: false` et l'interface les affiche comme tels.
+Plutôt que de conserver trois sources incapables de produire un chiffre, elles
+ont été supprimées. Le principe reste : jamais d'extrapolation depuis le
+nombre de caractères, qui produirait une valeur fausse présentée comme une
+mesure.
 
 ---
 

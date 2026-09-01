@@ -316,7 +316,7 @@ function sourcesCard() {
       : src.note
       || (src.events ? 'aucune activité sur la période' : 'aucune donnée'));
     const provider = { 'claude-code': 'anthropic', 'anthropic-oauth': 'anthropic', 'anthropic-api': 'anthropic',
-      'codex-cli': 'openai', 'openai-api': 'openai', 'gemini-cli': 'google', 'grok-cli': 'xai', ollama: 'local' }[src.id] || 'unknown';
+      'codex-cli': 'openai', 'openai-api': 'openai' }[src.id] || 'unknown';
     wrap.insertAdjacentHTML('beforeend', `<div class="src">
         ${providerMark(provider, 13)}
         <i class="dot" style="background:${color}"></i>

@@ -32,26 +32,8 @@ const MARKS = {
              L${s * 0.5} ${s * 0.93} L${s * 0.12} ${s * 0.715} L${s * 0.12} ${s * 0.285} Z"
           fill="none" stroke="currentColor" stroke-width="${s * 0.13}" stroke-linejoin="round"/>`,
 
-  // Étincelle à quatre branches aux flancs concaves, signature des marques Gemini.
-  google: (s) => `
-    <path d="M${s * 0.5} ${s * 0.06}
-             C${s * 0.55} ${s * 0.36} ${s * 0.64} ${s * 0.45} ${s * 0.94} ${s * 0.5}
-             C${s * 0.64} ${s * 0.55} ${s * 0.55} ${s * 0.64} ${s * 0.5} ${s * 0.94}
-             C${s * 0.45} ${s * 0.64} ${s * 0.36} ${s * 0.55} ${s * 0.06} ${s * 0.5}
-             C${s * 0.36} ${s * 0.45} ${s * 0.45} ${s * 0.36} ${s * 0.5} ${s * 0.06} Z"
-          fill="currentColor"/>`,
 
-  // Puce : le calcul se fait sur la machine de l'utilisateur.
-  local: (s) => `
-    <rect x="${s * 0.18}" y="${s * 0.18}" width="${s * 0.64}" height="${s * 0.64}" rx="${s * 0.12}"
-          fill="none" stroke="currentColor" stroke-width="${s * 0.11}"/>
-    <rect x="${s * 0.38}" y="${s * 0.38}" width="${s * 0.24}" height="${s * 0.24}" rx="${s * 0.05}" fill="currentColor"/>`,
 
-  // xAI : la marque est un monogramme anguleux ; on en garde la géométrie.
-  xai: (s) => `
-    <path d="M${s * 0.12} ${s * 0.88} L${s * 0.88} ${s * 0.12}" stroke="currentColor" stroke-width="${s * 0.14}" stroke-linecap="round"/>
-    <path d="M${s * 0.12} ${s * 0.12} L${s * 0.44} ${s * 0.46}" stroke="currentColor" stroke-width="${s * 0.14}" stroke-linecap="round"/>
-    <path d="M${s * 0.56} ${s * 0.58} L${s * 0.88} ${s * 0.88}" stroke="currentColor" stroke-width="${s * 0.14}" stroke-linecap="round"/>`,
 
   unknown: (s) => `
     <circle cx="${s * 0.5}" cy="${s * 0.5}" r="${s * 0.3}" fill="none"
@@ -68,23 +50,17 @@ const MARKS = {
  * regroupement visuel.
  *
  * Elles se trouvent en outre être plus fidèles aux marques réelles : celle
- * d'OpenAI est monochrome, celle de Gemini tire sur le bleu-violet.
+ * d'OpenAI est monochrome.
  */
 export const PROVIDER_COLOR = {
   anthropic: '#e0863c',
   openai: '#9aa4b2',
-  google: '#b79bff',
-  xai: '#c2c8d2',
-  local: '#f0a3bd',
   unknown: 'var(--ink-faint)',
 };
 
 export const PROVIDER_LABEL = {
   anthropic: 'Anthropic',
   openai: 'OpenAI',
-  google: 'Google',
-  xai: 'xAI',
-  local: 'Local',
   unknown: 'Fournisseur inconnu',
 };
 

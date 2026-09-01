@@ -57,7 +57,7 @@ function render() {
   if (!snap.report.eventCount) {
     body.innerHTML = `<div class="empty">
       <h2>Aucune consommation détectée</h2>
-      <p>TRACE lit les journaux locaux de Claude Code, Codex et Gemini CLI.
+      <p>TRACE lit les journaux locaux de Claude Code et Codex CLI.
       Lancez un de ces outils, puis actualisez.</p></div>`;
     return;
   }

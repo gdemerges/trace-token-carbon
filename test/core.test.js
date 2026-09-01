@@ -31,11 +31,17 @@ test('registre : un modèle inconnu reste visible plutôt que disparaître', () 
   assert.equal(m.pricing, null, 'un tarif inconnu doit rester null, pas devenir 0');
 });
 
-test('registre : la taille d’un modèle local est lue dans son nom', () => {
-  const m = resolveModel('llama3.1:70b');
-  assert.equal(m.provider, 'local');
-  assert.equal(m.params.active.min, 70);
-  assert.equal(m.params.confidence, 'disclosed');
+test('registre : seuls les fournisseurs collectés sont résolus', () => {
+  // Gemini, Grok et Ollama ont été retirés des sources : leurs modèles ne
+  // peuvent plus arriver, et retombent donc sur le profil inconnu — visible
+  // comme tel dans l'interface plutôt que chiffré à tort.
+  for (const id of ['gemini-2.5-pro', 'grok-build', 'llama3.1:70b']) {
+    const m = resolveModel(id);
+    assert.equal(m.provider, 'unknown', id);
+    assert.equal(m.pricing, null, `${id} : coût inconnu, jamais nul`);
+  }
+  assert.equal(resolveModel('claude-opus-5').provider, 'anthropic');
+  assert.equal(resolveModel('gpt-5').provider, 'openai');
 });
 
 // ---------------------------------------------------------------------------
@@ -46,9 +52,10 @@ test('tarification : les multiplicateurs de cache sont appliqués par TTL', () =
   assert.ok(Math.abs(c - expected) < 1e-9, `${c} != ${expected}`);
 });
 
-test('tarification : un coût inconnu vaut null, un modèle local vaut 0', () => {
+test('tarification : un coût inconnu vaut null, jamais 0', () => {
+  // Un coût inconnu ne doit pas se fondre dans un total en se faisant passer
+  // pour la gratuité.
   assert.equal(cost({ input: 1e6 }, resolveModel('modele-inconnu')), null);
-  assert.equal(cost({ input: 1e6 }, resolveModel('llama3.1:70b')), 0);
 });
 
 test('tarification : le cache fait bien économiser', () => {
@@ -768,38 +775,7 @@ test('usage direct : une coupure passagère ne punit pas comme un 429', () => {
 });
 
 // ---------------------------------------------------------------------------
-test('registre : un modèle Grok a un coût INCONNU, pas nul', () => {
-  const m = resolveModel('grok-build');
-  assert.equal(m.provider, 'xai');
-  // Les tarifs xAI ne sont pas exposés par le CLI. `null` reste visible comme
-  // « coût inconnu » dans l'interface ; 0 aurait été un mensonge.
-  assert.equal(cost({ input: 1e6, output: 1e6 }, m), null);
-  assert.ok(m.params.active.max > 0, 'l’estimation carbone reste possible');
-});
-
-test('collecteur Grok : déclare ne pas fournir de tokens', () => {
-  const grok = require('../src/core/collectors/grok-cli');
-  assert.equal(grok.providesTokens, false);
-  // Aucun compteur n'existe côté Grok CLI : extrapoler depuis la longueur des
-  // messages produirait un chiffre faux présenté comme une mesure.
-  const r = grok.collect({ grokDir: tmpdir() });
-  assert.deepEqual(r.events, []);
-  assert.deepEqual(r.quota, []);
-});
-
-test('collecteur Grok : un index illisible ne fait pas tomber le collecteur', () => {
-  const grok = require('../src/core/collectors/grok-cli');
-  const dir = tmpdir();
-  fs.mkdirSync(path.join(dir, 'sessions'), { recursive: true });
-  fs.writeFileSync(path.join(dir, 'sessions', 'session_search.sqlite'), 'ceci n\'est pas une base');
-  const r = grok.collect({ grokDir: dir });
-  assert.equal(r.stats.sqlite, false, 'l’échec est signalé, pas propagé');
-  assert.deepEqual(r.events, []);
-  fs.rmSync(dir, { recursive: true, force: true });
-});
-
 // ---------------------------------------------------------------------------
-const gemini = require('../src/core/collectors/gemini-cli');
 
 /** Enregistrement calqué sur la structure réellement observée dans le
  *  telemetry.log de Gemini CLI : objets JSON INDENTÉS et concaténés, avec un
@@ -809,74 +785,3 @@ const geminiRecord = (attrs) => JSON.stringify({
   resource: { _rawAttributes: [['host.arch', 'arm64']] },
   attributes: { 'session.id': 's1', 'user.email': 'x@example.com', ...attrs },
 }, null, 2);
-
-test('Gemini : découpe des objets JSON concaténés, pas du JSONL', () => {
-  const text = geminiRecord({ 'event.name': 'a' }) + geminiRecord({ 'event.name': 'b' });
-  const { objects, consumed } = gemini.splitObjects(text);
-  assert.equal(objects.length, 2);
-  assert.equal(consumed, text.length);
-});
-
-test('Gemini : une accolade dans une chaîne ne casse pas le découpage', () => {
-  const text = geminiRecord({ 'event.name': 'a', prompt: 'un } piège { ici' });
-  assert.equal(gemini.splitObjects(text).objects.length, 1);
-});
-
-test('Gemini : un objet incomplet est laissé pour la passe suivante', () => {
-  const complet = geminiRecord({ 'event.name': 'a' });
-  const { objects, consumed } = gemini.splitObjects(complet + '{ "attributes": { "inc');
-  assert.equal(objects.length, 1);
-  assert.equal(consumed, complet.length, 'la reprise doit se faire après le dernier objet complet');
-});
-
-test('Gemini : les tokens d’un api_response sont extraits', () => {
-  const dir = tmpdir();
-  const file = path.join(dir, 'telemetry.log');
-  fs.writeFileSync(file, [
-    geminiRecord({ 'event.name': 'gemini_cli.config', model: 'auto-gemini-3' }),
-    geminiRecord({
-      'event.name': 'gemini_cli.api_response',
-      'event.timestamp': '2026-09-01T20:10:55.137Z',
-      model: 'gemini-2.5-pro',
-      // L'exporteur sérialise les compteurs en chaîne : le parseur normalise.
-      input_token_count: '12000',
-      output_token_count: '800',
-      cached_content_token_count: '9000',
-      thoughts_token_count: '150',
-      cwd: '/Users/x/Dev/monprojet',
-    }),
-  ].join(''));
-
-  const r = gemini.collectTelemetry({ geminiTelemetryFile: file }, {});
-  assert.equal(r.events.length, 1, 'seul api_response porte des tokens');
-  const e = r.events[0];
-  assert.equal(e.tokens.output, 800);
-  assert.equal(e.tokens.cacheRead, 9000);
-  assert.equal(e.tokens.input, 3000, 'l’entrée inclut le cache : il faut le retrancher');
-  assert.equal(e.tokens.total, 12800);
-  assert.equal(e.model, 'gemini-2.5-pro');
-  assert.equal(e.project, 'monprojet');
-  // Le journal contient l'adresse e-mail de l'utilisateur : elle ne doit
-  // remonter nulle part.
-  assert.ok(!JSON.stringify(e).includes('@example.com'));
-  fs.rmSync(dir, { recursive: true, force: true });
-});
-
-test('Gemini : la lecture reprend à l’offset, sans recompter', () => {
-  const dir = tmpdir();
-  const file = path.join(dir, 'telemetry.log');
-  const resp = (n) => geminiRecord({
-    'event.name': 'gemini_cli.api_response', 'event.timestamp': '2026-09-01T20:10:55.137Z',
-    model: 'gemini-2.5-pro', input_token_count: String(n), output_token_count: '1', cached_content_token_count: '0',
-  });
-
-  fs.writeFileSync(file, resp(100));
-  const a = gemini.collectTelemetry({ geminiTelemetryFile: file }, {});
-  assert.equal(a.events.length, 1);
-
-  fs.appendFileSync(file, resp(200));
-  const b = gemini.collectTelemetry({ geminiTelemetryFile: file }, a.state);
-  assert.equal(b.events.length, 1, 'seul l’ajout doit remonter');
-  assert.equal(b.events[0].tokens.input, 200);
-  fs.rmSync(dir, { recursive: true, force: true });
-});
