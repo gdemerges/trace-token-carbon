@@ -1,0 +1,134 @@
+/* ==========================================================================
+   TRACE — jetons visuels
+
+   Parti pris : l'univers des instruments de mesure (enregistreur graphique,
+   VU-mètre, compteur), pas celui du tableau de bord SaaS. Fond graphite chaud
+   plutôt que noir, tracé ambre plutôt qu'accent acide.
+
+   Le point important, fonctionnel autant qu'esthétique : TROIS teintes
+   codantes, une par grandeur mesurée. L'ambre est toujours un volume de
+   tokens, la sarcelle toujours du CO₂e, le bleu toujours de l'argent. La
+   couleur porte donc de l'information et jamais de la décoration — on peut
+   lire un graphe sans en lire la légende.
+   ========================================================================== */
+
+:root {
+  color-scheme: dark light;
+
+  --ground: #14161a;
+  --panel: #1b1e24;
+  --panel-hi: #21252d;
+  --rule: #2a2f38;
+  --rule-soft: #22262e;
+
+  --ink: #e9e7e2;
+  --ink-dim: #939aa6;
+  --ink-faint: #626a77;
+
+  /* Les trois grandeurs mesurées */
+  --tokens: #ffb454;
+  --tokens-soft: rgba(255, 180, 84, 0.16);
+  --carbon: #6fd6c4;
+  --carbon-soft: rgba(111, 214, 196, 0.16);
+  --cost: #a8c4ff;
+  --cost-soft: rgba(168, 196, 255, 0.16);
+
+  --hot: #ff6b5b;
+  --hot-soft: rgba(255, 107, 91, 0.16);
+
+  --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, "Helvetica Neue", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Code", Menlo, Consolas, monospace;
+
+  --r: 6px;
+  --pad: 16px;
+}
+
+/* Variante claire : le papier de l'enregistreur, pas un fond crème.
+   Le fond est volontairement plus soutenu que les panneaux, pour que ceux-ci
+   se détachent, et les filets sont franchement visibles — sur un instrument
+   la grille se lit, elle ne se devine pas. */
+@media (prefers-color-scheme: light) {
+  :root {
+    --ground: #e9e4da;
+    --panel: #fbfaf7;
+    --panel-hi: #efeae0;
+    --rule: #c3baa9;
+    --rule-soft: #d6cfc1;
+
+    --ink: #12151a;
+    --ink-dim: #4a515c;
+    --ink-faint: #757d89;
+
+    --tokens: #a04e00;
+    --tokens-soft: rgba(160, 78, 0, 0.14);
+    --carbon: #0a6d5e;
+    --carbon-soft: rgba(10, 109, 94, 0.14);
+    --cost: #2a4a9c;
+    --cost-soft: rgba(42, 74, 156, 0.14);
+
+    --hot: #a8231a;
+    --hot-soft: rgba(168, 35, 26, 0.14);
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: var(--font-ui);
+  background: var(--ground);
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Tous les chiffres sont tabulaires : sans cela les jauges tressautent
+   latéralement à chaque rafraîchissement, ce qui est illisible du coin de
+   l'œil — précisément l'usage visé. */
+.num, .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1; }
+
+/* Légende d'instrument : capitales étroites très espacées. */
+.legend {
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--rule-soft);
+  border-radius: var(--r);
+}
+
+hr.rule { border: 0; border-top: 1px solid var(--rule-soft); margin: 0; }
+
+/* Les SVG sont `inline` par défaut : ils s'assoient sur la ligne de base et
+   traînent derrière eux l'espace du jambage, ce qui faisait déborder le tracé
+   du héros par-dessus la ligne de chiffres. */
+svg { display: block; }
+
+button {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+:focus-visible { outline: 2px solid var(--tokens); outline-offset: 2px; border-radius: 3px; }
+
+.dim { color: var(--ink-dim); }
+.faint { color: var(--ink-faint); }
+.c-tokens { color: var(--tokens); }
+.c-carbon { color: var(--carbon); }
+.c-cost { color: var(--cost); }
+.c-hot { color: var(--hot); }
+
+@media (prefers-reduced-motion: no-preference) {
+  .fade-in { animation: fade 260ms ease-out both; }
+  @keyframes fade { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+}

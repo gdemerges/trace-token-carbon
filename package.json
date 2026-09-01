@@ -1,0 +1,30 @@
+{
+  "name": "trace",
+  "productName": "TRACE",
+  "version": "0.1.0",
+  "description": "TRACE — Token Rate And Carbon Estimator. Consommation de tokens par modèle IA, rate limits et empreinte carbone.",
+  "main": "src/main/index.js",
+  "author": "Guillaume Demerges",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "cli": "node src/cli.js",
+    "test": "node --test \"test/**/*.test.js\"",
+    "dist": "node scripts/make-icons.js && node scripts/make-logos.js && electron-builder",
+    "dist:mac": "node scripts/make-icons.js && node scripts/make-logos.js && electron-builder --mac",
+    "dist:win": "node scripts/make-icons.js && node scripts/make-logos.js && electron-builder --win",
+    "dist:linux": "node scripts/make-icons.js && node scripts/make-logos.js && electron-builder --linux",
+    "icons": "node scripts/make-icons.js",
+    "logos": "node scripts/make-logos.js"
+  },
+  "devDependencies": {
+    "electron": "^44.1.0",
+    "electron-builder": "^26.15.3"
+  },
+  "dependencies": {},
+  "bin": {
+    "trace": "src/cli.js"
+  }
+}

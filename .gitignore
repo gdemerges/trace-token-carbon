@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.DS_Store
+*.log
+build/
+
+# Index et préférences vivent dans le répertoire de configuration système,
+# jamais dans le dépôt — ils contiennent l'historique d'usage et les clés.
+config.json
+index.json

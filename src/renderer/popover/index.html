@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<title>TRACE</title>
+<link rel="stylesheet" href="../shared/theme.css" />
+<style>
+  /* Le popover flotte : sur macOS il s'appuie sur le flou système, ailleurs
+     il pose son propre fond opaque. */
+  html, body { height: 100%; overflow: hidden; }
+  body { background: transparent; }
+  .shell {
+    height: 100%; display: flex; flex-direction: column;
+    background: color-mix(in srgb, var(--ground) 92%, transparent);
+    border: 1px solid var(--rule); border-radius: 10px; overflow: hidden;
+  }
+  @supports not (background: color-mix(in srgb, red 50%, blue)) { .shell { background: var(--ground); } }
+
+  header { display: flex; align-items: baseline; gap: 8px; padding: 11px var(--pad) 9px; }
+  .wordmark { font-size: 11px; font-weight: 700; letter-spacing: 0.22em; }
+  header .status { margin-left: auto; font-size: 10px; }
+
+  header { border-bottom: 1px solid var(--rule-soft); }
+
+  .body { flex: 1; overflow-y: auto; padding: 15px var(--pad) 0; }
+  .body::-webkit-scrollbar { width: 7px; }
+  .body::-webkit-scrollbar-thumb { background: var(--rule); border-radius: 4px; }
+
+  .gauge-row { margin-bottom: 15px; }
+  .gauge-head { display: flex; align-items: center; gap: 7px; margin-bottom: 5px; }
+  .mark { flex: none; }
+  /* Les logos sont peints à travers un masque : la silhouette vient du
+     fichier, la couleur suit le thème. */
+  .mark.logo { display: inline-block; -webkit-mask-size: contain; mask-size: contain;
+               -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+               -webkit-mask-position: center; mask-position: center; }
+  .gauge-head .val { margin-left: auto; font-size: 14px; font-weight: 600; }
+  .gauge-sub { display: flex; gap: 6px; margin-top: 4px; font-size: 10.5px; }
+  .gauge-sub .right { margin-left: auto; }
+
+  .triad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--rule-soft);
+           border: 1px solid var(--rule-soft); border-radius: var(--r); overflow: hidden; margin: 16px 0 14px; }
+  .triad > div { background: var(--panel); padding: 9px 10px 10px; }
+  .triad .v { font-size: 15px; font-weight: 600; margin-top: 2px; }
+  .triad .x { font-size: 10px; margin-top: 1px; }
+
+  footer { border-top: 1px solid var(--rule-soft); padding: 8px var(--pad); display: flex; align-items: center; gap: 8px; }
+  .btn { padding: 6px 11px; border-radius: 5px; font-size: 11.5px; font-weight: 500; border: 1px solid var(--rule); }
+  .btn:hover { background: var(--panel-hi); }
+  .btn.primary { background: var(--tokens-soft); border-color: transparent; color: var(--tokens); }
+  .btn.primary:hover { background: color-mix(in srgb, var(--tokens) 26%, transparent); }
+  kbd { font-family: var(--font-mono); font-size: 9.5px; color: var(--ink-faint); border: 1px solid var(--rule);
+        border-radius: 3px; padding: 1px 4px; }
+  .grow { flex: 1; }
+  .btn.icon { padding: 5px 8px; line-height: 1; }
+  /* Quitter est destructif : discret par défaut, explicite au survol. */
+  .btn.quit { color: var(--ink-faint); border-color: transparent; }
+  .btn.quit:hover { color: var(--hot); border-color: var(--hot); background: var(--hot-soft); }
+
+  .empty { padding: 30px var(--pad); text-align: center; }
+  .empty h2 { font-size: 13px; margin: 0 0 6px; font-weight: 600; }
+  .empty p { margin: 0; font-size: 11.5px; color: var(--ink-dim); }
+</style>
+</head>
+<body>
+  <div class="shell">
+    <header>
+      <span class="wordmark">TRACE</span>
+      <span class="legend" id="range-label"></span>
+      <span class="status legend" id="status">lecture…</span>
+    </header>
+    <div class="body" id="body"></div>
+    <footer>
+      <button class="btn primary" id="open-dash">Ouvrir le tableau de bord</button>
+      <button class="btn icon" id="refresh" title="Actualiser" aria-label="Actualiser">⟳</button>
+      <span class="grow"></span>
+      <kbd id="shortcut-hint"></kbd>
+      <button class="btn icon quit" id="quit" title="Quitter TRACE" aria-label="Quitter TRACE">⏻</button>
+    </footer>
+  </div>
+  <script type="module" src="./popover.js"></script>
+</body>
+</html>

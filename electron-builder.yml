@@ -1,0 +1,59 @@
+appId: com.gdemerges.trace
+productName: TRACE
+copyright: TRACE — Token Rate And Carbon Estimator
+
+directories:
+  output: dist
+  buildResources: build
+
+files:
+  - src/**/*
+  - package.json
+  - "!test/**"
+  - "!scripts/**"
+  - "!dist/**"
+
+# Les icônes sont dessinées par `scripts/make-icons.js`, appelé par les scripts
+# npm `dist:*` : rien de binaire n'est versionné, et l'icône applicative reste
+# synchronisée avec celle de la barre d'état.
+
+mac:
+  category: public.app-category.developer-tools
+  icon: build/icon.png
+  target:
+    - target: dmg
+      arch: [arm64, x64]
+    - target: zip
+      arch: [arm64, x64]
+  extendInfo:
+    # TRACE vit dans la barre de menus : pas d'icône dans le Dock, pas de
+    # fenêtre au lancement.
+    LSUIElement: 1
+  hardenedRuntime: true
+  gatekeeperAssess: false
+
+dmg:
+  title: TRACE ${version}
+
+win:
+  icon: build/icon.png
+  target:
+    - target: nsis
+      arch: [x64, arm64]
+    - target: portable
+      arch: [x64]
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  shortcutName: TRACE
+
+linux:
+  icon: build/icon.png
+  category: Utility
+  synopsis: Consommation de tokens IA, limites de débit et empreinte carbone
+  target:
+    - AppImage
+    - deb
+    - rpm
