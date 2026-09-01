@@ -55,7 +55,7 @@ const FRESH_MS = 20 * 60 * 1000;
  * relevé périmé pour une mesure courante. Il vit donc ici, remplacé à chaque
  * succès, et jamais écrit sur le disque.
  */
-const cache = { fetchedAt: 0, quota: null, failures: 0, retryAfter: 0, lastError: null };
+const cache = { fetchedAt: 0, quota: null, failures: 0, retryAfter: 0, lastError: null, forceNext: false };
 
 /** Lit le trousseau macOS. Résout à null plutôt que de rejeter : l'absence
  *  d'identifiants est un cas normal, pas une erreur. */
@@ -213,21 +213,31 @@ async function collect(config = {}, state = {}) {
   const now = Date.now();
   const minInterval = config.liveUsageIntervalMs || MIN_INTERVAL_MS;
 
-  // Amorçage depuis l'état persisté. Sans cela, chaque démarrage de
-  // l'application repart d'un cache vide et refrappe l'API immédiatement —
-  // une dizaine de redémarrages en développement suffisent à déclencher un
-  // 429, ce qui est précisément ce qui s'est produit.
+  // Demande explicite de l'utilisateur (bouton « Actualiser »). Ce drapeau doit
+  // être lu AVANT l'amorçage : la première version remettait `fetchedAt` à
+  // zéro pour forcer un relevé, et l'amorçage ci-dessous le restaurait aussitôt
+  // depuis l'état persisté — le bouton ne faisait donc plus rien. Deux
+  // correctifs ajoutés séparément qui s'annulaient en silence.
+  const forced = cache.forceNext;
+  cache.forceNext = false;
+
+  // Amorçage depuis l'état persisté, TOUJOURS — y compris sur une demande
+  // explicite. Il ne fait que restaurer ce qu'on sait déjà : le dernier relevé
+  // et un éventuel report en cours. C'est la cadence, et elle seule, que le
+  // forçage doit court-circuiter.
   if (!cache.fetchedAt && state.fetchedAt) {
     cache.fetchedAt = state.fetchedAt;
     cache.quota = state.quota || null;
     cache.retryAfter = state.retryAfter || 0;
   }
 
-  // Report après échec : on ne réessaie pas avant l'heure dite. Insister sur
-  // un 429 ne fait que prolonger la sanction.
+  // Le report après échec s'applique MÊME à une demande explicite : insister
+  // sur un 429 ne fait que prolonger la sanction. En revanche l'interface doit
+  // dire pourquoi rien ne bouge, jamais rester muette.
   if (cache.retryAfter > now) return cached('en attente après un échec');
-  // Régime normal : on réutilise le dernier relevé tant qu'il est récent.
-  if (cache.fetchedAt && now - cache.fetchedAt < minInterval) return cached('relevé récent réutilisé');
+  // Régime normal : on réutilise le dernier relevé tant qu'il est récent —
+  // sauf demande explicite, qui court-circuite la cadence.
+  if (!forced && cache.fetchedAt && now - cache.fetchedAt < minInterval) return cached('relevé récent réutilisé');
 
   const { token, error } = await loadToken();
   if (!token) return { events: [], quota: [], state: {}, stats: { configured: false, events: 0, errors: error ? [error] : [] } };
@@ -312,18 +322,34 @@ async function collect(config = {}, state = {}) {
   };
 }
 
-/** Réinitialise le cache — utilisé par les tests et par « Actualiser maintenant ». */
+/**
+ * Force un relevé au prochain cycle (bouton « Actualiser »).
+ *
+ * On lève un drapeau plutôt que de vider le cache : vider `fetchedAt` ne
+ * survivait pas à l'amorçage depuis l'état persisté, et le dernier relevé
+ * connu serait perdu si l'appel échouait.
+ */
+function forceRefresh() {
+  // On ne touche ni à `retryAfter` ni à `failures` : un report en cours vient
+  // d'un refus du serveur, et cliquer sur « Actualiser » ne l'annule pas.
+  // L'interface affiche alors le délai restant plutôt que de rester muette.
+  cache.forceNext = true;
+}
+
+/** Vide entièrement le cache — réservé aux tests. */
 function resetCache() {
   cache.fetchedAt = 0;
   cache.quota = null;
   cache.failures = 0;
   cache.retryAfter = 0;
   cache.lastError = null;
+  cache.forceNext = false;
 }
 
 module.exports = {
   id: SOURCE,
   resetCache,
+  forceRefresh,
   FRESH_MS,
   MIN_INTERVAL_MS,
   label: 'Claude — usage en direct',

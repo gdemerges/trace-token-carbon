@@ -311,7 +311,7 @@ function registerIpc() {
   ipcMain.handle('trace:refresh', () => {
     // Une demande explicite passe outre la cadence d'interrogation : c'est
     // précisément ce qu'attend quelqu'un qui clique sur « Actualiser ».
-    require('../core/collectors/anthropic-oauth').resetCache();
+    require('../core/collectors/anthropic-oauth').forceRefresh();
     return refresh('manuel');
   });
   ipcMain.handle('trace:config:get', () => {

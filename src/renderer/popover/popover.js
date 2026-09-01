@@ -66,6 +66,17 @@ function render() {
 
   for (const block of groupByProduct(snap.gauges)) body.appendChild(renderBlock(block));
 
+  // Un relevé qui ne bouge pas doit s'expliquer. Sans ça, l'utilisateur voit
+  // un chiffre figé et conclut — à raison — que quelque chose est cassé.
+  const ls = snap.liveStatus;
+  if (ls && !ls.ok) {
+    const warn = document.createElement('div');
+    warn.className = 'live-warn';
+    const wait = ls.nextAttemptIn > 0 ? ` Nouvelle tentative dans ${Math.ceil(ls.nextAttemptIn / 60000)} min.` : '';
+    warn.innerHTML = `<span class="c-hot">Relevé Claude indisponible.</span> <span class="faint">${esc(ls.error)}.${esc(wait)}</span>`;
+    body.appendChild(warn);
+  }
+
   const triad = document.createElement('div');
   triad.className = 'triad';
   const c = t.carbon.gramsCO2e;

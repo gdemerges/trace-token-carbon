@@ -103,6 +103,16 @@ function gaugesCard() {
     wrap.appendChild(b);
   }
   s.appendChild(wrap);
+
+  const ls = snap.liveStatus;
+  if (ls && !ls.ok) {
+    const wait = ls.nextAttemptIn > 0 ? ` Nouvelle tentative dans ${Math.ceil(ls.nextAttemptIn / 60000)} min.` : '';
+    s.insertAdjacentHTML('beforeend',
+      `<div class="note" style="margin-top:12px;padding:9px 10px;background:var(--hot-soft);border-radius:5px">
+        <strong class="c-hot">Relevé Claude indisponible.</strong> ${esc(ls.error)}.${esc(wait)}
+        Les chiffres affichés sont ceux du dernier relevé réussi.
+      </div>`);
+  }
   return s;
 }
 

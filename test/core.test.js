@@ -532,3 +532,37 @@ test('usage direct : un relevé daté vaut mieux qu’une estimation fausse', ()
   assert.equal(g.limitSource, 'live-stale');
   assert.equal(g.approximate, false);
 });
+
+test('usage direct : « Actualiser » force vraiment un relevé', async () => {
+  // Régression : `resetCache()` remettait `fetchedAt` à zéro, mais l'amorçage
+  // depuis l'état persisté — ajouté plus tard contre le 429 — le restaurait
+  // aussitôt. Le bouton était devenu un no-op silencieux.
+  const col = require('../src/core/collectors/anthropic-oauth');
+  col.resetCache();
+
+  const recent = { fetchedAt: Date.now() - 5000, quota: [{ source: 'anthropic-oauth', ts: Date.now() - 5000, type: 'five_hour', usedPercent: 19 }], retryAfter: 0 };
+
+  // Sans forçage : le relevé récent est réutilisé, aucun appel n'est tenté.
+  const passive = await col.collect({}, recent);
+  assert.equal(passive.stats.note, 'relevé récent réutilisé');
+
+  // Avec forçage : la cadence est court-circuitée, un appel est tenté.
+  col.resetCache();
+  col.forceRefresh();
+  const active = await col.collect({}, recent);
+  assert.notEqual(active.stats.note, 'relevé récent réutilisé', 'le forçage doit passer outre la cadence');
+
+  col.resetCache();
+});
+
+test('usage direct : le forçage ne passe pas outre un report après échec', async () => {
+  // Insister sur un 429 ne fait que prolonger la sanction. L'interface doit
+  // dire pourquoi rien ne bouge, pas retenter en boucle.
+  const col = require('../src/core/collectors/anthropic-oauth');
+  col.resetCache();
+  col.forceRefresh();
+  const res = await col.collect({}, { fetchedAt: Date.now() - 5000, quota: [], retryAfter: Date.now() + 600000 });
+  assert.equal(res.stats.note, 'en attente après un échec');
+  assert.ok(res.stats.nextAttemptIn > 0, 'le délai restant doit être exposé à l’interface');
+  col.resetCache();
+});

@@ -121,9 +121,23 @@ function snapshot(state, options = {}) {
   const prevTotal = rep.trend.previous.tokens.total;
   rep.trend.significant = prevTotal > Math.max(1000, rep.totals.tokens.total * 0.02);
 
+  // État de la source directe, remonté tel quel : quand un report après échec
+  // est en cours, l'interface doit pouvoir dire pourquoi le chiffre ne bouge
+  // pas, au lieu de laisser croire à un blocage inexpliqué.
+  const liveSource = sources.find((x) => x.id === 'anthropic-oauth');
+  const liveStatus = liveSource
+    ? {
+        ok: !liveSource.error,
+        error: liveSource.error || null,
+        ageMs: (liveSource.stats || {}).ageMs,
+        nextAttemptIn: (liveSource.stats || {}).nextAttemptIn || 0,
+      }
+    : null;
+
   return {
     generatedAt: Date.now(),
     range: { from, to, days },
+    liveStatus,
     report: rep,
     gauges,
     sources,

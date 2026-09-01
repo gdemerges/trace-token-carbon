@@ -22,6 +22,15 @@ export const ORIGIN = {
 
 export function originLabel(g) {
   if (g.limitSource === 'live-stale' && g.reportedAt) return `relevé ${ago(g.reportedAt)}`;
+  // Un relevé en direct n'est pas rafraîchi en continu : la cadence est de
+  // quelques minutes pour ne pas se faire limiter par l'API. Passé une minute
+  // on affiche donc son âge — sans quoi un chiffre de quatre minutes se
+  // présenterait comme instantané et paraîtrait « bloqué » à qui vient de
+  // consommer des tokens.
+  if (g.limitSource === 'live' && g.reportedAt) {
+    const age = Date.now() - g.reportedAt;
+    if (age > 60000) return `en direct · ${ago(g.reportedAt)}`;
+  }
   return ORIGIN[g.limitSource] || 'échelle inconnue';
 }
 
