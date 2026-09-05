@@ -10,8 +10,9 @@ const { resolveModel, CACHE_MULTIPLIERS } = require('../src/core/models');
 const { cost, costWithoutCache } = require('../src/core/pricing');
 const carbon = require('../src/core/carbon');
 const { computeGauges, weightedUsage, applyUserCalibration, durationLabel, LIVE_FRESH_MS } = require('../src/core/ratelimits');
-const { report, exportRows, toCsv } = require('../src/core/aggregate');
+const { report, exportRows, methodologyRows, toCsv } = require('../src/core/aggregate');
 const store = require('../src/core/store');
+const core = require('../src/core');
 const claudeCode = require('../src/core/collectors/claude-code');
 const codex = require('../src/core/collectors/codex-cli');
 
@@ -634,7 +635,7 @@ test('export : format long, une ligne par jour/source/modèle/projet', () => {
     { from: now - 86400000, to: now });
 
   assert.equal(rows.length, 3, 'un en-tête et deux lignes');
-  assert.equal(rows[0].length, 17);
+  assert.equal(rows[0].length, 18);
   // Régression : la première version laissait huit colonnes sur treize vides
   // et mélangeait des lignes journalières avec des lignes « TOTAL ».
   for (const r of rows.slice(1)) {
@@ -785,3 +786,266 @@ const geminiRecord = (attrs) => JSON.stringify({
   resource: { _rawAttributes: [['host.arch', 'arm64']] },
   attributes: { 'session.id': 's1', 'user.email': 'x@example.com', ...attrs },
 }, null, 2);
+
+// ---------------------------------------------------------------------------
+// Traçabilité des facteurs
+//
+// Un chiffre carbone n'est opposable que si chaque facteur remonte à une
+// publication identifiée. Ces tests interdisent d'ajouter une constante sans
+// sa source, et gardent visible la liste de ce qu'il reste à figer.
+
+const factors = require('../src/core/carbon/factors');
+const sources = require('../src/core/carbon/sources');
+const { PARAM_PROFILES } = require('../src/core/models');
+
+test('facteurs : toute constante de méthode est sourcée, et rien de plus', () => {
+  const constants = Object.keys(factors.ECOLOGITS).sort();
+  const documented = Object.keys(factors.ECOLOGITS_PROVENANCE).sort();
+  assert.deepEqual(documented, constants, 'ECOLOGITS et sa provenance doivent se recouvrir exactement');
+
+  for (const [key, p] of Object.entries(factors.ECOLOGITS_PROVENANCE)) {
+    assert.doesNotThrow(() => sources.source(p.source), `${key} : source inconnue`);
+    assert.ok(p.unit, `${key} : unité manquante`);
+  }
+});
+
+test('facteurs : les pondérations par classe de token sont sourcées', () => {
+  for (const key of Object.keys(factors.TOKEN_ENERGY_WEIGHTS)) {
+    const p = factors.TOKEN_ENERGY_PROVENANCE[key];
+    assert.ok(p, `${key} : provenance manquante`);
+    assert.doesNotThrow(() => sources.source(p.source), `${key} : source inconnue`);
+  }
+});
+
+test('facteurs : chaque mix électrique porte sa source et son approche', () => {
+  for (const [key, g] of Object.entries(factors.GRID_INTENSITY)) {
+    assert.doesNotThrow(() => sources.source(g.source), `${key} : source inconnue`);
+    // Le GHG Protocol distingue location-based et market-based. TRACE ne peut
+    // produire que le premier : le confondre avec le second serait du
+    // greenwashing par sous-traitance.
+    assert.equal(g.basis, 'location-based', key);
+    assert.ok(g.value > 0, key);
+  }
+});
+
+test('facteurs : les équivalents de communication sont sourcés et bornés', () => {
+  for (const eq of factors.EQUIVALENTS) {
+    assert.doesNotThrow(() => sources.source(eq.source), `${eq.key} : source inconnue`);
+    // Sans réserve propre, l'annexe reprenait la note de la SOURCE — « mix de
+    // consommation France » collé sous « g de bœuf ». Chaque équivalent doit
+    // dire son propre périmètre.
+    assert.ok(eq.note && eq.note.length > 20, `${eq.key} : périmètre non précisé`);
+  }
+});
+
+test('registre : chaque profil de paramètres justifie sa fourchette', () => {
+  for (const [family, p] of Object.entries(PARAM_PROFILES)) {
+    assert.doesNotThrow(() => sources.source(p.source), `${family} : source inconnue`);
+    // « estimation » ne suffit pas : il faut le raisonnement qui borne la
+    // fourchette, puisque c'est l'incertitude dominante du calcul.
+    assert.ok(p.basis && p.basis.length > 60, `${family} : justification trop courte`);
+    assert.ok(p.total.max >= p.total.min && p.active.max >= p.active.min, family);
+    assert.ok(p.active.max <= p.total.max, `${family} : plus de paramètres actifs que de paramètres`);
+  }
+});
+
+test('facteurs : chaque fournisseur porte son infrastructure et sa source', () => {
+  for (const [key, infra] of Object.entries(factors.PROVIDER_INFRA)) {
+    assert.doesNotThrow(() => sources.source(infra.source), `${key} : source inconnue`);
+    assert.ok(factors.GRID_INTENSITY[infra.gridKey], `${key} : mix par défaut inconnu`);
+    assert.ok(infra.pue.max >= infra.pue.min && infra.pue.min >= 1, `${key} : PUE incohérent`);
+    assert.ok(infra.wueL.max >= infra.wueL.min && infra.wueL.min >= 0, `${key} : WUE incohérent`);
+    // Comme pour les profils de paramètres : « estimation » ne suffit pas, il
+    // faut le raisonnement qui borne la fourchette.
+    assert.ok(infra.basis && infra.basis.length > 60, `${key} : justification trop courte`);
+  }
+  // Un fournisseur non identifié ne doit pas hériter de l'hypothèse la plus
+  // flatteuse : sa fourchette doit englober celle des hyperscalers connus.
+  const unknown = factors.PROVIDER_INFRA.unknown;
+  assert.ok(unknown.pue.max > factors.PROVIDER_INFRA.anthropic.pue.max);
+});
+
+test('carbone : le PUE du fournisseur remplace la moyenne générique', () => {
+  const anthropic = carbon.estimate({ output: 5000 }, resolveModel('claude-opus-5'));
+  assert.equal(anthropic.infra.key, 'anthropic');
+  // La fourchette de PUE doit se retrouver dans le résultat, pas être moyennée.
+  const forced = carbon.estimate({ output: 5000 }, resolveModel('claude-opus-5'), { pue: 1.09 });
+  assert.ok(forced.energyWh.max < anthropic.energyWh.max, 'un PUE forcé doit resserrer la borne haute');
+});
+
+test('carbone : l’eau suit l’énergie et reste une fourchette', () => {
+  const m = resolveModel('claude-opus-5');
+  const a = carbon.estimate({ output: 1000 }, m);
+  const b = carbon.estimate({ output: 2000 }, m);
+  assert.ok(a.waterL.min > 0 && a.waterL.min <= a.waterL.mid && a.waterL.mid <= a.waterL.max);
+  assert.ok(Math.abs(b.waterL.mid / a.waterL.mid - 2) < 0.01, 'linéaire en volume');
+  // Une somme doit additionner l'eau borne à borne, comme le carbone.
+  const s = carbon.sum([a, b]);
+  assert.ok(Math.abs(s.waterL.min - (a.waterL.min + b.waterL.min)) < 1e-9);
+});
+
+test('sensibilité : le mix électrique déplace le total dans le bon sens', () => {
+  const pairs = [{ tokens: { output: 20000, input: 5000 }, model: resolveModel('claude-opus-5') }];
+  const rows = carbon.gridSensitivity(pairs, { gridKey: 'us-average' });
+
+  assert.equal(rows.length, carbon.GRID_SENSITIVITY.length);
+  const byKey = Object.fromEntries(rows.map((r) => [r.key, r]));
+  assert.ok(byKey.france.gramsCO2e.mid < byKey['us-average'].gramsCO2e.mid);
+  assert.ok(byKey['us-average'].gramsCO2e.mid < byKey.world.gramsCO2e.mid);
+  // Le mix retenu par ailleurs sert de référence : son rapport vaut 1.
+  assert.ok(Math.abs(byKey['us-average'].ratio - 1) < 1e-9);
+});
+
+test('sensibilité : l’incertitude est décomposée, et la taille des modèles domine', () => {
+  const pairs = [{ tokens: { output: 20000, input: 200000, cacheRead: 3000000 }, model: resolveModel('claude-opus-5') }];
+  const levers = carbon.uncertainty(pairs, { gridKey: 'us-average' });
+
+  assert.deepEqual(levers.map((l) => l.key).sort(), ['grid', 'infra', 'model', 'weights']);
+  // Trié du levier le plus lourd au plus léger.
+  for (let i = 1; i < levers.length; i++) assert.ok(levers[i - 1].ratio >= levers[i].ratio);
+  // Chaque levier isolé doit rester au-dessus de 1 : il ne peut pas resserrer.
+  for (const l of levers) assert.ok(l.ratio >= 1, `${l.key} : rapport < 1`);
+  // Le PUE est le levier le plus faible : c'est la seule hypothèse pour
+  // laquelle les exploitants publient quelque chose.
+  assert.equal(levers[levers.length - 1].key, 'infra');
+});
+
+test('rapport : le total carbone est livré avec de quoi le contester', () => {
+  const now = Date.now();
+  const events = [{
+    ts: now - 3600000, source: 'claude-code', model: 'claude-opus-5', project: 'p', session: 's', requests: 1,
+    tokens: { input: 1000, output: 500, cacheRead: 20000, cacheWrite: 2000, cacheWrite5m: 2000, cacheWrite1h: 0, thinking: 0, total: 23500 },
+  }];
+  const rep = report(events, { from: now - 86400000, to: now, carbon: { gridKey: 'france' } });
+
+  assert.ok(rep.totals.carbonSensitivity.length, 'analyse de sensibilité absente du rapport');
+  assert.ok(rep.totals.carbonUncertainty.length, 'décomposition de l’incertitude absente du rapport');
+  assert.ok(rep.totals.carbon.waterL.mid > 0, 'empreinte eau absente du rapport');
+  // Une période vide ne doit pas fabriquer une analyse sur du néant.
+  const empty = report([], { from: now - 86400000, to: now });
+  assert.deepEqual(empty.totals.carbonSensitivity, []);
+  assert.deepEqual(empty.totals.carbonUncertainty, []);
+});
+
+test('annexe : l’export méthodologique est autoportant', () => {
+  const rows = methodologyRows({ gridKey: 'france' });
+  assert.deepEqual(rows[0], ['groupe', 'facteur', 'valeur', 'unite', 'source', 'citation', 'version_figee', 'reserve']);
+  assert.ok(rows.length > 20);
+  for (const r of rows.slice(1)) {
+    assert.equal(r.length, rows[0].length);
+    assert.ok(String(r[5]).length > 10, `citation vide pour ${r[1]}`);
+    assert.ok(r[6] === 'oui' || r[6] === 'non', `${r[1]} : version_figee doit trancher`);
+  }
+  // Le mix retenu est cité, les autres ne polluent pas l'annexe.
+  const grids = rows.filter((r) => r[0] === 'Mix électrique');
+  assert.equal(grids.length, 1, 'seul le mix effectivement employé doit être cité');
+});
+
+test('facteurs : le tableau annexable cite chaque ligne', () => {
+  const rows = factors.factorTable();
+  assert.ok(rows.length >= Object.keys(factors.ECOLOGITS).length);
+  for (const r of rows) {
+    assert.ok(r.citation && r.citation.length > 10, `${r.key} : citation vide`);
+    assert.equal(typeof r.pinned, 'boolean', r.key);
+    assert.ok(r.value !== undefined && r.value !== null, `${r.key} : valeur manquante`);
+  }
+});
+
+test('facteurs : la liste des sources à figer est explicite', () => {
+  // Ce test n'échoue pas parce qu'une source n'est pas figée — c'est l'état
+  // actuel et il est assumé. Il échoue si la liste CHANGE sans qu'on le dise :
+  // en figer une doit être un geste délibéré, et en ajouter une non figée ne
+  // doit pas passer inaperçu.
+  assert.deepEqual(
+    sources.unpinnedSources().map((s) => s.id).sort(),
+    ['ademe', 'boavizta', 'ecologits', 'ember', 'epaEgrid', 'providerInfra', 'providerPricing', 'waterFootprint'],
+    'relever version et date SUR la publication, puis passer `pinned` à true'
+  );
+});
+
+test('facteurs : une citation non figée le dit au lieu de faire semblant', () => {
+  assert.match(sources.cite('ademe'), /NON RELEVÉES/);
+  assert.doesNotMatch(sources.cite('traceDerived'), /NON RELEVÉES/);
+});
+
+// ---------------------------------------------------------------------------
+// Cadence du relevé en direct
+//
+// Le relevé Claude n'est rappelé qu'au quart d'heure, pour ne pas se faire
+// écarter par un 429. Cette cadence est normale — mais tant qu'elle reste
+// muette, une jauge qui ne bouge pas se lit comme une panne, et l'utilisateur
+// prend l'habitude de cliquer sur ⟳ à chaque consultation.
+
+const liveCollector = require('../src/core/collectors/anthropic-oauth');
+
+test('relevé en direct : la cadence normale annonce sa prochaine échéance', async () => {
+  const interval = 15 * 60 * 1000;
+  const fetchedAt = Date.now() - 4 * 60 * 1000; // relevé il y a 4 minutes
+  const res = await liveCollector.collect(
+    { liveUsageIntervalMs: interval },
+    { fetchedAt, quota: [], retryAfter: 0, failures: 0 }
+  );
+
+  // Le champ valait 0 en régime normal : il n'était calculé que depuis le
+  // report d'échec, nul ici. Toute la mécanique d'explication était donc
+  // aveugle au cas le plus courant.
+  assert.ok(res.stats.nextAttemptIn > 0, 'la prochaine échéance doit être annoncée');
+  assert.ok(res.stats.nextAttemptIn <= interval);
+  assert.equal(res.stats.nextAttemptReason, 'cadence');
+  assert.equal(res.stats.fromCache, true);
+});
+
+test("relevé en direct : `cached` ne déclare qu'un seul `state`", () => {
+  // Le littéral portait deux fois la clé `state` ; la première, vide, était
+  // écrasée en silence. Une refonte du bloc aurait pu garder la mauvaise.
+  const src = fs.readFileSync(path.join(__dirname, '../src/core/collectors/anthropic-oauth.js'), 'utf8');
+  const body = src.slice(src.indexOf('function cached('), src.indexOf('async function collect('));
+  assert.equal((body.match(/^\s{4}state:/gm) || []).length, 1);
+});
+
+test('instantané : attendre la cadence n’est pas une panne', () => {
+  const base = {
+    config: { defaultRangeDays: 30 },
+    events: [],
+    quota: [],
+    extra: {},
+  };
+  const live = (stats, error) => ({ ...base, sources: [{ id: 'anthropic-oauth', stats, error }] });
+
+  const paced = core.snapshot(live({ nextAttemptIn: 9 * 60 * 1000, nextAttemptReason: 'cadence' }));
+  assert.equal(paced.liveStatus.pacing, true);
+  assert.equal(paced.liveStatus.waiting, false);
+  // Le bandeau rouge ne doit PAS s'afficher : le fonctionnement est nominal.
+  assert.equal(paced.liveStatus.ok, true);
+  assert.equal(paced.liveStatus.error, null);
+
+  const backing = core.snapshot(live({ nextAttemptIn: 9 * 60 * 1000, nextAttemptReason: 'backoff' }));
+  assert.equal(backing.liveStatus.waiting, true);
+  assert.equal(backing.liveStatus.pacing, false);
+  assert.equal(backing.liveStatus.ok, false, 'un report après échec doit rester signalé');
+  assert.ok(backing.liveStatus.error);
+});
+
+test('instantané : la jauge en direct porte l’échéance du prochain relevé', () => {
+  const now = Date.now();
+  const quota = [
+    { source: 'anthropic-oauth', ts: now - 4 * 60 * 1000, type: 'five_hour', usedPercent: 41, resetsAt: now + 3600 * 1000 },
+  ];
+  // Les jauges Anthropic ne sont construites que s'il existe une consommation
+  // Claude à situer : sans événement, il n'y a pas de fenêtre à afficher.
+  const events = [
+    { ts: now - 30 * 60 * 1000, source: 'claude-code', model: 'claude-opus-5', session: 's1', requests: 1,
+      tokens: { input: 1000, output: 500, cacheRead: 0, cacheWrite: 0, cacheWrite5m: 0, cacheWrite1h: 0, thinking: 0, total: 1500 } },
+  ];
+  const snap = core.snapshot({
+    config: { defaultRangeDays: 30 },
+    events,
+    quota,
+    extra: {},
+    sources: [{ id: 'anthropic-oauth', stats: { nextAttemptIn: 11 * 60 * 1000, nextAttemptReason: 'cadence' } }],
+  });
+
+  const g = snap.gauges.find((x) => x.id === 'anthropic-five_hour');
+  assert.equal(g.limitSource, 'live');
+  assert.equal(g.nextLiveIn, 11 * 60 * 1000, "sans cette échéance, l'interface ne peut que taire la cadence");
+});

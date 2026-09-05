@@ -1,4 +1,5 @@
 import { ago, until } from './format.js';
+import { t } from './i18n.js';
 
 /**
  * Regroupement des jauges par produit.
@@ -10,18 +11,31 @@ import { ago, until } from './format.js';
  */
 
 /** Provenance de l'échelle, en clair. */
-export const ORIGIN = {
-  live: 'en direct',
-  'live-stale': 'relevé daté',
-  user: 'calé par vous',
-  configured: 'plafond renseigné',
-  provider: 'donné par le fournisseur',
-  derived: 'déduit du dernier relevé',
-  reset: 'fenêtre réinitialisée',
-};
+export const originText = (limitSource) =>
+  ['live', 'live-stale', 'user', 'configured', 'provider', 'derived', 'reset'].includes(limitSource)
+    ? t(`origin.${limitSource}`)
+    : null;
+
+/**
+ * Échéance du prochain relevé, en minutes rondes.
+ *
+ * Dire l'âge d'un chiffre ne suffit pas : « il y a 12 min » explique d'où
+ * vient la valeur, mais laisse croire que plus rien ne viendra. C'est
+ * exactement ainsi qu'une cadence normale se lit comme une panne, et que
+ * l'utilisateur prend l'habitude de cliquer sur ⟳ à chaque fois.
+ */
+function nextReadingLabel(g) {
+  if (!g.nextLiveIn || g.nextLiveIn <= 0) return null;
+  const min = Math.ceil(g.nextLiveIn / 60000);
+  return min <= 1 ? t('origin.nextSoon') : t('origin.nextIn', { n: min });
+}
 
 export function originLabel(g) {
-  if (g.limitSource === 'live-stale' && g.reportedAt) return `relevé ${ago(g.reportedAt)}`;
+  const next = nextReadingLabel(g);
+  if (g.limitSource === 'live-stale' && g.reportedAt) {
+    const read = t('fmt.readAt', { when: ago(g.reportedAt) });
+    return next ? t('origin.join', { a: read, b: next }) : read;
+  }
   // Un relevé en direct n'est pas rafraîchi en continu : la cadence est de
   // quelques minutes pour ne pas se faire limiter par l'API. Passé une minute
   // on affiche donc son âge — sans quoi un chiffre de quatre minutes se
@@ -29,17 +43,34 @@ export function originLabel(g) {
   // consommer des tokens.
   if (g.limitSource === 'live' && g.reportedAt) {
     const age = Date.now() - g.reportedAt;
-    if (age > 60000) return `en direct · ${ago(g.reportedAt)}`;
+    const aged = t('origin.liveAged', { age: ago(g.reportedAt) });
+    if (age > 60000) return next ? t('origin.join', { a: aged, b: next }) : aged;
+    if (next) return t('origin.join', { a: t('origin.live'), b: next });
   }
-  return ORIGIN[g.limitSource] || 'échelle inconnue';
+  return originText(g.limitSource) || t('origin.unknown');
+}
+
+/**
+ * Trajectoire : quand la fenêtre sera pleine, au rythme des dernières minutes.
+ *
+ * N'apparaît que si la saturation tombe AVANT la réinitialisation. Une
+ * projection qui déborde de la fenêtre n'annonce rien — la fenêtre se vide
+ * d'abord — et l'afficher quand même transformerait un fonctionnement normal
+ * en avertissement permanent.
+ */
+export function projectionLabel(g) {
+  const p = g.projection;
+  if (!p || !p.beforeReset) return null;
+  const left = until(p.at);
+  return left ? t('gauge.fullIn', { when: left }) : t('gauge.fullImminent');
 }
 
 /** Échéance ou nature de la fenêtre, côté gauche de la ligne. */
 export function timingLabel(g) {
   const left = until(g.resetsAt);
-  if (left) return `réinit. dans ${left}`;
-  if (g.limitSource === 'reset') return 'réinitialisée depuis';
-  return 'fenêtre glissante';
+  if (left) return t('fmt.resetIn', { when: left });
+  if (g.limitSource === 'reset') return t('fmt.resetSince');
+  return t('fmt.rolling');
 }
 
 /**

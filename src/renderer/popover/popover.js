@@ -1,7 +1,8 @@
 import { tokens, usd, co2, pct, windowLabel, ago, esc } from '../shared/format.js';
 import { gauge } from '../shared/charts.js';
 import { providerMark } from '../shared/marks.js';
-import { groupByProduct, originLabel, timingLabel } from '../shared/gauges.js';
+import { groupByProduct, originLabel, timingLabel, projectionLabel } from '../shared/gauges.js';
+import { initI18n, applyStaticI18n, t, lang } from '../shared/i18n.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -20,7 +21,9 @@ function renderWindow(g) {
       <span class="wname">${esc(g.label)}</span>
       <span class="val num ${g.percent >= 85 ? 'c-hot' : ''}${g.approximate ? ' faint' : ''}">${shown}</span>
     </div><div class="bar"></div>
-    <div class="win-meta faint">${esc(timingLabel(g))}</div>`;
+    <div class="win-meta faint"><span>${esc(timingLabel(g))}</span>${
+      projectionLabel(g) ? `<span class="proj c-hot">${esc(projectionLabel(g))}</span>` : ''
+    }</div>`;
 
   requestAnimationFrame(() => gauge(row.querySelector('.bar'), g.percent, { height: 8, approximate: g.approximate }));
   return row;
@@ -49,16 +52,15 @@ function render() {
   const body = $('body');
   if (!snap) return;
 
-  const t = snap.report.totals;
-  $('range-label').textContent = `${snap.range.days} jours`;
-  $('status').textContent = snap.staleError ? 'données figées' : ago(snap.generatedAt);
+  const tot = snap.report.totals;
+  $('range-label').textContent = t('ui.days', { n: snap.range.days });
+  $('status').textContent = snap.staleError ? t('ui.stale') : ago(snap.generatedAt);
   $('status').className = `status legend ${snap.staleError ? 'c-hot' : ''}`;
 
   if (!snap.report.eventCount) {
     body.innerHTML = `<div class="empty">
-      <h2>Aucune consommation détectée</h2>
-      <p>TRACE lit les journaux locaux de Claude Code et Codex CLI.
-      Lancez un de ces outils, puis actualisez.</p></div>`;
+      <h2>${esc(t('popover.emptyTitle'))}</h2>
+      <p>${esc(t('popover.emptyBody'))}</p></div>`;
     return;
   }
 
@@ -72,20 +74,20 @@ function render() {
   if (ls && !ls.ok) {
     const warn = document.createElement('div');
     warn.className = 'live-warn';
-    const wait = ls.nextAttemptIn > 0 ? ` Nouvelle tentative dans ${Math.ceil(ls.nextAttemptIn / 60000)} min.` : '';
-    const titre = ls.waiting ? 'Relevé Claude en attente.' : 'Relevé Claude indisponible.';
+    const wait = ls.nextAttemptIn > 0 ? ` ${t('live.retryIn', { n: Math.ceil(ls.nextAttemptIn / 60000) })}` : '';
+    const titre = ls.waiting ? t('live.waiting') : t('live.unavailable');
     warn.innerHTML = `<span class="c-hot">${esc(titre)}</span> <span class="faint">${esc(ls.error)}.${esc(wait)}</span>`;
     body.appendChild(warn);
   }
 
   const triad = document.createElement('div');
   triad.className = 'triad';
-  const c = t.carbon.gramsCO2e;
+  const c = tot.carbon.gramsCO2e;
   triad.innerHTML = `
-    <div><div class="legend">Tokens</div><div class="v num c-tokens">${tokens(t.tokens.total)}</div>
-         <div class="x faint num">${tokens(t.requests)} requêtes</div></div>
-    <div><div class="legend">Coût</div><div class="v num c-cost">${usd(t.costUSD)}</div>
-         <div class="x faint num">${usd(t.cacheSavingsUSD)} évités</div></div>
+    <div><div class="legend">${esc(t('metric.tokens'))}</div><div class="v num c-tokens">${tokens(tot.tokens.total)}</div>
+         <div class="x faint num">${esc(t('triad.requests', { n: tokens(tot.requests) }))}</div></div>
+    <div><div class="legend">${esc(t('metric.cost'))}</div><div class="v num c-cost">${usd(tot.costUSD)}</div>
+         <div class="x faint num">${esc(t('triad.saved', { amount: usd(tot.cacheSavingsUSD) }))}</div></div>
     <div><div class="legend">CO₂e</div><div class="v num c-carbon">${co2(c.mid)}</div>
          <div class="x faint num">${co2(c.min)} – ${co2(c.max)}</div></div>`;
   body.appendChild(triad);
@@ -94,7 +96,7 @@ function render() {
 $('open-dash').onclick = () => window.trace.openDashboard();
 $('quit').onclick = () => window.trace.quit();
 $('refresh').onclick = async () => {
-  $('status').textContent = 'lecture…';
+  $('status').textContent = t('ui.reading');
   snap = await window.trace.refresh();
   render();
 };
@@ -111,6 +113,11 @@ window.trace.onUpdate((payload) => {
 });
 
 (async () => {
+  // Le catalogue AVANT le premier rendu : peindre puis corriger ferait
+  // clignoter l'écran sur des clés brutes.
+  initI18n(await window.trace.getStrings());
+  applyStaticI18n();
+  document.documentElement.lang = lang();
   snap = await window.trace.getSnapshot();
   const cfg = await window.trace.getConfig();
   $('shortcut-hint').textContent = (cfg.shortcut || '').replace('CommandOrControl', navigator.platform.includes('Mac') ? '⌘' : 'Ctrl').replace(/\+/g, ' ');

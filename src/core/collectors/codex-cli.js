@@ -1,5 +1,7 @@
 'use strict';
 
+const { t } = require('../../i18n');
+
 const path = require('path');
 const fs = require('fs');
 const { walkFiles, readJsonlFrom, projectName, homeDir } = require('../util');
@@ -127,4 +129,4 @@ function collect(config = {}, state = {}) {
   return { events, quota, state: nextState, stats: { files: files.length, events: events.length } };
 }
 
-module.exports = { id: SOURCE, label: 'Codex CLI', isAvailable, collect };
+module.exports = { id: SOURCE, get label() { return t('source.codex-cli'); }, isAvailable, collect };

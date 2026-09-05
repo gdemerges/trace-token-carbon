@@ -1,5 +1,7 @@
 'use strict';
 
+const { t } = require('../../i18n');
+
 /**
  * Collecteur API Anthropic — rapports d'usage et de coût de l'organisation.
  *
@@ -34,7 +36,7 @@ async function request(url, key) {
     // standard là où une clé Admin est requise.
     const hint =
       res.status === 401 || res.status === 403
-        ? " — vérifiez qu'il s'agit bien d'une clé Admin (sk-ant-admin...)"
+        ? t('api.adminKeyHint.anthropic')
         : '';
     throw new Error(`Anthropic ${res.status}${hint}: ${body.slice(0, 200)}`);
   }
@@ -158,10 +160,10 @@ async function collect(config = {}) {
 
 module.exports = {
   id: SOURCE,
-  label: 'API Anthropic (organisation)',
+  get label() { return t('source.anthropic-api'); },
   async: true,
   requiresKey: 'anthropicAdminKey',
-  unavailableReason: "Renseignez une clé Admin Anthropic (sk-ant-admin...) dans les réglages.",
+  get unavailableReason() { return t('source.needAnthropicKey'); },
   isAvailable,
   collect,
 };

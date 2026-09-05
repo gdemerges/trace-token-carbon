@@ -6,7 +6,9 @@
  * Deux familles d'information cohabitent ici, et elles n'ont PAS le même statut
  * épistémique — l'UI doit les distinguer :
  *
- *  - `pricing` : tarifs publics, en USD par million de tokens. Factuel.
+ *  - `pricing` : tarifs publics, en USD par million de tokens. Factuel, mais
+ *    volatil — source `providerPricing`, à revérifier à chaque édition d'un
+ *    livrable audité.
  *  - `params`  : nombre de paramètres (total / actifs), en milliards. Pour les
  *    modèles fermés (Anthropic, OpenAI, Google) ces valeurs ne sont PAS
  *    divulguées : ce sont des fourchettes d'estimation, exactement comme le
@@ -32,6 +34,11 @@ const range = (min, max) => ({ min, max, mid: (min + max) / 2 });
 /**
  * Profils de paramètres par famille. Les modèles fermés sont des estimations
  * assumées ; on garde des fourchettes larges plutôt qu'un faux point précis.
+ *
+ * Chaque profil porte sa provenance (`source`, `basis`) : c'est la source
+ * d'incertitude DOMINANTE du calcul carbone, et donc la première ligne qu'un
+ * vérificateur demandera à justifier. `basis` doit dire d'où vient la
+ * fourchette — pas « estimation », mais le raisonnement qui la borne.
  */
 const PARAM_PROFILES = {
   // Les modèles frontière actuels sont, selon toute vraisemblance, des
@@ -39,14 +46,66 @@ const PARAM_PROFILES = {
   // inférieur au total. C'est ce qui explique leurs vitesses de génération
   // observées (50-100 tokens/s), impossibles à atteindre en dense à cette
   // échelle. Les fourchettes ci-dessous restent larges, à dessein.
-  'claude-fable': { total: range(400, 1200), active: range(60, 250), confidence: 'estimated' },
-  'claude-opus': { total: range(300, 800), active: range(40, 150), confidence: 'estimated' },
-  'claude-sonnet': { total: range(100, 300), active: range(15, 60), confidence: 'estimated' },
-  'claude-haiku': { total: range(20, 80), active: range(5, 20), confidence: 'estimated' },
-  'gpt-frontier': { total: range(300, 1000), active: range(50, 200), confidence: 'estimated' },
-  'gpt-mid': { total: range(100, 400), active: range(20, 80), confidence: 'estimated' },
-  'gpt-small': { total: range(8, 50), active: range(3, 20), confidence: 'estimated' },
-  unknown: { total: range(70, 400), active: range(15, 100), confidence: 'unknown' },
+  'claude-fable': {
+    total: range(400, 1200), active: range(60, 250),
+    confidence: 'estimated',
+    source: 'inferredFromBehaviour',
+    basis:
+      "Modèle le plus cher de la gamme Anthropic (10/50 USD par Mtok) : borne haute alignée sur ce tarif. Aucune publication du fournisseur. Fourchette bornée par la vitesse de génération observée (50-100 tokens/s), inatteignable en dense à cette échelle, et par le tarif relatif aux modèles de la même famille.",
+  },
+  'claude-opus': {
+    total: range(300, 800), active: range(40, 150),
+    confidence: 'estimated',
+    source: 'inferredFromBehaviour',
+    basis:
+      "Aucune publication du fournisseur. Fourchette bornée par la vitesse de génération observée (50-100 tokens/s), inatteignable en dense à cette échelle, et par le tarif relatif aux modèles de la même famille.",
+  },
+  'claude-sonnet': {
+    total: range(100, 300), active: range(15, 60),
+    confidence: 'estimated',
+    source: 'inferredFromBehaviour',
+    basis:
+      "Aucune publication du fournisseur. Fourchette bornée par la vitesse de génération observée (50-100 tokens/s), inatteignable en dense à cette échelle, et par le tarif relatif aux modèles de la même famille.",
+  },
+  'claude-haiku': {
+    total: range(20, 80), active: range(5, 20),
+    confidence: 'estimated',
+    source: 'inferredFromBehaviour',
+    basis:
+      "Modèle rapide et bon marché (1/5 USD par Mtok) : la fourchette suit ce positionnement. Aucune publication du fournisseur. Fourchette bornée par la vitesse de génération observée (50-100 tokens/s), inatteignable en dense à cette échelle, et par le tarif relatif aux modèles de la même famille.",
+  },
+  'gpt-frontier': {
+    total: range(300, 1000), active: range(50, 200),
+    confidence: 'estimated',
+    source: 'inferredFromBehaviour',
+    basis:
+      "Aucune publication du fournisseur. Fourchette bornée par la vitesse de génération observée (50-100 tokens/s), inatteignable en dense à cette échelle, et par le tarif relatif aux modèles de la même famille.",
+  },
+  'gpt-mid': {
+    total: range(100, 400), active: range(20, 80),
+    confidence: 'estimated',
+    source: 'inferredFromBehaviour',
+    basis:
+      "Aucune publication du fournisseur. Fourchette bornée par la vitesse de génération observée (50-100 tokens/s), inatteignable en dense à cette échelle, et par le tarif relatif aux modèles de la même famille.",
+  },
+  'gpt-small': {
+    total: range(8, 50), active: range(3, 20),
+    confidence: 'estimated',
+    source: 'inferredFromBehaviour',
+    basis:
+      "Aucune publication du fournisseur. Fourchette bornée par la vitesse de génération observée (50-100 tokens/s), inatteignable en dense à cette échelle, et par le tarif relatif aux modèles de la même famille.",
+  },
+  unknown: {
+    total: range(70, 400),
+    active: range(15, 100),
+    confidence: 'unknown',
+    source: 'inferredFromBehaviour',
+    basis:
+      "Modèle non répertorié : fourchette délibérément très large, couvrant du " +
+      "petit modèle ouvert au modèle frontière. Toute famille représentant une " +
+      "part notable des tokens d'un livrable doit être ajoutée au registre " +
+      "plutôt que laissée ici.",
+  },
 };
 
 /**
@@ -125,7 +184,11 @@ function resolveModel(raw, overrides = null) {
       // interruptions) : aucun appel réseau, donc ni coût ni empreinte.
       pricing: key === '<synthetic>' ? { input: 0, output: 0 } : null,
       context: null,
-      params: key === '<synthetic>' ? { total: range(0, 0), active: range(0, 0), confidence: 'disclosed' } : PARAM_PROFILES.unknown,
+      params:
+        key === '<synthetic>'
+          ? { total: range(0, 0), active: range(0, 0), confidence: 'disclosed', source: 'traceDerived',
+              basis: "Message produit localement par le client, sans appel réseau : empreinte nulle par construction, ce n'est pas une estimation." }
+          : PARAM_PROFILES.unknown,
     };
   }
   if (!record.params) record.params = PARAM_PROFILES[record.family] || PARAM_PROFILES.unknown;

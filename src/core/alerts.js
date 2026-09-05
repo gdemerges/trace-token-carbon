@@ -1,5 +1,7 @@
 'use strict';
 
+const { t } = require('../i18n');
+
 /**
  * Alertes de limite.
  *
@@ -22,6 +24,15 @@
  */
 
 const DEFAULT_THRESHOLDS = [80, 95];
+
+/**
+ * Marqueur d'état de l'alerte de trajectoire.
+ *
+ * Il partage la mémoire des seuils — même fenêtre, même remise à zéro à la
+ * réinitialisation — mais ne peut être confondu avec un pourcentage : c'est
+ * une chaîne, là où les seuils sont des nombres.
+ */
+const TRAJECTORY = 'trajectoire';
 
 /** Sources d'échelle en lesquelles on a assez confiance pour alerter. */
 const TRUSTED = new Set(['live', 'live-stale', 'user', 'provider', 'configured']);
@@ -66,6 +77,40 @@ function evaluate(gauges, config = {}, state = {}, now = Date.now()) {
     const already = new Set(state[key] || []);
     const fired = [...already];
 
+    // --- trajectoire -------------------------------------------------------
+    // Le seuil dit où l'on est, la trajectoire dit où l'on va. À 40 % en
+    // montant vite, il reste le temps d'agir ; à 80 %, souvent plus. C'est
+    // donc AVANT le premier seuil que cette alerte a une valeur, et elle ne se
+    // déclenche que là — sinon elle doublerait l'alerte de seuil au lieu de
+    // l'anticiper.
+    //
+    // `beforeReset` est la condition qui la rend défendable : atteindre le
+    // plafond après la réinitialisation de la fenêtre n'est pas un incident,
+    // c'est une fenêtre qui se vide à temps.
+    const p = g.projection;
+    if (
+      settings.projection !== false &&
+      p && p.beforeReset &&
+      thresholds.length && g.percent < thresholds[0] &&
+      !already.has(TRAJECTORY)
+    ) {
+      notifications.push({
+        key,
+        gaugeId: g.id,
+        threshold: TRAJECTORY,
+        percent: g.percent,
+        projectedAt: p.at,
+        title: t('alert.trajectory.title', {
+          product: g.product || t('alert.limit'),
+          window: g.label.toLowerCase(),
+          when: formatUntil(p.at, now),
+        }),
+        body: t('alert.trajectory.body', { percent: Math.round(g.percent) }),
+        urgency: 'normal',
+      });
+      fired.push(TRAJECTORY);
+    }
+
     // Seul le seuil le PLUS HAUT franchi est notifié : passer de 0 à 96 % en
     // un cycle ne doit pas produire deux notifications d'un coup.
     const crossed = thresholds.filter((t) => g.percent >= t && !already.has(t));
@@ -76,10 +121,14 @@ function evaluate(gauges, config = {}, state = {}, now = Date.now()) {
         gaugeId: g.id,
         threshold: top,
         percent: g.percent,
-        title: `${g.product || 'Limite'} — ${Math.round(g.percent)} % de ${g.label.toLowerCase()}`,
+        title: t('alert.threshold.title', {
+          product: g.product || t('alert.limit'),
+          percent: Math.round(g.percent),
+          window: g.label.toLowerCase(),
+        }),
         body: g.resetsAt
-          ? `Réinitialisation ${formatUntil(g.resetsAt, now)}.`
-          : 'Fenêtre glissante, pas de réinitialisation annoncée.',
+          ? t('alert.threshold.reset', { when: formatUntil(g.resetsAt, now) })
+          : t('alert.threshold.rolling'),
         urgency: top >= 95 ? 'critical' : 'normal',
       });
       fired.push(...crossed);
@@ -95,12 +144,12 @@ function evaluate(gauges, config = {}, state = {}, now = Date.now()) {
 
 function formatUntil(ts, now) {
   const ms = ts - now;
-  if (ms <= 0) return 'imminente';
+  if (ms <= 0) return t('duration.imminent');
   const h = Math.floor(ms / 3600000);
   const m = Math.floor((ms % 3600000) / 60000);
-  if (h >= 24) return `dans ${Math.floor(h / 24)} j`;
-  if (h > 0) return `dans ${h} h ${String(m).padStart(2, '0')}`;
-  return `dans ${m} min`;
+  if (h >= 24) return t('duration.inDays', { n: Math.floor(h / 24) });
+  if (h > 0) return t('duration.inHoursMinutes', { h, m: String(m).padStart(2, '0') });
+  return t('duration.inMinutes', { n: m });
 }
 
-module.exports = { evaluate, windowKey, DEFAULT_THRESHOLDS, TRUSTED };
+module.exports = { evaluate, windowKey, DEFAULT_THRESHOLDS, TRAJECTORY, TRUSTED };

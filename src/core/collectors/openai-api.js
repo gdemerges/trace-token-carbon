@@ -1,5 +1,7 @@
 'use strict';
 
+const { t } = require('../../i18n');
+
 /**
  * Collecteur API OpenAI — rapport d'usage de l'organisation.
  * Nécessite une clé Admin (`sk-admin-...`) ; une clé de projet est rejetée.
@@ -18,7 +20,7 @@ async function request(url, key) {
     const body = await res.text().catch(() => '');
     const hint =
       res.status === 401 || res.status === 403
-        ? " — une clé Admin d'organisation (sk-admin-...) est requise"
+        ? t('api.adminKeyRequired.openai')
         : '';
     throw new Error(`OpenAI ${res.status}${hint}: ${body.slice(0, 200)}`);
   }
@@ -90,10 +92,10 @@ async function collect(config = {}) {
 
 module.exports = {
   id: SOURCE,
-  label: 'API OpenAI (organisation)',
+  get label() { return t('source.openai-api'); },
   async: true,
   requiresKey: 'openaiAdminKey',
-  unavailableReason: "Renseignez une clé Admin OpenAI (sk-admin-...) dans les réglages.",
+  get unavailableReason() { return t('source.needOpenaiKey'); },
   isAvailable,
   collect,
 };

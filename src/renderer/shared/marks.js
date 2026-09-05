@@ -1,3 +1,5 @@
+import { t } from './i18n.js';
+
 /**
  * Marques de fournisseur.
  *
@@ -58,10 +60,12 @@ export const PROVIDER_COLOR = {
   unknown: 'var(--ink-faint)',
 };
 
+// Les deux premiers sont des noms propres : ils ne se traduisent pas. Seul le
+// repli en a besoin.
 export const PROVIDER_LABEL = {
   anthropic: 'Anthropic',
   openai: 'OpenAI',
-  unknown: 'Fournisseur inconnu',
+  get unknown() { return t('provider.unknown'); },
 };
 
 /** Renvoie la marque d'un fournisseur, prête à insérer dans du HTML. */

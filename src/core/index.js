@@ -1,11 +1,13 @@
 'use strict';
 
 const { collectAll } = require('./collectors');
-const { report, exportRows, toCsv } = require('./aggregate');
+const { report, exportRows, methodologyRows, toCsv } = require('./aggregate');
 const { computeGauges, applyUserCalibration } = require('./ratelimits');
 const store = require('./store');
 const carbon = require('./carbon');
 const alerts = require('./alerts');
+const provenance = require('./provenance');
+const { t } = require('../i18n');
 const { resolveModel } = require('./models');
 
 /**
@@ -42,7 +44,32 @@ async function refresh(options = {}) {
 
   const collected = await collectAll(config, idx.collectors || {});
 
-  const events = mergeRecords(idx.events || [], collected.events, eventKey);
+  // Deux régimes de fusion, parce que deux natures d'enregistrement.
+  //
+  // Un événement de requête s'AJOUTE : il décrit un fait passé, définitif.
+  // Un agrégat journalier se REMPLACE : il décrit l'état d'une journée, et
+  // celui de la journée en cours grossit d'un relevé à l'autre. Les fusionner
+  // sous la même règle faisait empiler les états successifs du jour au lieu
+  // de les corriger — à une minute de cadence, la journée courante finissait
+  // comptée plus de mille fois, en totaux croissants.
+  const previous = idx.events || [];
+  // En deçà de cette borne, l'index ne garde plus que des agrégats horaires.
+  // Une relecture complète des journaux — provoquée par un élargissement de
+  // la rétention ou par un fichier tronqué — y ramènerait le détail déjà
+  // replié, qui s'ajouterait à son propre agrégat. On l'écarte à l'entrée.
+  const compactedThrough = idx.compactedThrough || 0;
+  const streamEvents = mergeRecords(
+    previous.filter((e) => !provenance.isDailyGrain(e.source)),
+    collected.events.filter((e) => !provenance.isDailyGrain(e.source) && e.ts >= compactedThrough),
+    eventKey
+  );
+  const dailyEvents = provenance.mergeDaily(
+    previous.filter((e) => provenance.isDailyGrain(e.source)),
+    collected.events.filter((e) => provenance.isDailyGrain(e.source))
+  );
+  const events = dailyEvents.length
+    ? streamEvents.concat(dailyEvents).sort((a, b) => a.ts - b.ts)
+    : streamEvents;
 
   // Les relevés de quota en direct sont des INSTANTANÉS, pas de l'historique :
   // on n'en garde que le PLUS RÉCENT par fenêtre. Les empiler donnait 60
@@ -65,12 +92,12 @@ async function refresh(options = {}) {
   const live = [...newestLive.values()];
   const quota = history.concat(live);
 
-  let nextIndex = { version: 2, collectors: collected.state, events, quota };
+  let nextIndex = { version: 2, collectors: collected.state, events, quota, compactedThrough };
   // `saveIndex` applique la rétention. On renvoie l'index RETENU, pas celui
   // d'avant élagage : sinon la vue en mémoire et le fichier divergent, et le
   // nombre d'événements changerait tout seul au redémarrage suivant.
   if (options.persist !== false) {
-    nextIndex = store.saveIndex(nextIndex, config.retentionDays);
+    nextIndex = store.saveIndex(nextIndex, config);
     nextIndex.collectors = collected.state;
   }
 
@@ -140,7 +167,14 @@ function snapshot(state, options = {}) {
   // pas, au lieu de laisser croire à un blocage inexpliqué.
   const liveSource = sources.find((x) => x.id === 'anthropic-oauth');
   const liveStats = (liveSource && liveSource.stats) || {};
-  const waiting = (liveStats.nextAttemptIn || 0) > 0;
+  const nextAttemptIn = liveStats.nextAttemptIn || 0;
+  // Attendre la cadence normale n'est PAS une panne. Confondre les deux
+  // faisait annoncer « relevé suspendu après un échec » à chaque quart d'heure
+  // ordinaire ; ne regarder que le report d'échec, à l'inverse, laissait le
+  // régime normal totalement muet — c'est ce second travers qui donnait une
+  // jauge figée sans la moindre explication.
+  const waiting = nextAttemptIn > 0 && liveStats.nextAttemptReason === 'backoff';
+  const pacing = nextAttemptIn > 0 && liveStats.nextAttemptReason === 'cadence';
   const liveStatus = liveSource
     ? {
         // Une source en attente après un échec n'est PAS « ok » : la première
@@ -149,14 +183,38 @@ function snapshot(state, options = {}) {
         // l'utilisateur voyait un chiffre figé sans explication.
         ok: !liveSource.error && !waiting,
         waiting,
-        error: liveSource.error || (waiting ? 'Relevé suspendu après un échec précédent' : null),
+        // La cadence se dit sur la jauge elle-même, pas dans un bandeau
+        // d'alerte : c'est le fonctionnement nominal.
+        pacing,
+        error: liveSource.error || (waiting ? t('oauth.suspended') : null),
         ageMs: liveStats.ageMs,
-        nextAttemptIn: liveStats.nextAttemptIn || 0,
+        nextAttemptIn,
       }
     : null;
 
+  // La jauge en direct porte l'échéance du prochain relevé : sans elle, un
+  // pourcentage qui ne bouge pas pendant un quart d'heure se lit comme une
+  // panne, alors que c'est la cadence qui protège du 429.
+  if (nextAttemptIn > 0) {
+    for (const g of gauges) {
+      if (g.limitSource === 'live' || g.limitSource === 'live-stale') g.nextLiveIn = nextAttemptIn;
+    }
+  }
+
+  // La méthodologie voyage AVEC le chiffre. La construire et ne jamais la
+  // montrer revenait à demander à l'utilisateur de croire un total dont il ne
+  // pouvait vérifier aucun terme ; c'est exactement ce qu'un chiffre carbone ne
+  // doit pas être.
+  const methodology = {
+    factors: carbon.factorTable({ gridKey: (config.carbon || {}).gridKey }),
+    unpinned: carbon.unpinnedSources(),
+    grids: carbon.GRID_INTENSITY,
+    providers: carbon.PROVIDER_INFRA,
+  };
+
   return {
     generatedAt: Date.now(),
+    methodology,
     range: { from, to, days: days || Math.round((to - from) / 86400000), all },
     dataHorizon: horizon,
     liveStatus,
@@ -184,4 +242,4 @@ function calibrate(state, gaugeId, percent) {
   return updated;
 }
 
-module.exports = { refresh, snapshot, store, carbon, alerts, resolveModel, report, computeGauges, calibrate, exportRows, toCsv };
+module.exports = { refresh, snapshot, store, carbon, alerts, resolveModel, report, computeGauges, calibrate, exportRows, methodologyRows, toCsv };

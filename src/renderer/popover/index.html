@@ -2,6 +2,16 @@
 <html lang="fr">
 <head>
 <meta charset="utf-8" />
+<!--
+  Politique de sécurité du contenu.
+  Le renderer n'a besoin de rien d'extérieur : son script est local, ses styles
+  sont dans la page, ses logos sont des `data:`. Tout interdire par défaut et
+  n'ouvrir que cela ferme la porte à l'injection d'un script distant par une
+  chaîne venue d'un journal analysé — noms de projets et de modèles compris.
+-->
+<meta http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'none'; form-action 'none'; base-uri 'none'" />
+
 <title>TRACE</title>
 <link rel="stylesheet" href="../shared/theme.css" />
 <style>
@@ -48,6 +58,10 @@
   .win-top .val { margin-left: auto; font-size: 13.5px; font-weight: 600; }
   .win-meta { display: flex; gap: 6px; margin-top: 4px; font-size: 10px; }
   .win-meta .right { margin-left: auto; }
+  /* Dans le popover, la trajectoire est l'information qu'on vient chercher :
+     elle prend la droite de la ligne, là où l'œil termine sa lecture. */
+  .win-meta .proj { margin-left: auto; font-weight: 600; }
+  .win-meta .proj::before { content: '↗ '; }
 
   .live-warn { font-size: 10.5px; line-height: 1.45; padding: 8px 10px; margin-bottom: 14px;
                background: var(--hot-soft); border-radius: 5px; }
@@ -80,15 +94,17 @@
     <header>
       <span class="wordmark">TRACE</span>
       <span class="legend" id="range-label"></span>
-      <span class="status legend" id="status">lecture…</span>
+      <span class="status legend" id="status" data-i18n="ui.reading">lecture…</span>
     </header>
     <div class="body" id="body"></div>
     <footer>
-      <button class="btn primary" id="open-dash">Ouvrir le tableau de bord</button>
-      <button class="btn icon" id="refresh" title="Actualiser" aria-label="Actualiser">⟳</button>
+      <button class="btn primary" id="open-dash" data-i18n="ui.openDashboard">Ouvrir le tableau de bord</button>
+      <button class="btn icon" id="refresh" title="Actualiser" aria-label="Actualiser"
+              data-i18n-title="ui.refresh" data-i18n-aria="ui.refresh">⟳</button>
       <span class="grow"></span>
       <kbd id="shortcut-hint"></kbd>
-      <button class="btn icon quit" id="quit" title="Quitter TRACE" aria-label="Quitter TRACE">⏻</button>
+      <button class="btn icon quit" id="quit" title="Quitter TRACE" aria-label="Quitter TRACE"
+              data-i18n-title="ui.quit" data-i18n-aria="ui.quit">⏻</button>
     </footer>
   </div>
   <script type="module" src="./popover.js"></script>

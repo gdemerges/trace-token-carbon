@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { execFile } = require('child_process');
 const { homeDir } = require('../util');
+const { t } = require('../../i18n');
 
 /**
  * Consommation Claude EN DIRECT, via l'endpoint que Claude Code interroge
@@ -94,22 +95,22 @@ function readCredentialsFile() {
 
 async function loadToken() {
   const raw = process.platform === 'darwin' ? (await readMacKeychain()) || readCredentialsFile() : readCredentialsFile() || (await readMacKeychain());
-  if (!raw) return { error: "Aucun identifiant Claude Code trouvé. Connectez-vous avec `claude` d'abord." };
+  if (!raw) return { error: t('oauth.noCredentials') };
 
   let creds;
   try {
     creds = JSON.parse(raw);
   } catch {
-    return { error: 'Identifiants Claude Code illisibles.' };
+    return { error: t('oauth.unreadable') };
   }
 
   const o = creds.claudeAiOauth || creds.oauth || creds;
   const token = o.accessToken || o.access_token;
-  if (!token) return { error: "Identifiants trouvés mais sans jeton d'accès." };
+  if (!token) return { error: t('oauth.noToken') };
 
   const expiresAt = o.expiresAt || o.expires_at || null;
   if (expiresAt && expiresAt < Date.now()) {
-    return { error: 'Jeton Claude Code expiré. Relancez `claude` pour le renouveler.' };
+    return { error: t('oauth.expired') };
   }
   return { token, expiresAt };
 }
@@ -200,19 +201,33 @@ async function isAvailable(config = {}) {
  * était jeté avant d'arriver à l'affichage, et la jauge retombait sur une
  * estimation fausse.
  */
-function cached(reason) {
-  const age = cache.fetchedAt ? Date.now() - cache.fetchedAt : null;
+function cached(reason, minInterval = MIN_INTERVAL_MS) {
+  const now = Date.now();
+  const age = cache.fetchedAt ? now - cache.fetchedAt : null;
+
+  // Deux raisons très différentes de ne pas rappeler l'API, et l'interface
+  // doit pouvoir les distinguer : la cadence normale n'est pas une panne.
+  //
+  // La première version ne calculait `nextAttemptIn` que depuis `retryAfter`,
+  // nul en régime normal — le champ valait donc 0 alors que le prochain relevé
+  // était à un quart d'heure. Toute la mécanique de `liveStatus`, écrite pour
+  // « dire pourquoi le chiffre ne bouge pas », était aveugle au cas le PLUS
+  // courant, et l'utilisateur voyait une jauge figée sans explication.
+  const backoffUntil = cache.retryAfter || 0;
+  const pacedUntil = cache.fetchedAt ? cache.fetchedAt + minInterval : 0;
+  const nextAt = Math.max(backoffUntil, pacedUntil);
+
   return {
     events: [],
     quota: cache.quota || [],
-    state: {},
     stats: {
       configured: true,
       events: 0,
       fromCache: true,
       ageMs: age,
       stale: age != null && age > FRESH_MS,
-      nextAttemptIn: Math.max(0, cache.retryAfter - Date.now()),
+      nextAttemptIn: Math.max(0, nextAt - now),
+      nextAttemptReason: backoffUntil > now ? 'backoff' : nextAt > now ? 'cadence' : null,
       // Un report sans motif connu — hérité d'un redémarrage — doit tout de
       // même se dire : « rien ne bouge » sans explication est le pire cas.
       errors: cache.lastError
@@ -262,10 +277,10 @@ async function collect(config = {}, state = {}) {
   // Le report après échec s'applique MÊME à une demande explicite : insister
   // sur un 429 ne fait que prolonger la sanction. En revanche l'interface doit
   // dire pourquoi rien ne bouge, jamais rester muette.
-  if (cache.retryAfter > now) return cached('en attente après un échec');
+  if (cache.retryAfter > now) return cached('en attente après un échec', minInterval);
   // Régime normal : on réutilise le dernier relevé tant qu'il est récent —
   // sauf demande explicite, qui court-circuite la cadence.
-  if (!forced && cache.fetchedAt && now - cache.fetchedAt < minInterval) return cached('relevé récent réutilisé');
+  if (!forced && cache.fetchedAt && now - cache.fetchedAt < minInterval) return cached('relevé récent réutilisé', minInterval);
 
   const { token, error } = await loadToken();
   if (!token) return { events: [], quota: [], state: {}, stats: { configured: false, events: 0, errors: error ? [error] : [] } };
@@ -294,18 +309,18 @@ async function collect(config = {}, state = {}) {
       cache.retryAfter = Date.now() + wait;
 
       const hint =
-        res.status === 401 ? ' — jeton refusé, relancez `claude` pour vous réauthentifier'
-        : res.status === 429 ? ` — trop de requêtes, nouvelle tentative dans ${Math.round(wait / 60000)} min`
+        res.status === 401 ? t('oauth.rejectedToken')
+        : res.status === 429 ? t('oauth.tooManyRequests')
         : '';
       cache.lastError = `Anthropic ${res.status}${hint}`;
-      return cached('échec du relevé');
+      return cached(t('oauth.readFailed'), minInterval);
     }
     payload = await res.json();
   } catch (e) {
     cache.failures++;
     cache.retryAfter = Date.now() + Math.min(BACKOFF_MAX_MS, BACKOFF_TRANSIENT_MS * 2 ** (cache.failures - 1));
-    cache.lastError = e.name === 'AbortError' ? "Délai dépassé en interrogeant l'API Anthropic" : e.message;
-    return cached('échec du relevé');
+    cache.lastError = e.name === 'AbortError' ? t('oauth.timeout') : e.message;
+    return cached(t('oauth.readFailed'), minInterval);
   } finally {
     clearTimeout(timer);
   }
@@ -343,10 +358,15 @@ async function collect(config = {}, state = {}) {
       events: 0,
       windows: quota.length,
       ageMs: 0,
+      // Annoncée dès le succès, et pas seulement au tour suivant : sans cela
+      // l'échéance apparaissait une minute après le relevé, comme si elle
+      // venait d'un incident.
+      nextAttemptIn: minInterval,
+      nextAttemptReason: 'cadence',
       // Si la forme de la réponse change, on veut pouvoir le diagnostiquer
       // sans deviner — sans jamais exposer le contenu.
       unrecognized: windows.length && !quota.length ? Object.keys(payload || {}) : undefined,
-      errors: windows.length === 0 ? ["Réponse reçue mais aucune fenêtre reconnue — le format de l'API a peut-être changé."] : [],
+      errors: windows.length === 0 ? [t('oauth.unknownShape')] : [],
     },
   };
 }
@@ -383,10 +403,10 @@ module.exports = {
   MIN_INTERVAL_MS,
   BACKOFF_RATE_LIMIT_MS,
   BACKOFF_TRANSIENT_MS,
-  label: 'Claude — usage en direct',
+  get label() { return t('source.anthropic-oauth'); },
   async: true,
   providesTokens: false,
-  unavailableReason: "Connectez-vous avec `claude` pour que TRACE puisse lire votre usage réel.",
+  get unavailableReason() { return t('source.needClaudeLogin'); },
   isAvailable,
   collect,
   extractWindows,

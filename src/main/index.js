@@ -6,6 +6,9 @@ const fs = require('fs');
 
 const core = require('../core');
 const { drawTrayIcon } = require('./icon');
+const { startUpdateChecks, RELEASES_PAGE } = require('./update');
+const present = require('./present');
+const i18n = require('../i18n');
 
 const isDev = process.argv.includes('--dev');
 
@@ -72,9 +75,7 @@ function saveKey(field, value) {
     cfg[field] = null;
   } else {
     if (!safeStorage.isEncryptionAvailable()) {
-      throw new Error(
-        "Le trousseau du système n'est pas disponible : TRACE refuse d'écrire une clé d'API en clair sur le disque."
-      );
+      throw new Error(i18n.t('main.noKeychain'));
     }
     cfg[field] = { enc: safeStorage.encryptString(value).toString('base64') };
   }
@@ -85,10 +86,26 @@ function saveKey(field, value) {
 // Rafraîchissement
 // ---------------------------------------------------------------------------
 
+/**
+ * Fixe la langue du processus principal.
+ *
+ * Le renderer, lui, reçoit son catalogue par IPC : il n'a pas accès au système
+ * de fichiers, et une seule source de vérité vaut mieux que deux catalogues à
+ * garder synchronisés.
+ */
+function applyLocale() {
+  return i18n.setLocale(i18n.resolveLocale(core.store.loadConfig().locale, app.getLocale()));
+}
+
 async function refresh(reason = 'timer') {
   if (refreshing) return snap;
   refreshing = true;
   try {
+    // L'application est le propriétaire de l'index tant qu'elle tourne : une
+    // CLI lancée en parallèle lira les mêmes chiffres sans réécrire par-dessus
+    // le cycle en cours. La marque est rafraîchie à chaque tour, pour qu'un
+    // arrêt brutal ne condamne pas le fichier plus de quelques minutes.
+    core.store.claimOwnership();
     const config = loadConfigWithKeys();
     state = await core.refresh({ config, index: state ? state.index : undefined });
     state.config = config;
@@ -98,7 +115,7 @@ async function refresh(reason = 'timer') {
     broadcast();
     return snap;
   } catch (e) {
-    console.error('[trace] échec du rafraîchissement:', e);
+    console.error(i18n.t('main.refreshFailed'), e);
     // On garde le dernier instantané valide : mieux vaut des chiffres un peu
     // datés qu'une interface vide.
     if (snap) snap.staleError = e.message;
@@ -135,12 +152,15 @@ function notifyThresholds(config) {
   }
 }
 
+/** Instantané destiné à la fenêtre qui le demande, dans SA période. */
+function viewFor(senderId) {
+  return present.snapshotFor(state, snap, viewRange.get(senderId), core.snapshot);
+}
+
 function broadcast() {
   for (const w of [popover, dashboard]) {
     if (!w || w.isDestroyed()) continue;
-    const days = viewRange.get(w.webContents.id);
-    const payload = state && days != null && days !== snap.range.days ? core.snapshot(state, { days }) : snap;
-    w.webContents.send('trace:update', payload);
+    w.webContents.send('trace:update', viewFor(w.webContents.id));
   }
 }
 
@@ -155,38 +175,9 @@ function scheduleRefresh() {
 // Barre d'état
 // ---------------------------------------------------------------------------
 
-/** Métrique la plus parlante d'un coup d'œil : la jauge la plus remplie. */
-function primaryGauge() {
-  if (!snap || !snap.gauges.length) return null;
-  const withPct = snap.gauges.filter((g) => g.percent != null);
-  if (!withPct.length) return null;
-  return withPct.reduce((a, b) => (b.percent > a.percent ? b : a));
-}
-
-function trayTitle() {
-  if (!snap) return '';
-  const cfg = core.store.loadConfig();
-  const t = snap.report.totals;
-  switch (cfg.trayMetric) {
-    case 'tokens': {
-      const n = t.tokens.total;
-      return n >= 1e9 ? `${(n / 1e9).toFixed(1)} Md` : `${Math.round(n / 1e6)} M`;
-    }
-    case 'cost':
-      return `$${t.costUSD.toFixed(0)}`;
-    case 'carbon':
-      return `${(t.carbon.gramsCO2e.mid / 1000).toFixed(1)} kg`;
-    case 'session':
-    default: {
-      const g = primaryGauge();
-      return g ? `${Math.round(g.percent)} %` : '—';
-    }
-  }
-}
-
 function updateTray() {
   if (!tray) return;
-  const g = primaryGauge();
+  const g = present.primaryGauge(snap);
   const fill = g ? g.percent / 100 : null;
 
   // macOS teinte lui-même les icônes « template » ; ailleurs on colore selon
@@ -200,28 +191,21 @@ function updateTray() {
   if (isMac) img.setTemplateImage(true);
 
   tray.setImage(img);
-  if (isMac) tray.setTitle(trayTitle() ? ` ${trayTitle()}` : '');
-
-  const lines = ['TRACE'];
-  if (snap) {
-    for (const gg of snap.gauges) {
-      lines.push(`${gg.fullLabel || gg.label} : ${gg.percent != null ? Math.round(gg.percent) + ' %' : '—'}`);
-    }
-    lines.push(`${snap.range.days} j : $${snap.report.totals.costUSD.toFixed(2)} · ${(snap.report.totals.carbon.gramsCO2e.mid / 1000).toFixed(1)} kg CO₂e`);
-  }
-  tray.setToolTip(lines.join('\n'));
+  const title = present.trayTitle(snap, core.store.loadConfig());
+  if (isMac) tray.setTitle(title ? ` ${title}` : '');
+  tray.setToolTip(present.trayTooltip(snap));
 }
 
 function buildTrayMenu() {
   const cfg = core.store.loadConfig();
   return Menu.buildFromTemplate([
-    { label: 'Voir les jauges', accelerator: cfg.shortcut, click: () => togglePopover() },
-    { label: 'Ouvrir le tableau de bord', click: () => openDashboard() },
+    { label: i18n.t('menu.gauges'), accelerator: cfg.shortcut, click: () => togglePopover() },
+    { label: i18n.t('menu.dashboard'), click: () => openDashboard() },
     { type: 'separator' },
     {
-      label: 'Afficher dans la barre',
+      label: i18n.t('menu.trayMetric'),
       submenu: ['session', 'tokens', 'cost', 'carbon'].map((m) => ({
-        label: { session: 'Consommation de la fenêtre', tokens: 'Tokens', cost: 'Coût', carbon: 'CO₂e' }[m],
+        label: i18n.t(`metric.${m}`),
         type: 'radio',
         checked: cfg.trayMetric === m,
         click: () => {
@@ -230,9 +214,9 @@ function buildTrayMenu() {
         },
       })),
     },
-    { label: 'Actualiser maintenant', click: () => refresh('manuel') },
+    { label: i18n.t('menu.refreshNow'), click: () => refresh('manuel') },
     { type: 'separator' },
-    { label: 'Quitter TRACE', click: () => app.quit() },
+    { label: i18n.t('menu.quit'), click: () => app.quit() },
   ]);
 }
 
@@ -347,6 +331,15 @@ function openDashboard() {
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false },
   });
   dashboard.loadFile(path.join(__dirname, '..', 'renderer', 'dashboard', 'index.html'));
+  // En développement, la console du renderer remonte dans le terminal. Une
+  // erreur de rendu s'y perdait autrement : le processus principal ne la voit
+  // pas, et personne ne garde les outils de développement ouverts en
+  // permanence.
+  if (isDev) {
+    dashboard.webContents.on('console-message', (_e, level, message, line, source) => {
+      if (level >= 2) console.error(`[renderer] ${source}:${line} ${message}`);
+    });
+  }
   // Idem : capturé à la création, pas lu à la fermeture.
   const dashboardContentsId = dashboard.webContents.id;
   if (isDev) {
@@ -376,7 +369,7 @@ function registerShortcut() {
   } catch {
     ok = false; // accélérateur syntaxiquement invalide
   }
-  if (!ok) console.warn(`[trace] raccourci « ${accel} » refusé (déjà pris, ou syntaxe invalide)`);
+  if (!ok) console.warn(i18n.t('main.shortcutRefused', { accel }));
   return ok;
 }
 
@@ -390,16 +383,14 @@ function registerIpc() {
     // La période demandée est mémorisée pour cette fenêtre : les diffusions
     // suivantes la respecteront au lieu de retomber sur la valeur par défaut.
     if (options.days != null) viewRange.set(e.sender.id, options.days);
-    const days = viewRange.get(e.sender.id);
-    return state && days != null && days !== snap.range.days ? core.snapshot(state, { days }) : snap;
+    return viewFor(e.sender.id);
   });
   ipcMain.handle('trace:refresh', async (e) => {
     // Une demande explicite passe outre la cadence d'interrogation : c'est
     // précisément ce qu'attend quelqu'un qui clique sur « Actualiser ».
     require('../core/collectors/anthropic-oauth').forceRefresh();
     await refresh('manuel');
-    const days = viewRange.get(e.sender.id);
-    return state && days != null && days !== snap.range.days ? core.snapshot(state, { days }) : snap;
+    return viewFor(e.sender.id);
   });
   ipcMain.handle('trace:config:get', () => {
     const cfg = core.store.loadConfig();
@@ -415,6 +406,13 @@ function registerIpc() {
     const cfg = { ...core.store.loadConfig(), ...patch };
     delete cfg.anthropicAdminKey_display;
     core.store.saveConfig(cfg);
+    // La langue change des libellés calculés côté cœur (jauges, sources) : on
+    // la pose AVANT le rafraîchissement, sinon l'instantané renvoyé porterait
+    // encore les anciens.
+    if (patch.locale !== undefined) {
+      applyLocale();
+      buildAppMenu();
+    }
     let shortcutOk = true;
     if (patch.shortcut) shortcutOk = registerShortcut();
     if (patch.refreshIntervalSec) scheduleRefresh();
@@ -422,7 +420,10 @@ function registerIpc() {
       app.setLoginItemSettings({ openAtLogin: !!patch.launchAtLogin });
     }
     await refresh('réglages');
-    return true;
+    // Le renderer teste `shortcutOk` pour afficher « raccourci refusé ». Tant
+    // que ce handler renvoyait `true`, la branche était morte et un raccourci
+    // déjà pris par une autre application restait silencieusement inopérant.
+    return { ok: true, shortcutOk };
   });
   ipcMain.handle('trace:key:set', async (_e, { provider, value }) => {
     const field = provider === 'openai' ? 'openaiAdminKey' : 'anthropicAdminKey';
@@ -435,7 +436,7 @@ function registerIpc() {
     }
   });
   ipcMain.handle('trace:calibrate', async (_e, { gaugeId, percent }) => {
-    if (!state) return { ok: false, error: 'Données pas encore chargées' };
+    if (!state) return { ok: false, error: i18n.t('main.notLoaded') };
     try {
       core.calibrate(state, gaugeId, Number(percent));
       await refresh('calibrage');
@@ -454,7 +455,7 @@ function registerIpc() {
   });
   ipcMain.handle('trace:quit', () => app.quit());
   ipcMain.handle('trace:export', async (e, options = {}) => {
-    if (!state) return { ok: false, error: 'Aucune donnée à exporter' };
+    if (!state) return { ok: false, error: i18n.t('main.nothingToExport') };
 
     const days = options.days != null ? options.days : viewRange.get(e.sender.id);
     const view = core.snapshot(state, { days });
@@ -463,24 +464,35 @@ function registerIpc() {
       to: view.range.to,
       carbon: (view.config.carbon || {}),
     });
-    if (rows.length <= 1) return { ok: false, error: 'Aucune consommation sur la période sélectionnée' };
+    if (rows.length <= 1) return { ok: false, error: i18n.t('main.emptyRange') };
 
     const stamp = new Date().toISOString().slice(0, 10);
     const { canceled, filePath } = await dialog.showSaveDialog({
-      title: 'Exporter la consommation',
+      title: i18n.t('main.exportTitle'),
       defaultPath: `trace-${stamp}-${view.range.days}j.csv`,
       filters: [{ name: 'CSV', extensions: ['csv'] }],
     });
     if (canceled || !filePath) return { ok: false, canceled: true };
 
+    // L'annexe part avec les données, dans un second fichier : un tableau de
+    // grammes sans les facteurs qui l'ont produit n'est pas vérifiable, et
+    // personne ne pense à l'exporter séparément au moment de rédiger.
+    const annexPath = filePath.replace(/\.csv$/i, '') + '-methodologie.csv';
+    const annex = core.methodologyRows({ gridKey: (view.config.carbon || {}).gridKey });
+
     try {
       // BOM UTF-8 : sans lui, Excel sous Windows massacre les accents.
       fs.writeFileSync(filePath, '\ufeff' + core.toCsv(rows), 'utf8');
+      fs.writeFileSync(annexPath, '\ufeff' + core.toCsv(annex), 'utf8');
     } catch (err) {
-      return { ok: false, error: `Écriture impossible : ${err.message}` };
+      return { ok: false, error: i18n.t('main.writeFailed', { message: err.message }) };
     }
-    return { ok: true, filePath, rows: rows.length - 1 };
+    return { ok: true, filePath, annexPath, rows: rows.length - 1 };
   });
+
+  // Catalogue de traduction : le renderer n'a pas accès aux fichiers, il le
+  // reçoit ici, une fois, au chargement.
+  ipcMain.handle('trace:strings', () => i18n.currentStrings());
 
   ipcMain.handle('trace:shortcut:status', () => ({
     accelerator: core.store.loadConfig().shortcut,
@@ -497,8 +509,8 @@ function buildAppMenu() {
   Menu.setApplicationMenu(
     Menu.buildFromTemplate([
       { label: app.name, submenu: [{ role: 'about' }, { type: 'separator' }, { role: 'hide' }, { role: 'hideOthers' }, { type: 'separator' }, { role: 'quit' }] },
-      { label: 'Édition', submenu: [{ role: 'undo' }, { role: 'redo' }, { type: 'separator' }, { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' }] },
-      { label: 'Fenêtre', submenu: [{ role: 'minimize' }, { role: 'close' }, { role: 'reload' }] },
+      { label: i18n.t('menu.edit'), submenu: [{ role: 'undo' }, { role: 'redo' }, { type: 'separator' }, { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' }] },
+      { label: i18n.t('menu.window'), submenu: [{ role: 'minimize' }, { role: 'close' }, { role: 'reload' }] },
     ])
   );
 }
@@ -520,6 +532,7 @@ if (!app.requestSingleInstanceLock()) {
     // Au démarrage, aucune fenêtre n'est ouverte : pas d'icône dans le Dock.
     syncDockVisibility();
 
+    applyLocale();
     buildAppMenu();
     registerIpc();
 
@@ -539,6 +552,24 @@ if (!app.requestSingleInstanceLock()) {
 
     nativeTheme.on('updated', () => updateTray());
 
+    // Vérification de version : jamais de téléchargement, une notification qui
+    // ouvre la page si on la clique. Voir `src/main/update.js` pour ce que
+    // l'appel expose exactement.
+    startUpdateChecks({
+      version: app.getVersion(),
+      isEnabled: () => core.store.loadConfig().checkUpdates !== false,
+      notify: (found) => {
+        if (!Notification.isSupported()) return;
+        const n = new Notification({
+          title: i18n.t('main.updateTitle', { version: found.version }),
+          body: i18n.t('main.updateBody', { current: app.getVersion() }),
+          silent: true,
+        });
+        n.on('click', () => shell.openExternal(found.url || RELEASES_PAGE));
+        n.show();
+      },
+    });
+
     // En développement, on ouvre directement le tableau de bord : inspecter
     // une fenêtre qui n'apparaît que sur raccourci global est pénible.
     if (isDev) {
@@ -551,5 +582,8 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   app.on('window-all-closed', (e) => e.preventDefault()); // application de barre d'état
-  app.on('will-quit', () => globalShortcut.unregisterAll());
+  app.on('will-quit', () => {
+    globalShortcut.unregisterAll();
+    core.store.releaseOwnership();
+  });
 }

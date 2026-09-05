@@ -4,6 +4,7 @@ const { emptyTokens, addTokens, dayKey } = require('./util');
 const { resolveModel } = require('./models');
 const { cost, costWithoutCache } = require('./pricing');
 const carbon = require('./carbon');
+const provenance = require('./provenance');
 
 /**
  * Transforme une liste brute d'événements en tous les agrégats dont
@@ -133,7 +134,14 @@ function hourHistogram(events, opts = {}) {
 function report(events, opts = {}) {
   const to = opts.to || Date.now();
   const from = opts.from || to - 30 * 86400000;
-  const inRange = events.filter((e) => e.ts >= from && e.ts <= to);
+
+  // Le chiffre facturé et la mesure locale décrivent les MÊMES requêtes : les
+  // sommer doublait le total dès qu'une clé Admin était renseignée. On écarte
+  // le doublon avant toute agrégation, et sur l'historique complet plutôt que
+  // sur la période affichée — sinon la même journée serait retenue ou écartée
+  // selon le sélecteur de période, et le total bougerait sans raison visible.
+  const { events: measured, dropped } = provenance.dedupeFamilies(events);
+  const inRange = measured.filter((e) => e.ts >= from && e.ts <= to);
 
   const byModel = groupBy(inRange, (e) => e.model, opts).sort((a, b) => b.tokens.total - a.tokens.total);
   const bySource = groupBy(inRange, (e) => e.source, opts).sort((a, b) => b.tokens.total - a.tokens.total);
@@ -156,6 +164,16 @@ function report(events, opts = {}) {
   }
   totals.carbon = carbon.sum(byModel.map((g) => g.carbon));
   totals.equivalents = carbon.equivalents(totals.carbon.gramsCO2e.mid);
+
+  // Un total carbone unique n'est pas défendable : il repose sur une hypothèse
+  // de localisation et sur des tailles de modèles non publiées. On livre donc
+  // avec le total ce qui permet de le contester — le même chiffre sous
+  // plusieurs mix, et le poids respectif de chaque hypothèse.
+  const pairs = byModel
+    .filter((g) => g.models.length && g.tokens.total > 0)
+    .map((g) => ({ tokens: g.tokens, model: g.models[0].model }));
+  totals.carbonSensitivity = pairs.length ? carbon.gridSensitivity(pairs, opts.carbon || {}) : [];
+  totals.carbonUncertainty = pairs.length ? carbon.uncertainty(pairs, opts.carbon || {}) : [];
   totals.cacheSavingsUSD = Math.max(0, totals.costWithoutCacheUSD - totals.costUSD);
   totals.cacheHitRatio =
     totals.tokens.cacheRead + totals.tokens.input + totals.tokens.cacheWrite > 0
@@ -164,7 +182,7 @@ function report(events, opts = {}) {
 
   // Période précédente de même durée, pour afficher une tendance.
   const span = to - from;
-  const prevEvents = events.filter((e) => e.ts >= from - span && e.ts < from);
+  const prevEvents = measured.filter((e) => e.ts >= from - span && e.ts < from);
   const prevTokens = emptyTokens();
   let prevCost = 0;
   const prevByModel = groupBy(prevEvents, (e) => e.model, opts);
@@ -192,6 +210,11 @@ function report(events, opts = {}) {
     daily: dailySeries(inRange, from, to, opts),
     hours: hourHistogram(inRange, opts),
     eventCount: inRange.length,
+    // Confrontation mesure locale / chiffre facturé : elle se construit sur
+    // les événements BRUTS, puisque son objet est précisément l'écart entre
+    // les deux vues qu'on vient de départager.
+    reconciliation: provenance.reconciliation(events, from, to),
+    billedDaysDropped: dropped,
   };
 }
 
@@ -208,7 +231,10 @@ function report(events, opts = {}) {
 function exportRows(events, opts = {}) {
   const to = opts.to || Date.now();
   const from = opts.from || to - 30 * 86400000;
-  const inRange = events.filter((e) => e.ts >= from && e.ts <= to);
+  // Même départage que le rapport : un export qui compterait deux fois les
+  // mêmes requêtes serait pire qu'un affichage faux, puisqu'il survit à
+  // l'application et part dans un tableur.
+  const inRange = provenance.dedupeFamilies(events).events.filter((e) => e.ts >= from && e.ts <= to);
 
   const groups = groupBy(
     inRange,
@@ -219,7 +245,7 @@ function exportRows(events, opts = {}) {
   const rows = [[
     'date', 'source', 'modele', 'fournisseur', 'projet',
     'requetes', 'tokens_entree', 'tokens_sortie', 'cache_ecrit', 'cache_lu', 'tokens_total',
-    'cout_usd', 'cout_sans_cache_usd', 'gco2e_min', 'gco2e_median', 'gco2e_max', 'energie_wh',
+    'cout_usd', 'cout_sans_cache_usd', 'gco2e_min', 'gco2e_median', 'gco2e_max', 'energie_wh', 'eau_l',
   ]];
 
   for (const g of groups) {
@@ -235,12 +261,28 @@ function exportRows(events, opts = {}) {
       g.carbon.gramsCO2e.mid.toFixed(3),
       g.carbon.gramsCO2e.max.toFixed(3),
       g.carbon.energyWh.mid.toFixed(3),
+      g.carbon.waterL.mid.toFixed(3),
     ]);
   }
 
   // Ordre chronologique puis décroissant en volume : lisible tel quel.
   const body = rows.slice(1).sort((a, b) => String(a[0]).localeCompare(String(b[0])) || b[10] - a[10]);
   return [rows[0], ...body];
+}
+
+/**
+ * Annexe méthodologique : un facteur par ligne, avec sa citation.
+ *
+ * Se joint à l'export de données. Un tableau de grammes sans les facteurs qui
+ * l'ont produit n'est pas vérifiable — et la colonne `version_figee` dit, ligne
+ * à ligne, ce qui reste à relever sur la publication avant un usage audité.
+ */
+function methodologyRows(opts = {}) {
+  const rows = [['groupe', 'facteur', 'valeur', 'unite', 'source', 'citation', 'version_figee', 'reserve']];
+  for (const r of carbon.factorTable(opts)) {
+    rows.push([r.group, r.key, r.value, r.unit, r.source, r.citation, r.pinned ? 'oui' : 'non', r.note || '']);
+  }
+  return rows;
 }
 
 /** Sérialise en CSV, avec échappement RFC 4180. */
@@ -250,4 +292,4 @@ function toCsv(rows) {
     .join('\n');
 }
 
-module.exports = { report, groupBy, dailySeries, hourHistogram, exportRows, toCsv };
+module.exports = { report, groupBy, dailySeries, hourHistogram, exportRows, methodologyRows, toCsv };

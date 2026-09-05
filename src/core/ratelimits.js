@@ -1,6 +1,21 @@
 'use strict';
 
 const { emptyTokens, addTokens } = require('./util');
+const provenance = require('./provenance');
+const { t } = require('../i18n');
+
+/**
+ * Événements utilisables pour reconstruire l'occupation d'une fenêtre.
+ *
+ * Seules les sources à granularité « requête » conviennent. Un agrégat
+ * journalier est horodaté à minuit : le verser dans une fenêtre de cinq heures
+ * déversait la consommation d'une journée entière — et de toutes les machines
+ * de l'organisation — dans la seule fenêtre contenant minuit. La jauge
+ * affichait alors un pic sans rapport avec ce que la machine avait fait.
+ */
+function windowEvents(events, family) {
+  return events.filter((e) => provenance.isRequestGrain(e.source) && provenance.meta(e.source).family === family);
+}
 
 /**
  * Reconstruction des fenêtres de limitation de débit.
@@ -40,10 +55,13 @@ const { emptyTokens, addTokens } = require('./util');
  * une jauge vide en permanence serait du bruit.
  */
 const WINDOWS = [
-  { id: 'five_hour', label: 'Session 5 h', hours: 5, providers: ['anthropic'] },
-  { id: 'weekly', label: 'Hebdomadaire', hours: 168, providers: ['anthropic'] },
-  { id: 'weekly_opus', label: 'Opus hebdomadaire', hours: 168, providers: ['anthropic'], liveOnly: true },
+  { id: 'five_hour', hours: 5, providers: ['anthropic'] },
+  { id: 'weekly', hours: 168, providers: ['anthropic'] },
+  { id: 'weekly_opus', hours: 168, providers: ['anthropic'], liveOnly: true },
 ];
+
+/** Libellé d'une fenêtre Anthropic, dans la langue courante. */
+const windowLabel = (id) => t(`window.${id}`);
 
 /**
  * Nom du produit auquel la fenêtre se rattache. Distinct de `provider` : on
@@ -61,12 +79,12 @@ const PRODUCT = { anthropic: 'Claude', openai: 'Codex' };
  * réelle, y compris pour des durées qu'on n'avait pas anticipées.
  */
 function durationLabel(hours) {
-  if (hours < 24) return `Session ${Math.round(hours)} h`;
+  if (hours < 24) return t('window.session', { n: Math.round(hours) });
   const days = Math.round(hours / 24);
-  if (days === 1) return 'Quotidienne';
-  if (days === 7) return 'Hebdomadaire';
-  if (days >= 28 && days <= 31) return 'Mensuelle';
-  return `${days} jours`;
+  if (days === 1) return t('window.daily');
+  if (days === 7) return t('window.weekly');
+  if (days >= 28 && days <= 31) return t('window.monthly');
+  return t('window.nDays', { n: days });
 }
 
 /**
@@ -164,6 +182,68 @@ function calibrateFromRejections(events, quota, windowId, hours) {
 }
 
 /**
+ * Fenêtre d'observation de la cadence courante.
+ *
+ * Assez longue pour ne pas confondre une pause de deux minutes avec un arrêt,
+ * assez courte pour que la projection suive un changement de rythme. Sur une
+ * fenêtre de cinq heures, prendre la moyenne depuis le début donnerait une
+ * cadence qui ne décrit plus rien : c'est le rythme des dernières minutes qui
+ * dit quand on heurtera le plafond.
+ */
+const PACE_WINDOW_MS = 45 * 60 * 1000;
+
+/**
+ * Estime QUAND la fenêtre sera pleine, au rythme des dernières minutes.
+ *
+ * TRACE disait où vous en êtes, jamais où vous alliez. Or prévenir à 80 % ne
+ * laisse presque pas de marge quand on consomme vite, et en laisse beaucoup
+ * quand on relit du code : c'est la trajectoire, pas le niveau, qui indique
+ * s'il faut lever le pied.
+ *
+ * Trois refus délibérés, qui valent mieux qu'une projection séduisante :
+ *
+ *  - **Sans échelle fiable, pas de projection.** Il faut un plafond, mesuré
+ *    ou déduit d'un pourcentage communiqué par le serveur. Extrapoler sur une
+ *    échelle inventée reviendrait à annoncer une heure précise à partir de
+ *    rien.
+ *  - **Sans activité récente, pas de projection.** Une cadence nulle ne
+ *    sature jamais ; annoncer « dans 340 h » serait du bruit.
+ *  - **Une saturation postérieure à la réinitialisation n'en est pas une.**
+ *    Atteindre le plafond à 3 h du matin n'a aucune importance si la fenêtre
+ *    se vide à 2 h. C'est ce test qui distingue une alerte utile d'une
+ *    inquiétude gratuite.
+ *
+ * @returns {?{at:number, inMs:number, ratePerHour:number, beforeReset:boolean}}
+ */
+function projectSaturation(gauge, events, now = Date.now()) {
+  if (!gauge || gauge.percent == null || gauge.percent >= 100) return null;
+
+  // Plafond : celui qu'on connaît, sinon celui qu'implique le pourcentage du
+  // serveur rapporté à la consommation qu'on a mesurée sous lui.
+  const limit = gauge.limit || (gauge.used > 0 && gauge.percent > 0 ? gauge.used / (gauge.percent / 100) : null);
+  if (!limit || !Number.isFinite(limit)) return null;
+
+  const family = gauge.provider === 'openai' ? 'openai' : 'anthropic';
+  const recent = consumptionBetween(windowEvents(events, family), now - PACE_WINDOW_MS, now);
+  const paceUsed = weightedUsage(recent.tokens);
+  if (paceUsed <= 0) return null;
+
+  const ratePerMs = paceUsed / PACE_WINDOW_MS;
+  const remaining = ((100 - gauge.percent) / 100) * limit;
+  const inMs = remaining / ratePerMs;
+  if (!Number.isFinite(inMs) || inMs <= 0) return null;
+
+  return {
+    at: now + inMs,
+    inMs,
+    ratePerHour: ratePerMs * 3600000,
+    // Une fenêtre glissante n'annonce pas de réinitialisation : rien ne vient
+    // absorber la trajectoire, la saturation est donc à prendre au sérieux.
+    beforeReset: gauge.resetsAt ? now + inMs < gauge.resetsAt : true,
+  };
+}
+
+/**
  * Construit les jauges à afficher.
  * @returns {Array} jauges prêtes pour l'interface
  */
@@ -171,7 +251,7 @@ function computeGauges(events, quota, config = {}, now = Date.now()) {
   const gauges = [];
 
   // --- Anthropic / Claude Code -------------------------------------------
-  const claudeEvents = events.filter((e) => e.source === 'claude-code' || e.source === 'anthropic-api');
+  const claudeEvents = windowEvents(events, 'anthropic');
   if (claudeEvents.length) {
     for (const w of WINDOWS) {
       // Une réinitialisation annoncée dans le futur donne l'ancrage exact de
@@ -228,8 +308,8 @@ function computeGauges(events, quota, config = {}, now = Date.now()) {
         id: `anthropic-${w.id}`,
         provider: 'anthropic',
         product: PRODUCT.anthropic,
-        label: w.label,
-        fullLabel: `${PRODUCT.anthropic} — ${w.label.toLowerCase()}`,
+        label: windowLabel(w.id),
+        fullLabel: t('window.full', { product: PRODUCT.anthropic, window: windowLabel(w.id).toLowerCase() }),
         windowHours: w.hours,
         startsAt,
         resetsAt: live && live.resetsAt ? live.resetsAt : resetsAt,
@@ -261,7 +341,7 @@ function computeGauges(events, quota, config = {}, now = Date.now()) {
   // cette même fenêtre donnent le plafond — puis on recalcule l'occupation de
   // la fenêtre COURANTE. Résultat : une jauge toujours à jour, à 0 % si vous
   // n'avez pas touché à Codex depuis.
-  const codexEvents = events.filter((e) => e.source === 'codex-cli');
+  const codexEvents = windowEvents(events, 'openai');
   const codexQuota = quota.filter((q) => q.source === 'codex-cli' && q.usedPercent != null);
   const byWindow = new Map();
   for (const q of codexQuota) {
@@ -320,7 +400,7 @@ function computeGauges(events, quota, config = {}, now = Date.now()) {
       provider: 'openai',
       product: PRODUCT.openai,
       label: durationLabel(hours),
-      fullLabel: `${PRODUCT.openai} — ${durationLabel(hours).toLowerCase()}`,
+      fullLabel: t('window.full', { product: PRODUCT.openai, window: durationLabel(hours).toLowerCase() }),
       windowHours: hours,
       startsAt,
       resetsAt,
@@ -342,6 +422,10 @@ function computeGauges(events, quota, config = {}, now = Date.now()) {
     });
   }
 
+  // La projection se pose en dernier : elle a besoin de la jauge terminée,
+  // pourcentage et plafond compris.
+  for (const g of gauges) g.projection = projectSaturation(g, events, now);
+
   return gauges;
 }
 
@@ -352,17 +436,15 @@ function computeGauges(events, quota, config = {}, now = Date.now()) {
 function applyUserCalibration(config, events, quota, gaugeId, percent, now = Date.now()) {
   const windowId = String(gaugeId).replace(/^anthropic-/, '');
   const w = WINDOWS.find((x) => x.id === windowId);
-  if (!w) throw new Error(`Fenêtre inconnue : ${gaugeId}`);
+  if (!w) throw new Error(t('window.unknown', { id: gaugeId }));
 
-  const claudeEvents = events.filter((e) => e.source === 'claude-code' || e.source === 'anthropic-api');
+  const claudeEvents = windowEvents(events, 'anthropic');
   const known = quota.filter((q) => q.type === w.id && q.resetsAt > now).sort((a, b) => b.ts - a.ts)[0];
   const startsAt = known ? known.resetsAt - w.hours * 3600 * 1000 : now - w.hours * 3600 * 1000;
 
   const limit = limitFromObservedPercent(claudeEvents, startsAt, now, percent);
   if (!limit) {
-    throw new Error(
-      "Aucune consommation mesurée sur cette fenêtre : impossible d'en déduire un plafond. Réessayez après quelques requêtes."
-    );
+    throw new Error(t('window.noUsage'));
   }
 
   return {
@@ -373,6 +455,10 @@ function applyUserCalibration(config, events, quota, gaugeId, percent, now = Dat
 }
 
 module.exports = {
+  windowEvents,
+  windowLabel,
+  projectSaturation,
+  PACE_WINDOW_MS,
   computeGauges,
   durationLabel,
   LIVE_FRESH_MS,

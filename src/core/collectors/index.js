@@ -5,6 +5,7 @@ const codexCli = require('./codex-cli');
 const anthropicOauth = require('./anthropic-oauth');
 const anthropicApi = require('./anthropic-api');
 const openaiApi = require('./openai-api');
+const { t } = require('../../i18n');
 
 const ALL = [claudeCode, anthropicOauth, codexCli, anthropicApi, openaiApi];
 
@@ -41,12 +42,12 @@ async function collectAll(config = {}, state = {}) {
 
       try {
         if (!entry.enabled) {
-          entry.note = 'Désactivée dans les réglages';
+          entry.note = t('source.disabled');
           return;
         }
         entry.available = await Promise.resolve(c.isAvailable(config));
         if (!entry.available) {
-          entry.note = c.unavailableReason || 'Source introuvable sur cette machine';
+          entry.note = c.unavailableReason || t('source.notFound');
           return;
         }
 

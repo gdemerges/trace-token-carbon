@@ -1,5 +1,7 @@
 'use strict';
 
+const { t } = require('../../i18n');
+
 const path = require('path');
 const fs = require('fs');
 const { walkFiles, readJsonlFrom, projectName, homeDir } = require('../util');
@@ -157,4 +159,4 @@ function collect(config = {}, state = {}) {
   };
 }
 
-module.exports = { id: SOURCE, label: 'Claude Code', isAvailable, collect, extractTokens };
+module.exports = { id: SOURCE, get label() { return t('source.claude-code'); }, isAvailable, collect, extractTokens };
