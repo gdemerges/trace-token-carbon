@@ -1,0 +1,54 @@
+# Le cœur métier n'a aucune dépendance à l'exécution et ne touche à Electron
+# nulle part : il se teste donc sur les trois systèmes sans rien installer
+# d'autre que Node. C'est précisément ce qui n'était jamais vérifié — les
+# chemins de fichiers, les permissions POSIX et la construction des dossiers de
+# configuration diffèrent d'un système à l'autre, et seul macOS était éprouvé.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: tests · ${{ matrix.os }} · node ${{ matrix.node }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node: ['20', '22']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      # `npm ci` sans dépendances d'exécution : seul Electron et son
+      # empaqueteur sont installés, et uniquement pour que le script `test`
+      # trouve un arbre cohérent.
+      - run: npm ci
+      - run: npm test
+
+  package:
+    name: empaquetage · ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      # Empaquetage sans signature : on vérifie que la construction aboutit,
+      # pas qu'elle est distribuable. La signature exige des secrets, elle
+      # n'a donc rien à faire dans une CI déclenchée par une pull request.
+      - run: npx electron-builder --dir --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'

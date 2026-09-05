@@ -31,6 +31,21 @@ mac:
     LSUIElement: 1
   hardenedRuntime: true
   gatekeeperAssess: false
+  # Le runtime durci sans habilitations refuse de lancer Electron : V8 a besoin
+  # de la JIT. Les deux clés doivent pointer le même fichier — la seconde
+  # s'applique aux processus fils (GPU, rendu), qui sinon héritent d'un jeu
+  # vide et meurent au démarrage.
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  # Sans notarisation, le DMG est refusé par Gatekeeper sur toute machine autre
+  # que celle qui l'a construit : « TRACE est endommagé et ne peut pas être
+  # ouvert ». electron-builder ne notarise que s'il a d'abord signé, la
+  # construction locale sans certificat reste donc possible.
+  #
+  # Requiert dans l'environnement : APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD,
+  # APPLE_TEAM_ID, plus CSC_LINK et CSC_KEY_PASSWORD pour le certificat
+  # « Developer ID Application ».
+  notarize: true
 
 dmg:
   title: TRACE ${version}
@@ -57,3 +72,11 @@ linux:
     - AppImage
     - deb
     - rpm
+
+# Les binaires publiés vont dans les « releases » du dépôt. C'est aussi ce que
+# le vérificateur de mise à jour interroge (`src/main/update.js`) : une seule
+# source de vérité pour ce qui est distribué.
+publish:
+  provider: github
+  owner: gdemerges
+  repo: trace-token-carbon

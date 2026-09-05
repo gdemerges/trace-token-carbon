@@ -2,7 +2,12 @@ node_modules/
 dist/
 .DS_Store
 *.log
-build/
+# `build/*` et non `build/` : git ne descend pas dans un dossier exclu, une
+# exception sur un fichier qu'il contient resterait donc sans effet.
+build/*
+# Les habilitations macOS décrivent ce que l'application a le droit de faire :
+# c'est du source, pas un artefact de construction.
+!build/entitlements.mac.plist
 
 # Index et préférences vivent dans le répertoire de configuration système,
 # jamais dans le dépôt — ils contiennent l'historique d'usage et les clés.

@@ -1,0 +1,49 @@
+# Publication des binaires sur un tag `v*`.
+#
+# La signature et la notarisation ne se déclenchent que si les secrets sont
+# présents : un fork peut donc lancer ce workflow et obtenir des binaires non
+# signés, sans échec bruyant sur un certificat qu'il n'a pas.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest, ubuntu-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+
+      # Le cœur métier doit passer avant de graver quoi que ce soit dans une
+      # release : un binaire publié ne se rappelle pas.
+      - run: npm test
+
+      - name: Empaqueter et publier
+        run: npx electron-builder --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # macOS — signature « Developer ID Application » puis notarisation.
+          # Absents, electron-builder produit un binaire non signé et le dit.
+          CSC_LINK: ${{ secrets.MAC_CERTIFICATE_P12 }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # Windows — signature Authenticode, même logique.
+          WIN_CSC_LINK: ${{ secrets.WIN_CERTIFICATE_P12 }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CERTIFICATE_PASSWORD }}
