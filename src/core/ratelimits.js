@@ -193,6 +193,75 @@ function calibrateFromRejections(events, quota, windowId, hours) {
 const PACE_WINDOW_MS = 45 * 60 * 1000;
 
 /**
+ * Échelle exploitable d'une jauge : le plafond qu'on connaît, sinon celui
+ * qu'implique le pourcentage du serveur rapporté à la consommation mesurée
+ * sous lui. Renvoie aussi ce qu'il reste à consommer avant la saturation.
+ */
+function scaleOf(gauge) {
+  if (!gauge || gauge.percent == null) return null;
+  const limit = gauge.limit || (gauge.used > 0 && gauge.percent > 0 ? gauge.used / (gauge.percent / 100) : null);
+  if (!limit || !Number.isFinite(limit)) return null;
+  return { limit, remaining: Math.max(0, ((100 - gauge.percent) / 100) * limit) };
+}
+
+/** Durée de la fenêtre courte, qui rythme tout le reste. */
+const FIVE_HOUR_MS = 5 * 3600 * 1000;
+
+/**
+ * Assez de cycles pour couvrir une semaine (168 h / 5 h ≈ 34), avec de la
+ * marge. Au-delà, la saturation tombe forcément après la réinitialisation
+ * hebdomadaire : il n'y a plus rien à annoncer.
+ */
+const MAX_CYCLES = 40;
+
+/**
+ * Temps réel jusqu'à saturation de l'hebdomadaire, verrou des 5 h compris.
+ *
+ * On ne peut pas brûler sa semaine d'une traite : la fenêtre de cinq heures
+ * coupe avant, et il faut attendre sa réinitialisation pour reprendre. Une
+ * projection hebdomadaire qui l'ignore répond à une question que personne ne
+ * pose — « combien de temps de consommation ininterrompue reste-t-il ? » — au
+ * lieu de celle qu'on se pose vraiment : « quel jour vais-je être bloqué ? ».
+ *
+ * La simulation avance par cycles : on consomme au rythme courant jusqu'à
+ * épuiser ce que la fenêtre 5 h autorise encore, on attend sa réinitialisation
+ * sans rien consommer, et on recommence avec un budget plein. Si le rythme est
+ * trop lent pour saturer la fenêtre courte, aucune attente n'est insérée et le
+ * résultat retombe exactement sur la projection simple.
+ *
+ * Le calage exige une réinitialisation annoncée pour la fenêtre courte, dont
+ * l'appelant s'assure : sans elle, on ne sait pas quand le budget revient, et une fenêtre glissante rend
+ * d'ailleurs la capacité progressivement, ce que ce modèle en escalier ne
+ * décrit pas. Mieux vaut alors ne pas brider la projection que la brider au
+ * jugé.
+ *
+ * @returns {?{inMs:number, throttled:boolean}}
+ */
+function throttleByShortWindow(remaining, ratePerMs, five, scale, now) {
+  let left = remaining;
+  let elapsed = 0;
+  let budget = scale.remaining;
+  let cycleEnd = five.resetsAt - now;
+  let throttled = false;
+
+  for (let i = 0; i < MAX_CYCLES; i++) {
+    // Ce qu'on peut brûler avant que la fenêtre courte ne bloque, ou avant
+    // qu'elle ne se réinitialise d'elle-même — le premier des deux.
+    const burnable = Math.min(budget, (cycleEnd - elapsed) * ratePerMs);
+    if (left <= burnable) return { inMs: elapsed + left / ratePerMs, throttled };
+    left -= burnable;
+    // On a touché le plafond des 5 h avant la fin du cycle : le temps mort
+    // jusqu'à la réinitialisation est précisément ce que la projection simple
+    // oubliait.
+    if (burnable < (cycleEnd - elapsed) * ratePerMs) throttled = true;
+    elapsed = cycleEnd;
+    budget = scale.limit;
+    cycleEnd = elapsed + FIVE_HOUR_MS;
+  }
+  return null;
+}
+
+/**
  * Estime QUAND la fenêtre sera pleine, au rythme des dernières minutes.
  *
  * TRACE disait où vous en êtes, jamais où vous alliez. Or prévenir à 80 % ne
@@ -200,7 +269,7 @@ const PACE_WINDOW_MS = 45 * 60 * 1000;
  * quand on relit du code : c'est la trajectoire, pas le niveau, qui indique
  * s'il faut lever le pied.
  *
- * Trois refus délibérés, qui valent mieux qu'une projection séduisante :
+ * Quatre refus délibérés, qui valent mieux qu'une projection séduisante :
  *
  *  - **Sans échelle fiable, pas de projection.** Il faut un plafond, mesuré
  *    ou déduit d'un pourcentage communiqué par le serveur. Extrapoler sur une
@@ -212,16 +281,18 @@ const PACE_WINDOW_MS = 45 * 60 * 1000;
  *    Atteindre le plafond à 3 h du matin n'a aucune importance si la fenêtre
  *    se vide à 2 h. C'est ce test qui distingue une alerte utile d'une
  *    inquiétude gratuite.
+ *  - **Une fenêtre longue n'est pas consommable d'une traite.** La limite de
+ *    cinq heures s'interpose ; l'ignorer annonçait l'épuisement d'une semaine
+ *    en une nuit. Voir `throttleByShortWindow`.
  *
- * @returns {?{at:number, inMs:number, ratePerHour:number, beforeReset:boolean}}
+ * @param {Array} siblings les autres jauges, pour retrouver la fenêtre courte
+ * @returns {?{at:number, inMs:number, ratePerHour:number, beforeReset:boolean, throttled:boolean}}
  */
-function projectSaturation(gauge, events, now = Date.now()) {
+function projectSaturation(gauge, events, now = Date.now(), siblings = []) {
   if (!gauge || gauge.percent == null || gauge.percent >= 100) return null;
 
-  // Plafond : celui qu'on connaît, sinon celui qu'implique le pourcentage du
-  // serveur rapporté à la consommation qu'on a mesurée sous lui.
-  const limit = gauge.limit || (gauge.used > 0 && gauge.percent > 0 ? gauge.used / (gauge.percent / 100) : null);
-  if (!limit || !Number.isFinite(limit)) return null;
+  const scale = scaleOf(gauge);
+  if (!scale) return null;
 
   const family = gauge.provider === 'openai' ? 'openai' : 'anthropic';
   const recent = consumptionBetween(windowEvents(events, family), now - PACE_WINDOW_MS, now);
@@ -229,8 +300,23 @@ function projectSaturation(gauge, events, now = Date.now()) {
   if (paceUsed <= 0) return null;
 
   const ratePerMs = paceUsed / PACE_WINDOW_MS;
-  const remaining = ((100 - gauge.percent) / 100) * limit;
-  const inMs = remaining / ratePerMs;
+
+  // Une fenêtre longue est bridée par la fenêtre courte du même fournisseur.
+  // La fenêtre courte, elle, n'est bridée par rien : c'est elle le verrou.
+  let inMs = scale.remaining / ratePerMs;
+  let throttled = false;
+  if (gauge.windowHours > 5) {
+    const five = siblings.find((s) => s.provider === gauge.provider && s.windowHours === 5 && s !== gauge);
+    const fiveScale = five && five.resetsAt > now ? scaleOf(five) : null;
+    if (fiveScale) {
+      const capped = throttleByShortWindow(scale.remaining, ratePerMs, five, fiveScale, now);
+      // Rien dans l'horizon simulé : la fenêtre longue se réinitialisera
+      // avant d'être pleine, il n'y a donc rien à annoncer.
+      if (!capped) return null;
+      inMs = capped.inMs;
+      throttled = capped.throttled;
+    }
+  }
   if (!Number.isFinite(inMs) || inMs <= 0) return null;
 
   return {
@@ -240,6 +326,9 @@ function projectSaturation(gauge, events, now = Date.now()) {
     // Une fenêtre glissante n'annonce pas de réinitialisation : rien ne vient
     // absorber la trajectoire, la saturation est donc à prendre au sérieux.
     beforeReset: gauge.resetsAt ? now + inMs < gauge.resetsAt : true,
+    // Vrai quand la limite 5 h impose des pauses avant la saturation : le
+    // délai annoncé contient alors du temps d'attente, pas que du travail.
+    throttled,
   };
 }
 
@@ -424,7 +513,7 @@ function computeGauges(events, quota, config = {}, now = Date.now()) {
 
   // La projection se pose en dernier : elle a besoin de la jauge terminée,
   // pourcentage et plafond compris.
-  for (const g of gauges) g.projection = projectSaturation(g, events, now);
+  for (const g of gauges) g.projection = projectSaturation(g, events, now, gauges);
 
   return gauges;
 }

@@ -57,12 +57,17 @@ export function originLabel(g) {
  * projection qui déborde de la fenêtre n'annonce rien — la fenêtre se vide
  * d'abord — et l'afficher quand même transformerait un fonctionnement normal
  * en avertissement permanent.
+ *
+ * Sur l'hebdomadaire, le délai inclut les pauses imposées par la limite de
+ * cinq heures. Le dire change la lecture du chiffre : ce n'est pas du temps de
+ * travail restant, c'est une date.
  */
 export function projectionLabel(g) {
   const p = g.projection;
   if (!p || !p.beforeReset) return null;
   const left = until(p.at);
-  return left ? t('gauge.fullIn', { when: left }) : t('gauge.fullImminent');
+  if (!left) return t('gauge.fullImminent');
+  return t(p.throttled ? 'gauge.fullInThrottled' : 'gauge.fullIn', { when: left });
 }
 
 /** Échéance ou nature de la fenêtre, côté gauche de la ligne. */

@@ -233,6 +233,86 @@ test('projection : une saturation postérieure à la réinitialisation est signa
   assert.equal(p.beforeReset, false, 'la fenêtre se vide avant qu’on la remplisse');
 });
 
+const MIN = 60000;
+
+/** Cadence constante sur toute la fenêtre d'observation, en tokens par minute. */
+function pace(now, perMinute) {
+  const events = [];
+  for (let i = 1; i <= 45; i++) events.push(local(now - i * MIN, perMinute));
+  return events;
+}
+
+test('projection : l’hebdomadaire tient compte des pauses imposées par la limite 5 h', () => {
+  const { projectSaturation } = require('../src/core/ratelimits');
+  const now = Date.now();
+  const events = pace(now, 1000);
+
+  // La 5 h se réinitialise dans une heure ; il lui reste 50 min de marge, donc
+  // 10 min de temps mort avant de pouvoir reprendre. Ensuite, chaque fenêtre
+  // rend 100 000 tokens qu'on brûle en 100 min, pour 300 min d'attente.
+  const five = { provider: 'anthropic', windowHours: 5, percent: 50, limit: 100000, used: 50000, resetsAt: now + 60 * MIN };
+  const week = { provider: 'anthropic', windowHours: 168, percent: 0, limit: 500000, used: 0, resetsAt: now + 168 * 3600000 };
+
+  const p = projectSaturation(week, events, now, [five, week]);
+  assert.ok(p, 'une projection est produite');
+  assert.equal(p.throttled, true, 'la limite courte s’interpose');
+  assert.equal(Math.round(p.inMs / MIN), 1310, '21 h 50, et non les 8 h 20 d’une extrapolation libre');
+  assert.equal(p.beforeReset, true);
+});
+
+test('projection : un rythme que la fenêtre 5 h absorbe ne fait perdre aucune minute', () => {
+  const { projectSaturation } = require('../src/core/ratelimits');
+  const now = Date.now();
+  // 100 tokens/min, très en dessous des 100 000 par tranche de cinq heures.
+  const events = pace(now, 100);
+
+  const five = { provider: 'anthropic', windowHours: 5, percent: 0, limit: 100000, used: 0, resetsAt: now + 60 * MIN };
+  const week = { provider: 'anthropic', windowHours: 168, percent: 0, limit: 60000, used: 0, resetsAt: now + 168 * 3600000 };
+
+  const p = projectSaturation(week, events, now, [five, week]);
+  assert.ok(p);
+  assert.equal(p.throttled, false, 'aucune pause à insérer');
+  assert.equal(Math.round(p.inMs / MIN), 600, 'le résultat retombe sur la projection simple');
+});
+
+test('projection : une saturation hors d’atteinte n’est pas annoncée', () => {
+  const { projectSaturation } = require('../src/core/ratelimits');
+  const now = Date.now();
+  const events = pace(now, 1000);
+
+  // À 1 000 tokens par tranche de cinq heures, la semaine ne sera jamais pleine.
+  const five = { provider: 'anthropic', windowHours: 5, percent: 0, limit: 1000, used: 0, resetsAt: now + 60 * MIN };
+  const week = { provider: 'anthropic', windowHours: 168, percent: 0, limit: 1e9, used: 0, resetsAt: now + 168 * 3600000 };
+
+  assert.equal(projectSaturation(week, events, now, [five, week]), null);
+});
+
+test('projection : sans fenêtre 5 h exploitable, on ne bride pas au jugé', () => {
+  const { projectSaturation } = require('../src/core/ratelimits');
+  const now = Date.now();
+  const events = pace(now, 1000);
+  const week = { provider: 'anthropic', windowHours: 168, percent: 0, limit: 500000, used: 0, resetsAt: now + 168 * 3600000 };
+
+  // Fenêtre courte glissante : on ignore quand le budget revient.
+  const rolling = { provider: 'anthropic', windowHours: 5, percent: 50, limit: 100000, used: 50000, resetsAt: null };
+  const p = projectSaturation(week, events, now, [rolling, week]);
+  assert.ok(p);
+  assert.equal(p.throttled, false);
+  assert.equal(Math.round(p.inMs / MIN), 500, 'la projection simple, faute de mieux');
+});
+
+test('projection : la fenêtre 5 h elle-même n’est bridée par rien', () => {
+  const { projectSaturation } = require('../src/core/ratelimits');
+  const now = Date.now();
+  const events = pace(now, 1000);
+  const five = { provider: 'anthropic', windowHours: 5, percent: 50, limit: 100000, used: 50000, resetsAt: now + 4 * 3600000 };
+
+  const p = projectSaturation(five, events, now, [five]);
+  assert.ok(p);
+  assert.equal(p.throttled, false);
+  assert.equal(Math.round(p.inMs / MIN), 50, 'c’est elle le verrou : rien ne s’interpose');
+});
+
 test('projection : sans échelle fiable, rien n’est extrapolé', () => {
   const { projectSaturation } = require('../src/core/ratelimits');
   const now = Date.now();

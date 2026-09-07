@@ -68,7 +68,7 @@ function trayTooltip(snap) {
     // a la place : c'est là qu'elle rend le plus de service, puisqu'on y passe
     // précisément quand on se demande s'il faut lever le pied.
     const p = g.projection && g.projection.beforeReset
-      ? ` · ${t('tray.full', { when: durationLabel(g.projection.inMs) })}`
+      ? ` · ${t(g.projection.throttled ? 'tray.fullThrottled' : 'tray.full', { when: durationLabel(g.projection.inMs) })}`
       : '';
     lines.push(`${g.fullLabel || g.label} : ${pct}${p}`);
   }

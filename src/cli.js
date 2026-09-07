@@ -129,7 +129,7 @@ async function main() {
     // ferait passer un régime normal pour un avertissement.
     const p = g.projection;
     const proj = p && p.beforeReset
-      ? `  ${C.red}${t('cli.full', { when: until(p.at) || t('cli.underMinute') })}${C.off}`
+      ? `  ${C.red}${t(p.throttled ? 'cli.fullThrottled' : 'cli.full', { when: until(p.at) || t('cli.underMinute') })}${C.off}`
       : '';
     console.log(` ${C.b}${(g.fullLabel || g.label).padEnd(21)}${C.off} ${bar(g.percent)} ${pctStr}  ${note}${proj}`);
   }
