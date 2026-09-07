@@ -24,15 +24,21 @@ const g = (over = {}) => ({ id: 'x', label: 'Session 5 h', fullLabel: 'Claude �
 // Choix de la jauge affichée
 // ---------------------------------------------------------------------------
 
-test('barre : la jauge la plus remplie est celle qui s’affiche', () => {
+test('barre : à durée de fenêtre égale, la plus remplie s’affiche', () => {
   const snap = snapWith([g({ id: 'a', percent: 20 }), g({ id: 'b', percent: 71 }), g({ id: 'c', percent: 55 })]);
   assert.equal(primaryGauge(snap).id, 'b');
 });
 
-test('barre : à égalité, la fenêtre la plus courte l’emporte', () => {
-  // C'est elle qui bloquera en premier : l'afficher est le seul choix utile.
-  const snap = snapWith([g({ id: 'semaine', percent: 60, windowHours: 168 }), g({ id: 'session', percent: 60, windowHours: 5 })]);
+test('barre : la fenêtre la plus courte passe avant la plus remplie', () => {
+  // C'est elle qui bloquera en premier, et la seule sur laquelle on puisse
+  // encore agir dans l'heure : une semaine à 90 % ne change rien à ça.
+  const snap = snapWith([g({ id: 'semaine', percent: 90, windowHours: 168 }), g({ id: 'session', percent: 10, windowHours: 5 })]);
   assert.equal(primaryGauge(snap).id, 'session');
+});
+
+test('barre : sans fenêtre courte, la plus courte disponible fait l’affaire', () => {
+  const snap = snapWith([g({ id: 'mois', percent: 18, windowHours: 720 }), g({ id: 'semaine', percent: 90, windowHours: 168 })]);
+  assert.equal(primaryGauge(snap).id, 'semaine');
 });
 
 test('barre : une jauge sans pourcentage n’est jamais choisie', () => {

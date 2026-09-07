@@ -15,18 +15,27 @@ const { t } = require('../i18n');
  */
 
 /**
- * La jauge la plus parlante d'un coup d'œil : la plus remplie.
+ * La jauge à lire d'un coup d'œil : la fenêtre la plus COURTE.
  *
- * À égalité de remplissage, la fenêtre la plus COURTE l'emporte : c'est elle
- * qui bloquera en premier, et c'est donc elle qu'on veut lire dans la barre.
+ * C'était la plus remplie, ce qui désignait presque toujours l'hebdomadaire —
+ * la jauge qui monte lentement, et sur laquelle on ne décide rien dans
+ * l'heure. Or ce qu'on cherche dans la barre, c'est ce qui bloquera en
+ * premier : la session de cinq heures. C'est elle qu'on peut encore
+ * infléchir, et c'est son remplissage que le disque de l'icône doit montrer.
+ *
+ * À durée de fenêtre égale, la plus remplie l'emporte. L'hebdomadaire n'est
+ * pas perdu de vue pour autant : l'infobulle le donne ligne à ligne, et les
+ * alertes continuent de surveiller toutes les jauges.
  */
 function primaryGauge(snap) {
   if (!snap || !snap.gauges || !snap.gauges.length) return null;
   const withPct = snap.gauges.filter((g) => g.percent != null);
   if (!withPct.length) return null;
   return withPct.reduce((a, b) => {
-    if (b.percent !== a.percent) return b.percent > a.percent ? b : a;
-    return (b.windowHours || Infinity) < (a.windowHours || Infinity) ? b : a;
+    const ha = a.windowHours || Infinity;
+    const hb = b.windowHours || Infinity;
+    if (ha !== hb) return hb < ha ? b : a;
+    return b.percent > a.percent ? b : a;
   });
 }
 
