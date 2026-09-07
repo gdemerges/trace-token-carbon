@@ -157,10 +157,29 @@ function viewFor(senderId) {
   return present.snapshotFor(state, snap, viewRange.get(senderId), core.snapshot);
 }
 
+/** Pousse l'instantané courant vers une fenêtre, sans condition. */
+function pushTo(w) {
+  if (!w || w.isDestroyed()) return;
+  w.webContents.send('trace:update', viewFor(w.webContents.id));
+}
+
+/**
+ * Diffuse aux fenêtres QUE L'ON VOIT.
+ *
+ * Le popover n'est jamais détruit : on le masque. Il continuait donc de
+ * recevoir l'instantané complet toutes les minutes et de reconstruire son DOM
+ * et ses SVG dans une fenêtre que personne ne regardait — mille quatre cents
+ * rendus par jour pour rien. Le test de destruction ne suffit pas, il faut
+ * celui de visibilité.
+ *
+ * Ce qui rend la chose sûre : une fenêtre qu'on rouvre reçoit l'instantané
+ * courant à l'affichage (`pushTo`), avant même le rafraîchissement suivant.
+ * Elle ne peut donc pas rester sur des chiffres datés de son masquage.
+ */
 function broadcast() {
   for (const w of [popover, dashboard]) {
-    if (!w || w.isDestroyed()) continue;
-    w.webContents.send('trace:update', viewFor(w.webContents.id));
+    if (!w || w.isDestroyed() || !w.isVisible() || w.isMinimized()) continue;
+    pushTo(w);
   }
 }
 
@@ -294,6 +313,9 @@ function togglePopover() {
   positionPopover();
   popover.show();
   popover.focus();
+  // D'abord ce qu'on sait déjà — un rafraîchissement peut être en cours, et
+  // `refresh` renonce alors sans rien diffuser.
+  pushTo(popover);
   refresh('popover');
 }
 
@@ -317,6 +339,9 @@ function openDashboard() {
   if (dashboard && !dashboard.isDestroyed()) {
     dashboard.show();
     dashboard.focus();
+    // Elle n'a rien reçu pendant qu'elle était masquée : on la remet à jour
+    // avant qu'elle ne s'affiche sur des chiffres d'il y a une heure.
+    pushTo(dashboard);
     syncDockVisibility();
     return;
   }

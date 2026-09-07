@@ -71,8 +71,24 @@ function groupBy(events, keyFn, opts) {
     g.costUnknown = modelBuckets.some((m) => m.costUnknown);
     g.costWithoutCacheUSD = modelBuckets.reduce((s, m) => s + m.costWithoutCacheUSD, 0);
     g.carbon = carbon.sum(modelBuckets.map((m) => m.carbon));
+    // Projection explicite, et non plus `{...m}`.
+    //
+    // Le bucket de travail porte la fiche complète du modèle et le détail
+    // carbone, dont il a besoin pour chiffrer. Les recopier dans le résultat
+    // les faisait voyager en double : la même fiche répétée pour chaque
+    // couple (projet, modèle), soit 42 Ko de ventilation par projet dans un
+    // instantané de 108, transmis toutes les minutes. Rien ne les lisait — le
+    // total carbone du groupe, lui, reste sur le groupe.
     g.models = modelBuckets
-      .map((m) => ({ id: m.model.id, label: m.model.label, provider: m.model.provider, ...m }))
+      .map((m) => ({
+        id: m.model.id,
+        label: m.model.label,
+        provider: m.model.provider,
+        tokens: m.tokens,
+        requests: m.requests,
+        costUSD: m.costUSD,
+        costUnknown: m.costUnknown,
+      }))
       .sort((a, b) => b.tokens.total - a.tokens.total);
     out.push(g);
   }
@@ -143,10 +159,14 @@ function report(events, opts = {}) {
   const { events: measured, dropped } = provenance.dedupeFamilies(events);
   const inRange = measured.filter((e) => e.ts >= from && e.ts <= to);
 
+  // Quatre ventilations étaient calculées, deux seulement étaient lues.
+  // `bySession` et `bySource` n'avaient aucun consommateur — ni interface, ni
+  // CLI, ni test — et coûtaient deux passes complètes, dont celle sur la clé
+  // la plus cardinale, plus 25 Ko sur les 108 de l'instantané transmis chaque
+  // minute. Le nombre d'événements par source, lui, est bien affiché, mais il
+  // vient de `snapshot` qui le compte sur l'index entier, pas d'ici.
   const byModel = groupBy(inRange, (e) => e.model, opts).sort((a, b) => b.tokens.total - a.tokens.total);
-  const bySource = groupBy(inRange, (e) => e.source, opts).sort((a, b) => b.tokens.total - a.tokens.total);
   const byProject = groupBy(inRange, (e) => e.project || 'sans projet', opts).sort((a, b) => b.tokens.total - a.tokens.total);
-  const bySession = groupBy(inRange, (e) => e.session, opts).sort((a, b) => b.tokens.total - a.tokens.total);
 
   const totals = {
     tokens: emptyTokens(),
@@ -169,9 +189,11 @@ function report(events, opts = {}) {
   // de localisation et sur des tailles de modèles non publiées. On livre donc
   // avec le total ce qui permet de le contester — le même chiffre sous
   // plusieurs mix, et le poids respectif de chaque hypothèse.
+  // La clé d'un groupe `byModel` EST l'identifiant du modèle : on le résout
+  // ici plutôt que de faire voyager la fiche dans chaque bucket.
   const pairs = byModel
     .filter((g) => g.models.length && g.tokens.total > 0)
-    .map((g) => ({ tokens: g.tokens, model: g.models[0].model }));
+    .map((g) => ({ tokens: g.tokens, model: resolveModel(g.key, opts.modelOverrides) }));
   totals.carbonSensitivity = pairs.length ? carbon.gridSensitivity(pairs, opts.carbon || {}) : [];
   totals.carbonUncertainty = pairs.length ? carbon.uncertainty(pairs, opts.carbon || {}) : [];
   totals.cacheSavingsUSD = Math.max(0, totals.costWithoutCacheUSD - totals.costUSD);
@@ -204,9 +226,9 @@ function report(events, opts = {}) {
       previous: { tokens: prevTokens, costUSD: prevCost, carbon: prevCarbon },
     },
     byModel,
-    bySource,
-    byProject: byProject.slice(0, 20),
-    topSessions: bySession.slice(0, 10),
+    // Dix lignes s'affichent : en transmettre vingt ne servait qu'à doubler
+    // le poids de la ventilation la plus lourde.
+    byProject: byProject.slice(0, 10),
     daily: dailySeries(inRange, from, to, opts),
     hours: hourHistogram(inRange, opts),
     eventCount: inRange.length,

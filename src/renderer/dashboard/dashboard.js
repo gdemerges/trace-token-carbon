@@ -141,13 +141,15 @@ function openCalibration(row, g) {
   row.appendChild(form);
   form.querySelector('input').focus();
 
-  form.querySelector('[data-cancel]').onclick = () => form.remove();
+  const close = () => { form.remove(); releaseRender(); };
+
+  form.querySelector('[data-cancel]').onclick = close;
   form.onsubmit = async (e) => {
     e.preventDefault();
     const value = Number(form.querySelector('input').value);
     const msg = form.querySelector('.calib-msg');
     const res = await window.trace.calibrate(g.id, value);
-    if (res.ok) form.remove();
+    if (res.ok) close();
     else { msg.textContent = res.error; msg.className = 'calib-msg c-hot'; }
   };
 }
@@ -409,6 +411,11 @@ function methodologyCard() {
 
   const det = document.createElement('details');
   det.className = 'annex';
+  // Identifiant stable : `render()` reconstruit la carte, et sans lui l'annexe
+  // se refermait toute seule sous les yeux de qui la lisait.
+  det.id = 'method-annex';
+  det.open = annexOpen;
+  det.addEventListener('toggle', () => { annexOpen = det.open; });
   det.innerHTML = `<summary>${esc(t('method.summary'))}</summary>
     ${[...groups].map(([group, rows]) => `
       <div class="annex-group">${esc(group)}</div>
@@ -493,6 +500,57 @@ function reconciliationCard() {
 }
 
 // ---------------------------------------------------------------------------
+
+/**
+ * Ce qui doit survivre à un rendu.
+ *
+ * `render()` vide `#main` et reconstruit les neuf cartes. Tout ce que
+ * l'utilisateur avait ouvert ou saisi disparaissait donc avec elles, à chaque
+ * cycle de rafraîchissement : l'annexe méthodologique se refermait, et le
+ * formulaire de calibrage — un champ où l'on recopie précisément le
+ * pourcentage lu dans `/usage` — était effacé en cours de frappe.
+ *
+ * Deux réponses, parce que deux natures d'état. Ce qui se résume à un booléen
+ * se mémorise et se repose (l'annexe). Ce qui ne se résume pas — une saisie en
+ * cours, un focus — ne se restaure pas : on diffère le rendu jusqu'à ce que
+ * l'interaction soit finie.
+ */
+let annexOpen = false;
+let renderPending = false;
+
+/**
+ * Vrai tant que l'utilisateur a la main dans une carte.
+ *
+ * On ne regarde que les champs de saisie, pas le focus en général : un bouton
+ * de bascule garde le focus après le clic, et s'en tenir à `activeElement`
+ * suspendait alors les rafraîchissements pour de bon.
+ */
+function interacting() {
+  const main = $('#main');
+  if (!main) return false;
+  if (main.querySelector('.calib-form')) return true;
+  const a = document.activeElement;
+  return !!a && main.contains(a) && /^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName);
+}
+
+/**
+ * Rendu demandé par un rafraîchissement de fond, donc annulable. Les rendus
+ * provoqués par un clic de l'utilisateur appellent `render()` directement :
+ * ils répondent à son geste, il n'y a rien à préserver.
+ */
+function requestRender() {
+  if (interacting()) {
+    renderPending = true;
+    return;
+  }
+  renderPending = false;
+  render();
+}
+
+/** Rattrape le rendu mis en attente, une fois l'interaction terminée. */
+function releaseRender() {
+  if (renderPending) requestRender();
+}
 
 function render() {
   if (!snap) return;
@@ -755,7 +813,7 @@ $('#export').onclick = (e) =>
 $('#settings-btn').onclick = openSettings;
 $('#close-settings').onclick = () => $('#settings').close();
 
-window.trace.onUpdate((payload) => { snap = payload; render(); });
+window.trace.onUpdate((payload) => { snap = payload; requestRender(); });
 // Un redimensionnement émet des dizaines d'événements par seconde ; chacun
 // déclenchait un rendu complet avec régénération de tous les SVG. On coalesce
 // sur une frame d'affichage : au plus un rendu par rafraîchissement écran.

@@ -927,6 +927,33 @@ test('rapport : le total carbone est livré avec de quoi le contester', () => {
   assert.deepEqual(empty.totals.carbonUncertainty, []);
 });
 
+test('rapport : un bucket modèle ne transporte que ce qui est lu', () => {
+  // La fiche complète du modèle et le détail carbone étaient recopiés dans
+  // chaque couple (groupe, modèle), et repartaient vers l'interface toutes les
+  // minutes sans que rien ne les lise.
+  const now = Date.now();
+  const events = [
+    { ts: now - 3600000, source: 'claude-code', model: 'claude-opus-5', project: 'p', session: 's', requests: 1,
+      tokens: { input: 1000, output: 500, cacheRead: 0, cacheWrite: 0, cacheWrite5m: 0, cacheWrite1h: 0, thinking: 0, total: 1500 } },
+  ];
+  const rep = report(events, { from: now - 86400000, to: now });
+  const m = rep.byModel[0].models[0];
+
+  assert.deepEqual(Object.keys(m).sort(),
+    ['costUSD', 'costUnknown', 'id', 'label', 'provider', 'requests', 'tokens'].sort());
+  // La sensibilité au mix a besoin de la fiche : elle la résout depuis la clé
+  // du groupe, elle ne la lit plus dans le bucket.
+  assert.ok(rep.totals.carbonSensitivity.length, 'la fiche modèle reste accessible là où elle sert');
+});
+
+test('rapport : les ventilations que personne ne lit ne sont plus calculées', () => {
+  const now = Date.now();
+  const rep = report([], { from: now - 86400000, to: now });
+  assert.equal(rep.bySession, undefined);
+  assert.equal(rep.topSessions, undefined);
+  assert.equal(rep.bySource, undefined);
+});
+
 test('annexe : l’export méthodologique est autoportant', () => {
   const rows = methodologyRows({ gridKey: 'france' });
   assert.deepEqual(rows[0], ['groupe', 'facteur', 'valeur', 'unite', 'source', 'citation', 'version_figee', 'reserve']);
