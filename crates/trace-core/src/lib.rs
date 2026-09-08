@@ -7,6 +7,7 @@
 //! d'exister sans rien dupliquer.
 
 pub mod carbon;
+pub mod collectors;
 pub mod i18n;
 pub mod models;
 pub mod pricing;
