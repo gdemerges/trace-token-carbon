@@ -6,6 +6,8 @@
 //! qui permet de l'éprouver sur les trois systèmes sans interface, et au CLI
 //! d'exister sans rien dupliquer.
 
+pub mod carbon;
+pub mod i18n;
 pub mod models;
 pub mod pricing;
 pub mod util;
