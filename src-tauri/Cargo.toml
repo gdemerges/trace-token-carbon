@@ -1,0 +1,27 @@
+[package]
+name = "trace-app"
+description = "TRACE — la barre d'état, le popover, le tableau de bord."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[lib]
+# Le binaire n'est qu'un point d'entrée : toute l'application vit dans la
+# bibliothèque, qui reste ainsi accessible aux tests.
+name = "trace_app_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+trace-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+# `macos-private-api` : la transparence du popover, qui s'appuie sur le flou
+# du système. C'est le choix de rendu que faisait déjà la version Electron.
+tauri = { version = "2", features = ["tray-icon", "image-png", "macos-private-api"] }
+tauri-plugin-global-shortcut = "2"
+tauri-plugin-opener = "2"

@@ -9,7 +9,7 @@
 #   trace-app   — la barre d'état, le popover, le tableau de bord.
 [workspace]
 resolver = "2"
-members = ["crates/trace-core"]
+members = ["crates/trace-core", "src-tauri"]
 
 [workspace.package]
 version = "0.1.0"
