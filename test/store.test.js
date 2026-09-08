@@ -154,6 +154,14 @@ test('permissions : dossier en 0700, index et configuration en 0600', { skip: pr
 // Propriété de l'index
 // ---------------------------------------------------------------------------
 
+// Un processus assurément vivant, et assurément différent du nôtre.
+//
+// Les marques d'un « autre processus » se faisaient avec le PID 1. C'est vrai
+// sous Unix, où init ne meurt jamais ; Windows n'a pas d'init, `kill(1, 0)` y
+// lève ESRCH, et l'index du propriétaire se faisait écraser sous les yeux du
+// test. Le parent — npm, ou le lanceur de tests — est vivant partout.
+const ALIVE_PID = process.ppid;
+
 test('propriété : notre propre marque ne nous bloque pas', (t) => {
   sandbox(t);
   store.claimOwnership();
@@ -162,15 +170,15 @@ test('propriété : notre propre marque ne nous bloque pas', (t) => {
 
 test('propriété : une marque fraîche d’un processus vivant nous met en lecture seule', (t) => {
   sandbox(t);
-  // PID 1 existe toujours ; selon les droits, `kill(1, 0)` réussit ou renvoie
-  // EPERM — les deux prouvent que le processus est là.
-  fs.writeFileSync(store.ownerPath(), JSON.stringify({ pid: 1, at: Date.now() }));
+  // Selon les droits, `kill(pid, 0)` réussit ou renvoie EPERM — les deux
+  // prouvent que le processus est là.
+  fs.writeFileSync(store.ownerPath(), JSON.stringify({ pid: ALIVE_PID, at: Date.now() }));
   assert.equal(store.ownedByAnother(), true);
 });
 
 test('propriété : une marque périmée ne condamne pas l’index', (t) => {
   sandbox(t);
-  fs.writeFileSync(store.ownerPath(), JSON.stringify({ pid: 1, at: Date.now() - store.OWNER_STALE_MS - 1000 }));
+  fs.writeFileSync(store.ownerPath(), JSON.stringify({ pid: ALIVE_PID, at: Date.now() - store.OWNER_STALE_MS - 1000 }));
   assert.equal(store.ownedByAnother(), false);
 });
 
@@ -188,7 +196,7 @@ test('propriété : un second processus n’écrase pas l’index du premier', (
   const written = fs.readFileSync(store.indexPath(), 'utf8');
 
   // Un autre processus tient désormais la marque.
-  fs.writeFileSync(store.ownerPath(), JSON.stringify({ pid: 1, at: Date.now() }));
+  fs.writeFileSync(store.ownerPath(), JSON.stringify({ pid: ALIVE_PID, at: Date.now() }));
   store.resetSignature();
   const result = store.saveIndex({ version: 2, collectors: {}, events: [], quota: [] }, store.DEFAULT_CONFIG);
 

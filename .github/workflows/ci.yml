@@ -19,7 +19,11 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        node: ['20', '22']
+        # Node 20 a été retiré : Electron et `node-abi` exigent déjà 22.12, et
+        # `node --test` n'y développe pas les motifs (`test/**/*.test.js` est
+        # pris au pied de la lettre, donc introuvable). La CI éprouvait un
+        # socle que le projet ne prétend pas supporter.
+        node: ['22', '24']
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
