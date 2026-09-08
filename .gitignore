@@ -13,3 +13,6 @@ build/*
 # jamais dans le dépôt — ils contiennent l'historique d'usage et les clés.
 config.json
 index.json
+
+# Artefacts de compilation Rust.
+target/

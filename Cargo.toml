@@ -1,0 +1,36 @@
+# Espace de travail à trois membres, qui reproduit la séparation qui faisait
+# déjà la valeur de la version Electron : le cœur ne connaît pas l'interface.
+#
+#   trace-core  — lecture des journaux, tarification, carbone, agrégation.
+#                 Aucune dépendance à Tauri ni à une quelconque interface :
+#                 c'est ce qui permet de l'éprouver sur les trois systèmes
+#                 sans rien installer, et au CLI d'exister gratuitement.
+#   trace-cli   — le même chiffre, dans le terminal.
+#   trace-app   — la barre d'état, le popover, le tableau de bord.
+[workspace]
+resolver = "2"
+members = ["crates/trace-core"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.82"
+license = "MIT"
+authors = ["Guillaume Demergès"]
+
+[workspace.dependencies]
+trace-core = { path = "crates/trace-core" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+regex = "1"
+dirs = "5"
+
+# Le binaire est distribué : on optimise pour la taille autant que pour la
+# vitesse. Le travail réel est de la lecture de fichiers, pas du calcul.
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
