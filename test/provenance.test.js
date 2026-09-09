@@ -38,6 +38,20 @@ function midnight(offset = 0) {
   return d.getTime();
 }
 
+/**
+ * Borne haute des rapports de ce fichier : la fin de la journée en cours, et
+ * NON `Date.now()`.
+ *
+ * Ces tests placent leurs événements à une heure fixe du jour — 10 h, pour que
+ * la mesure locale et l'agrégat journalier de minuit tombent bien le même jour
+ * local. Borner à l'instant présent les excluait donc du rapport chaque fois
+ * que la suite tournait avant cette heure-là : verte le soir, rouge le matin.
+ * La CI n'y échappait que par l'heure de ses déclenchements.
+ */
+function endOfToday() {
+  return midnight(1) - 1;
+}
+
 // ---------------------------------------------------------------------------
 // Fusion : ajouter une requête, remplacer une journée
 // ---------------------------------------------------------------------------
@@ -104,7 +118,7 @@ test('provenance : trois relevés successifs de la journée en cours ne gonflent
   }
 
   assert.equal(state.events.length, 1, 'un seul agrégat pour la journée');
-  const rep = report(state.events, { from: midnight() - DAY, to: Date.now() });
+  const rep = report(state.events, { from: midnight() - DAY, to: endOfToday() });
   assert.equal(rep.totals.tokens.total, 2200, 'le total suit le dernier relevé, il ne cumule pas les relevés');
 });
 
@@ -116,7 +130,7 @@ test('provenance : la mesure locale et le chiffre facturé ne s’additionnent p
   const t = midnight() + 10 * 3600000;
   const events = [local(t, 1000), local(t + 60000, 500), billed(midnight(), 1600)];
 
-  const rep = report(events, { from: midnight() - DAY, to: Date.now() });
+  const rep = report(events, { from: midnight() - DAY, to: endOfToday() });
   assert.equal(rep.totals.tokens.total, 1500, 'la mesure locale fait foi sur les jours qu’elle couvre');
   assert.equal(rep.billedDaysDropped, 1);
 });
@@ -127,7 +141,7 @@ test('provenance : le chiffre facturé comble les jours que la machine n’a pas
   // facturée.
   const events = [local(midnight() + 3600000, 1000), billed(midnight(-3), 8000)];
 
-  const rep = report(events, { from: midnight(-10), to: Date.now() });
+  const rep = report(events, { from: midnight(-10), to: endOfToday() });
   assert.equal(rep.totals.tokens.total, 9000);
   assert.equal(rep.billedDaysDropped, 0);
 });
@@ -141,13 +155,13 @@ test('provenance : les familles sont indépendantes', () => {
     billed(midnight(), 900, { source: 'openai-api', model: 'gpt-5' }),
     billed(midnight(), 4000),
   ];
-  const rep = report(events, { from: midnight(-2), to: Date.now() });
+  const rep = report(events, { from: midnight(-2), to: endOfToday() });
   assert.equal(rep.totals.tokens.total, 5000, 'openai départagé, anthropic conservé');
 });
 
 test('provenance : l’export applique le même départage que l’affichage', () => {
   const t = midnight() + 10 * 3600000;
-  const rows = exportRows([local(t, 1000), billed(midnight(), 1600)], { from: midnight() - DAY, to: Date.now() });
+  const rows = exportRows([local(t, 1000), billed(midnight(), 1600)], { from: midnight() - DAY, to: endOfToday() });
   const body = rows.slice(1);
   assert.equal(body.length, 1, 'une seule ligne : le doublon facturé est écarté');
   assert.equal(Number(body[0][10]), 1000);
@@ -161,7 +175,7 @@ test('réconciliation : l’écart local/facturé est chiffré, pas moyenné', (
   const t = midnight() + 10 * 3600000;
   const events = [local(t, 1000), billed(midnight(), 1500)];
 
-  const rep = report(events, { from: midnight() - DAY, to: Date.now() });
+  const rep = report(events, { from: midnight() - DAY, to: endOfToday() });
   const anthropic = rep.reconciliation.find((r) => r.family === 'anthropic');
   assert.ok(anthropic, 'la famille comparable est présente');
   assert.equal(anthropic.local, 1000);
@@ -171,7 +185,7 @@ test('réconciliation : l’écart local/facturé est chiffré, pas moyenné', (
 
 test('réconciliation : un jour sans chiffre facturé n’est pas un écart de 100 %', () => {
   const events = [local(midnight() + 3600000, 1000)];
-  const rep = report(events, { from: midnight(-2), to: Date.now() });
+  const rep = report(events, { from: midnight(-2), to: endOfToday() });
   assert.equal(rep.reconciliation.length, 0, 'rien à comparer, donc rien à annoncer');
 });
 
