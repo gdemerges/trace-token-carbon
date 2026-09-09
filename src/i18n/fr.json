@@ -284,6 +284,8 @@
   "ui.settings": "Réglages",
   "ui.settingsApplied": "Réglages appliqués",
   "ui.stale": "données figées",
+  "update.available": "TRACE {version} est disponible",
+  "update.body": "Une version plus récente est publiée. Rien n’a été téléchargé : ouvrez la page des versions pour l’installer.",
   "window.daily": "Quotidienne",
   "window.five_hour": "Session 5 h",
   "window.full": "{product} — {window}",

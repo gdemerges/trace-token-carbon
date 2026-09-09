@@ -17,7 +17,13 @@
     "dist:win": "node scripts/make-icons.js && node scripts/make-logos.js && electron-builder --win",
     "dist:linux": "node scripts/make-icons.js && node scripts/make-logos.js && electron-builder --linux",
     "icons": "node scripts/make-icons.js",
-    "logos": "node scripts/make-logos.js"
+    "logos": "node scripts/make-logos.js",
+    "tauri:dev": "cargo run -p trace-app",
+    "tauri:build": "cargo build --release -p trace-app",
+    "test:rust": "cargo test",
+    "cli:rust": "cargo run -q --release -p trace-cli --",
+    "icons:tauri": "node scripts/make-tauri-icons.js",
+    "tauri:bundle": "node scripts/make-tauri-icons.js && cargo tauri build"
   },
   "devDependencies": {
     "electron": "^44.1.0",

@@ -1,0 +1,37 @@
+[package]
+name = "trace-app"
+description = "TRACE — la barre d'état, le popover, le tableau de bord."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[lib]
+# Le binaire n'est qu'un point d'entrée : toute l'application vit dans la
+# bibliothèque, qui reste ainsi accessible aux tests.
+name = "trace_app_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+trace-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+# `macos-private-api` : la transparence du popover, qui s'appuie sur le flou
+# du système. C'est le choix de rendu que faisait déjà la version Electron.
+tauri = { version = "2", features = ["tray-icon", "image-png", "macos-private-api"] }
+tauri-plugin-global-shortcut = "2"
+tauri-plugin-opener = "2"
+
+# La langue du système, correctement : `LANG` est fixé par le terminal et vaut
+# souvent « en_US » sur un poste français. macOS répond `AppleLanguages`,
+# Windows et Linux ont chacun leur source.
+sys-locale = "0.3"
+tauri-plugin-notification = "2"
+
+# Le flux zlib d'un PNG. L'icône de barre d'état est redessinée à chaque
+# rafraîchissement : elle doit s'encoder, pas se charger.
+flate2 = "1"

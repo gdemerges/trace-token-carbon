@@ -1,0 +1,64 @@
+# Le cœur Rust n'a aucune dépendance à Tauri : il se teste sur les trois
+# systèmes sans installer la moindre bibliothèque d'interface. C'est la même
+# propriété qui faisait la valeur de la séparation côté Electron, et c'est
+# elle qui rend ce job rapide.
+#
+# L'application, elle, a besoin des bibliothèques système de la webview : sur
+# Linux, WebKitGTK et ses dépendances ; ailleurs, elles sont déjà là.
+name: Rust
+
+on:
+  push:
+    branches: [main, tauri]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  # Un avertissement non traité finit par en cacher un vrai.
+  RUSTFLAGS: -D warnings
+
+jobs:
+  core:
+    name: cœur · ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      # Le cœur et la CLI seulement : ni l'un ni l'autre ne touche à Tauri, et
+      # les compiler seuls fait tomber les erreurs de portabilité en trente
+      # secondes plutôt qu'en dix minutes.
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy -p trace-core -p trace-cli --all-targets
+      - run: cargo test -p trace-core -p trace-cli
+
+  app:
+    name: application · ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      # Les bibliothèques de la webview système. Sans elles, `wry` ne trouve
+      # pas WebKitGTK et l'édition de liens échoue — c'est le prix de ne PAS
+      # embarquer son propre moteur de rendu.
+      - name: Dépendances système (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+      # Compilation sans signature : on vérifie que la construction aboutit,
+      # pas qu'elle est distribuable. La signature exige des secrets, elle n'a
+      # rien à faire dans une CI déclenchée par une pull request.
+      - run: cargo build --release -p trace-app

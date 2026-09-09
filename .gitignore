@@ -13,3 +13,12 @@ build/*
 # jamais dans le dépôt — ils contiennent l'historique d'usage et les clés.
 config.json
 index.json
+
+# Artefacts de compilation Rust.
+target/
+
+# Schémas d'autorisations régénérés par `tauri-build` à chaque compilation.
+src-tauri/gen/schemas/
+
+# Paquets produits par `cargo tauri build`.
+src-tauri/gen/

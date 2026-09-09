@@ -4,26 +4,47 @@ Ce que vos outils IA consomment vraiment : tokens par modèle, position dans les
 limites de débit, et empreinte carbone. Une icône dans la barre d'état, un
 raccourci global pour les jauges, un tableau de bord pour le détail.
 
-macOS · Windows · Linux — Electron, **zéro dépendance à l'exécution**.
+macOS · Windows · Linux — Rust et Tauri. **4,4 Mo empaqueté**, contre 287 Mo
+pour le runtime Electron qu'employait la version précédente.
 
 ---
 
 ## Démarrer
 
 ```bash
-npm install
-npm start          # lance l'application
-npm run dev        # ouvre le tableau de bord directement (développement)
-npm test           # 146 tests sur le cœur, la présentation et les catalogues
-npm run cli        # les mêmes chiffres, dans le terminal
+cargo run -p trace-app     # lance l'application
+cargo run -p trace-cli     # les mêmes chiffres, dans le terminal
+cargo test                 # 135 tests sur le cœur, la présentation et les catalogues
+cargo tauri build          # empaquette pour le système courant
 ```
 
-Empaqueter : `npm run dist:mac` · `dist:win` · `dist:linux`.
+Rust 1.82 ou plus récent. Sous Linux, la webview du système demande
+`libwebkit2gtk-4.1-dev`, `libappindicator3-dev` et `librsvg2-dev`.
 
-Les tests tournent en intégration continue sur les trois systèmes et deux
-versions de Node (`.github/workflows/ci.yml`) : les chemins de fichiers, les
-permissions POSIX et la construction du dossier de configuration diffèrent d'un
-système à l'autre, et seul macOS était éprouvé jusque-là.
+Les tests tournent en intégration continue sur les trois systèmes
+(`.github/workflows/rust.yml`), avec `clippy` et `rustfmt` en erreur bloquante.
+Ce n'est pas une précaution de principe : les chemins de fichiers, les
+permissions POSIX, la construction du dossier de configuration et surtout la
+détection de processus vivant diffèrent d'un système à l'autre, et la CI a
+attrapé sur Windows deux fautes qu'aucune machine macOS ne pouvait montrer.
+
+### Architecture
+
+Trois membres, et la frontière entre eux est ce qui fait tenir le reste :
+
+```
+crates/trace-core/   lecture des journaux, tarification, carbone, agrégation,
+                     limites de débit, alertes. Ne connaît NI Tauri NI aucune
+                     interface : c'est ce qui permet de l'éprouver sur les
+                     trois systèmes sans rien lancer.
+crates/trace-cli/    le binaire `trace`.
+src-tauri/           barre d'état, popover, tableau de bord.
+src/renderer/        l'interface, en JavaScript sans bundler ni framework.
+```
+
+Le renderer n'a pas été réécrit lors du passage d'Electron à Tauri : le même
+DOM, le même SVG écrit à la main, la même feuille de style. Seul le pont IPC
+change, et il expose exactement la même surface.
 
 ## Utiliser
 
@@ -49,15 +70,15 @@ force. Le changement s'applique sans redémarrage — y compris aux libellés
 calculés par le cœur (fenêtres, sources, équivalents carbone) et au format des
 nombres et des dates.
 
-Les catalogues sont deux fichiers JSON (`src/i18n/`), lus par le processus
-principal et transmis à l'interface par IPC : le renderer n'a aucun accès au
-système de fichiers, et c'est délibéré. Un test vérifie que les deux langues
+Les catalogues sont deux fichiers JSON (`src/i18n/`), embarqués dans le binaire
+et transmis à l'interface par IPC : le renderer n'a aucun accès au système de
+fichiers, et c'est délibéré. Un test vérifie que les deux langues
 portent exactement les mêmes clés, avec les mêmes paramètres, et que toute clé
 employée dans le code existe — une clé mal orthographiée s'afficherait telle
 quelle à l'écran sans que rien d'autre ne le signale.
 
 **Ce qui reste en français :** les notes et citations de l'annexe
-méthodologique carbone (`carbon/factors.js`, `carbon/sources.js`). Ce sont des
+méthodologique carbone (`carbon/factors.rs`, `carbon/sources.rs`). Ce sont des
 textes destinés à un livrable auditable, encore en cours de figeage ; les
 traduire vite en ferait deux versions à maintenir dont une non relue.
 
@@ -65,7 +86,7 @@ traduire vite en ferait deux versions à maintenir dont une non relue.
 
 ## Ce que chaque source fournit réellement
 
-TRACE agrège six sources. Elles ne sont pas équivalentes, et l'application le
+TRACE agrège cinq sources. Elles ne sont pas équivalentes, et l'application le
 dit au lieu de le masquer :
 
 | Source | Tokens | Limites de débit | Comment |
@@ -158,7 +179,7 @@ linéairement. C'est une analyse de sensibilité, et l'interface le dit.
 ### Traçabilité des facteurs
 
 Chaque constante du calcul est rattachée à une source dans
-`src/core/carbon/sources.js`, et `carbon.factorTable()` produit le tableau
+`crates/trace-core/src/carbon/sources.rs`, et `factor_table()` produit le tableau
 annexable à un rapport : valeur, unité, citation, réserve d'usage.
 
 Un champ `pinned` distingue les sources dont la version exacte et la date de
@@ -272,7 +293,7 @@ réseau, n'efface rien.
 machine, `anthropic-api` lit la facturation de l'organisation : ce sont les
 **mêmes requêtes vues deux fois**. Les additionner doublait le total dès
 qu'une clé Admin était renseignée, jauges comprises. La règle appliquée
-(`src/core/provenance.js`) :
+(`crates/trace-core/src/provenance.rs`) :
 
 - la mesure locale garde la main sur les jours qu'elle couvre — elle seule
   porte le projet, la session et l'heure ;
@@ -386,22 +407,24 @@ et un lien.
 ## Architecture
 
 ```
-src/
-  core/          cœur métier — aucune dépendance à Electron, testable seul
-    collectors/  une source = un module, isolé (une source en échec n'en bloque aucune autre)
-    carbon/      estimateur EcoLogits + facteurs
-    models.js    registre : tarifs, fenêtres de contexte, paramètres estimés
-    ratelimits.js reconstruction des fenêtres et auto-calibrage
-    aggregate.js coût et carbone calculés PAR MODÈLE puis sommés, jamais sur un tarif moyen
-  main/          processus Electron : barre d'état, raccourci global, IPC, icônes PNG générées
-  renderer/      popover et tableau de bord — HTML/CSS/JS natifs, SVG écrit à la main
-  cli.js         les mêmes chiffres dans un terminal
+crates/trace-core/src/
+  collectors/    une source = un module, isolé (une source en échec n'en bloque aucune autre)
+  carbon/        estimateur EcoLogits, facteurs, registre des sources citables
+  models.rs      registre : tarifs, fenêtres de contexte, paramètres estimés
+  ratelimits.rs  reconstruction des fenêtres, calibrage, projection de saturation
+  aggregate.rs   coût et carbone calculés PAR MODÈLE puis sommés, jamais sur un tarif moyen
+  provenance.rs  qui mesure quoi, et qui l'emporte quand deux sources se superposent
+  present.rs     ce que la barre d'état affiche — logique pure, donc testable
+crates/trace-cli/  le binaire `trace`
+src-tauri/src/     barre d'état, popover, tableau de bord, icônes PNG générées
+src/renderer/      popover et tableau de bord — HTML/CSS/JS natifs, SVG écrit à la main
+src/i18n/          deux catalogues JSON, embarqués dans le binaire
 ```
 
 L'indexation est incrémentale : chaque fichier est relu depuis un offset en
 octets, et les lignes incomplètes — Claude Code écrit pendant qu'on lit — sont
-reprises au passage suivant. Sur 116 Mo de journaux : **291 ms à froid, 18 ms
-ensuite**.
+reprises au passage suivant. Sur 186 Mo de journaux : **230 ms à froid**, et rien
+ensuite tant qu'aucun fichier n'a grossi.
 
 ### Un seul processus écrit l'index
 
@@ -471,7 +494,7 @@ génération n'est facturé qu'une fois.
 
 Déposez un fichier dans `logo/` (PNG ou WebP, fond transparent) puis lancez
 `npm run logos` : il est reconnu par son nom de fichier, redimensionné et
-intégré en base64 dans `src/renderer/shared/logos.js`. Les scripts `dist:*`
+intégré en base64 dans `src/renderer/shared/logos.js`. Les scripts d'empaquetage
 le font automatiquement.
 
 Les logos sont rendus en **masque CSS**, pas en image. Ce sont des silhouettes
@@ -496,20 +519,19 @@ logo sarcelle sur la même ligne qu'une valeur CO₂e sarcelle deviendrait ambig
 
 ## Distribution
 
-Le runtime durci de macOS refuse de lancer Electron sans habilitations : V8 a
-besoin de la JIT. `build/entitlements.mac.plist` en porte trois, et pas une de
-plus — chaque habilitation ajoutée élargit ce que l'application peut faire une
-fois compromise.
+`build/entitlements.mac.plist` porte le jeu d'habilitations macOS, et pas une
+de plus — chaque habilitation ajoutée élargit ce que l'application peut faire
+une fois compromise.
 
 Sans **notarisation**, le DMG est refusé par Gatekeeper sur toute machine autre
-que celle qui l'a construit. `electron-builder.yml` l'active ; elle ne se
-déclenche que si la signature a eu lieu, la construction locale sans certificat
-reste donc possible. Les secrets attendus par `.github/workflows/release.yml`,
+que celle qui l'a construit. Le workflow l'active ; elle ne se déclenche que si
+la signature a eu lieu, la construction locale sans certificat reste donc
+possible. Les secrets attendus par `.github/workflows/release-tauri.yml`,
 déclenché sur un tag `v*` :
 
 | Secret | Rôle |
 |---|---|
-| `MAC_CERTIFICATE_P12` / `MAC_CERTIFICATE_PASSWORD` | certificat « Developer ID Application » |
+| `MAC_CERTIFICATE_P12` / `MAC_CERTIFICATE_PASSWORD` / `APPLE_SIGNING_IDENTITY` | certificat « Developer ID Application » |
 | `APPLE_ID` / `APPLE_APP_SPECIFIC_PASSWORD` / `APPLE_TEAM_ID` | notarisation |
 | `WIN_CERTIFICATE_P12` / `WIN_CERTIFICATE_PASSWORD` | signature Authenticode |
 
@@ -520,7 +542,7 @@ d'échouer sur un certificat qu'un fork n'a pas.
 en arrière-plan sur la machine de quelqu'un demande une chaîne de confiance
 qu'une application de barre de menus sans serveur ne peut pas tenir
 sérieusement. TRACE se contente de lire la dernière version publiée et de le
-dire une fois (`src/main/update.js`).
+dire une fois (`crates/trace-core/src/update.rs`).
 
 ---
 
@@ -529,7 +551,7 @@ dire une fois (`src/main/update.js`).
 - Les paramètres des modèles fermés sont estimés : la fourchette carbone couvre
   environ un ordre de grandeur. C'est irréductible sans publication des
   fournisseurs.
-- Les tarifs sont figés dans `src/core/models.js` et doivent être mis à jour
+- Les tarifs sont figés dans `crates/trace-core/src/models.rs` et doivent être mis à jour
   quand ils changent (surchargeables via `modelOverrides` dans la configuration).
 - La pondération des limites de débit est une approximation : les vrais
   plafonds pondèrent aussi par modèle, selon une formule non publiée. D'où le

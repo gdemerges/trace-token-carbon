@@ -1,0 +1,47 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "TRACE",
+  "version": "0.1.0",
+  "identifier": "com.gdemerges.trace",
+  "build": {
+    "frontendDist": "../src/renderer"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "macOSPrivateApi": true,
+    "windows": [],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "publisher": "Guillaume Demergès",
+    "copyright": "TRACE — Token Rate And Carbon Estimator",
+    "shortDescription": "Consommation de tokens IA, limites de débit et empreinte carbone",
+    "longDescription": "Ce que vos outils IA consomment vraiment : tokens par modèle, position dans les limites de débit, et empreinte carbone. Une icône dans la barre d'état, un raccourci global pour les jauges, un tableau de bord pour le détail.",
+    "category": "DeveloperTool",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "macOS": {
+      "minimumSystemVersion": "10.15",
+      "entitlements": "../build/entitlements.mac.plist"
+    },
+    "linux": {
+      "deb": {
+        "depends": ["libwebkit2gtk-4.1-0", "libgtk-3-0", "libayatana-appindicator3-1"]
+      }
+    },
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser"
+      }
+    }
+  }
+}
