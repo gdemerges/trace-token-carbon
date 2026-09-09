@@ -5,6 +5,8 @@
 //! faire — ouvrir des fenêtres, tenir une icône, relayer des appels.
 
 mod commands;
+// Public pour que l'exemple de comparaison puisse le vider.
+pub mod icon;
 mod state;
 mod windows;
 
@@ -12,6 +14,47 @@ use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::Manager;
 use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut, ShortcutState};
+
+/// L'identifiant de l'icône de barre d'état, pour la retrouver et la
+/// redessiner à chaque cycle.
+const TRAY_ID: &str = "trace";
+
+/// Côté de l'icône, en pixels physiques.
+///
+/// On dessine en 2x et on laisse le système réduire : une barre d'état sur
+/// écran Retina afficherait sinon une icône floue.
+const TRAY_SIZE: u32 = 44;
+
+/// Dessine l'icône au remplissage voulu.
+///
+/// Hors macOS, l'icône n'est pas un gabarit : la barre d'état n'y affiche
+/// aucun texte à côté, et la jauge peinte dans l'icône est la SEULE
+/// information disponible d'un coup d'œil. Elle mérite sa couleur.
+fn tray_image(fill: Option<f64>) -> tauri::Result<tauri::image::Image<'static>> {
+    let template = cfg!(target_os = "macos");
+    let png = icon::draw_tray_icon(TRAY_SIZE, fill, template);
+    tauri::image::Image::from_bytes(&png).map(|i| i.to_owned())
+}
+
+/// Reflète l'état courant dans la barre : le dessin, le titre, l'infobulle.
+fn update_tray(app: &tauri::AppHandle, snapshot: &trace_core::core::Snapshot) {
+    use trace_core::present;
+    let Some(tray) = app.tray_by_id(TRAY_ID) else {
+        return;
+    };
+    let config = app.state::<state::AppState>().config();
+
+    if let Ok(image) = tray_image(present::tray_fill(snapshot)) {
+        let _ = tray.set_icon(Some(image));
+    }
+    // Le titre n'existe que sur macOS ; ailleurs, c'est la jauge peinte dans
+    // l'icône qui porte l'information.
+    #[cfg(target_os = "macos")]
+    let _ = tray.set_title(Some(present::tray_title(snapshot, &config)));
+    #[cfg(not(target_os = "macos"))]
+    let _ = &config;
+    let _ = tray.set_tooltip(Some(present::tray_tooltip(snapshot)));
+}
 
 /// Le raccourci global par défaut, `⌘⌥T` (`Ctrl+Alt+T` ailleurs).
 fn default_shortcut() -> Shortcut {
@@ -94,9 +137,8 @@ pub fn run() {
 
             windows::build_popover(&handle)?;
 
-            let icon = tauri::image::Image::from_bytes(include_bytes!("../icons/tray.png"))?;
-            TrayIconBuilder::with_id("trace")
-                .icon(icon)
+            TrayIconBuilder::with_id(TRAY_ID)
+                .icon(tray_image(None)?)
                 // Sur macOS l'icône est un gabarit : le système la teinte selon
                 // le thème de la barre, ce qu'aucune couleur figée ne sait faire.
                 .icon_as_template(true)
@@ -137,6 +179,11 @@ pub fn run() {
             app.state::<state::AppState>()
                 .set_shortcut_registered(registered);
 
+            update_tray(
+                &handle,
+                &app.state::<state::AppState>()
+                    .snapshot(&trace_core::core::SnapshotOptions::default()),
+            );
             start_refresh_loop(handle.clone());
 
             // En développement, les deux fenêtres s'ouvrent d'emblée : une
@@ -206,6 +253,11 @@ fn start_refresh_loop(app: tauri::AppHandle) {
         // Les alertes partent même fenêtres fermées : c'est précisément quand
         // on ne regarde pas l'écran qu'un avertissement a de la valeur.
         notify(&app, state.pending_alerts());
+
+        // La barre d'état, elle, se met à jour dans tous les cas : c'est la
+        // seule chose visible quand aucune fenêtre ne l'est.
+        let snap = state.snapshot(&trace_core::core::SnapshotOptions::default());
+        update_tray(&app, &snap);
         // On ne peint que si quelqu'un regarde : recalculer un instantané
         // complet pour l'envoyer à des fenêtres fermées était précisément ce
         // que le dernier commit de la version Electron avait supprimé.
@@ -213,11 +265,9 @@ fn start_refresh_loop(app: tauri::AppHandle) {
             .webview_windows()
             .values()
             .any(|w| w.is_visible().unwrap_or(false));
-        if !watching {
-            continue;
+        if watching {
+            broadcast(&app, &snap);
         }
-        let snap = state.snapshot(&trace_core::core::SnapshotOptions::default());
-        broadcast(&app, &snap);
     });
 }
 

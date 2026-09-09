@@ -13,6 +13,7 @@ pub mod collectors;
 pub mod core;
 pub mod i18n;
 pub mod models;
+pub mod present;
 pub mod pricing;
 pub mod provenance;
 pub mod ratelimits;

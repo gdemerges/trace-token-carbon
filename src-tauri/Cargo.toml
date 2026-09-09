@@ -31,3 +31,7 @@ tauri-plugin-opener = "2"
 # Windows et Linux ont chacun leur source.
 sys-locale = "0.3"
 tauri-plugin-notification = "2"
+
+# Le flux zlib d'un PNG. L'icône de barre d'état est redessinée à chaque
+# rafraîchissement : elle doit s'encoder, pas se charger.
+flate2 = "1"
