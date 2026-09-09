@@ -304,14 +304,21 @@ struct LiveProcess(std::process::Child);
 impl LiveProcess {
     fn spawn() -> Self {
         let mut cmd = if cfg!(windows) {
+            // `timeout` refuse une entrée redirigée et rend la main
+            // immédiatement — le processus témoin serait mort avant d'être
+            // interrogé. `ping` attend vraiment.
             let mut c = std::process::Command::new("cmd");
-            c.args(["/c", "timeout", "/t", "30", "/nobreak"]);
+            c.args(["/c", "ping", "-n", "31", "127.0.0.1"]);
             c
         } else {
             let mut c = std::process::Command::new("sh");
             c.args(["-c", "sleep 30"]);
             c
         };
+        // La sortie est jetée : `ping` en produit, et l'accumuler dans un
+        // tube que personne ne lit finirait par bloquer l'enfant.
+        cmd.stdout(std::process::Stdio::null());
+        cmd.stderr(std::process::Stdio::null());
         LiveProcess(cmd.spawn().expect("un processus enfant"))
     }
 

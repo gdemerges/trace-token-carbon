@@ -281,17 +281,37 @@ fn process_alive(pid: u32) -> bool {
     std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM)
 }
 
+/// Sous Windows, il n'y a pas de signal 0 : on ouvre une poignée sur le
+/// processus et on lit son code de sortie.
+///
+/// La première version lançait `tasklist` et cherchait le PID dans sa sortie.
+/// Deux torts, dont la CI n'a révélé que le premier : elle rendait faux pour
+/// un processus bien vivant, et surtout elle lançait un processus externe à
+/// CHAQUE cycle de rafraîchissement, puisque la propriété de l'index se
+/// vérifie avant chaque écriture.
+///
+/// Un accès refusé est traité comme une preuve de vie, exactement comme
+/// `EPERM` sous Unix : le processus existe, il appartient à un autre compte.
 #[cfg(windows)]
 fn process_alive(pid: u32) -> bool {
-    // Faute d'un équivalent portable en bibliothèque standard, on interroge le
-    // système. Un échec de la commande vaut « vivant » : mieux vaut renoncer à
-    // écrire que risquer d'écraser l'index d'un processus actif.
-    match std::process::Command::new("tasklist")
-        .args(["/FI", &format!("PID eq {pid}"), "/NH"])
-        .output()
-    {
-        Ok(out) => String::from_utf8_lossy(&out.stdout).contains(&pid.to_string()),
-        Err(_) => true,
+    use windows_sys::Win32::Foundation::{CloseHandle, GetLastError, ERROR_ACCESS_DENIED};
+    use windows_sys::Win32::System::Threading::{
+        GetExitCodeProcess, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
+    };
+
+    /// `STILL_ACTIVE`, alias de `STATUS_PENDING` : le code que rend un
+    /// processus qui n'a pas encore terminé.
+    const STILL_ACTIVE: u32 = 259;
+
+    unsafe {
+        let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+        if handle.is_null() {
+            return GetLastError() == ERROR_ACCESS_DENIED;
+        }
+        let mut code: u32 = 0;
+        let ok = GetExitCodeProcess(handle, &mut code) != 0;
+        CloseHandle(handle);
+        ok && code == STILL_ACTIVE
     }
 }
 

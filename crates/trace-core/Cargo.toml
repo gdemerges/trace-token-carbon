@@ -19,3 +19,8 @@ ureq.workspace = true
 # tuer. La bibliothèque standard n'expose pas d'équivalent.
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
+
+# Uniquement pour savoir si un processus est vivant. Interroger `tasklist` à
+# chaque cycle serait à la fois faux et coûteux.
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_System_Threading"] }
