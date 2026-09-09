@@ -57,6 +57,9 @@ pub struct State {
     pub sources: Vec<SourceStatus>,
     /// Ce que le relevé direct rapporte de lui-même au dernier passage.
     pub live_stats: Option<crate::collectors::anthropic_oauth::LiveStats>,
+    /// Le coût facturé par le fournisseur : la seule vérification externe du
+    /// chiffre estimé localement.
+    pub cost: Option<crate::collectors::billing::CostReport>,
 }
 
 /// Rafraîchit toutes les sources et rend l'état à afficher.
@@ -143,6 +146,7 @@ pub fn refresh(config: Config, persist: bool) -> State {
         quota: index.quota.clone(),
         sources: collected.sources,
         live_stats: collected.live_stats,
+        cost: collected.cost,
         index,
         config,
     }
@@ -189,6 +193,9 @@ pub struct Snapshot {
     /// chiffre affiché n'en dépend.
     pub methodology: Option<serde_json::Value>,
     pub stale_error: Option<String>,
+    /// Ce que les sources rapportent au-delà des tokens — pour l'instant, le
+    /// coût facturé par Anthropic.
+    pub extra: serde_json::Value,
 }
 
 /// Construit l'instantané destiné à l'affichage.
@@ -295,6 +302,10 @@ pub fn snapshot(state: &State, opts: &SnapshotOptions) -> Snapshot {
         has_keys,
         methodology: None,
         stale_error: None,
+        extra: match &state.cost {
+            Some(c) => serde_json::json!({ "anthropic-api": { "cost": c } }),
+            None => serde_json::json!({}),
+        },
     }
 }
 

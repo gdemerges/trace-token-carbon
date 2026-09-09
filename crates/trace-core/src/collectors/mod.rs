@@ -5,6 +5,7 @@
 //! ne demande de mot de passe, aucun n'envoie quoi que ce soit ailleurs.
 
 pub mod anthropic_oauth;
+pub mod billing;
 pub mod claude_code;
 pub mod codex_cli;
 
@@ -134,6 +135,11 @@ pub struct Collected {
     /// besoin de dire POURQUOI un chiffre ne bouge pas, et la cadence normale
     /// n'est pas une panne.
     pub live: Option<anthropic_oauth::LiveStats>,
+    /// Le coût facturé, quand une clé Admin permet de le lire. C'est la seule
+    /// vérification externe du chiffre estimé localement.
+    pub cost: Option<billing::CostReport>,
+    /// Ce qui a échoué sans empêcher le reste de remonter.
+    pub errors: Vec<String>,
 }
 
 /// Taille de la fenêtre de déduplication, en identifiants.
@@ -182,6 +188,8 @@ pub struct CollectedAll {
     /// Ce que le relevé direct rapporte de lui-même, pour que l'interface
     /// puisse dire pourquoi un chiffre ne bouge pas.
     pub live_stats: Option<anthropic_oauth::LiveStats>,
+    /// Le coût facturé par le fournisseur, quand une clé Admin le permet.
+    pub cost: Option<billing::CostReport>,
 }
 
 /// Les collecteurs déjà portés, dans l'ordre d'affichage.
@@ -194,9 +202,12 @@ const PORTED: &[(&str, &str)] = &[
 /// trousseau. On les DÉCLARE plutôt que de les faire disparaître — une source
 /// absente de la liste se lirait comme une source qui n'existe pas, alors
 /// qu'elle existe et ne fonctionne simplement pas encore.
-const PENDING: &[(&str, &str, bool)] = &[
-    ("anthropic-api", "source.anthropic-api", true),
-    ("openai-api", "source.openai-api", true),
+/// Les deux rapports de facturation. Ils ne se lisent qu'avec une clé Admin,
+/// et leur motif d'indisponibilité doit le dire — c'est la première question
+/// que se pose l'utilisateur devant une source vide.
+const BILLING: &[(&str, &str, &str)] = &[
+    (billing::ANTHROPIC, "source.anthropic-api", "source.needAnthropicKey"),
+    (billing::OPENAI, "source.openai-api", "source.needOpenaiKey"),
 ];
 
 /// Exécute tous les collecteurs activés et fusionne leurs résultats.
@@ -296,19 +307,48 @@ pub fn collect_all(
         out.sources.push(entry);
     }
 
-    for (id, label_key, provides_tokens) in PENDING {
-        out.sources.push(SourceStatus {
+    // --- rapports de facturation ---------------------------------------------
+    for (id, label_key, need_key) in BILLING {
+        let key = if *id == billing::ANTHROPIC {
+            config.anthropic_admin_key.as_deref()
+        } else {
+            config.openai_admin_key.as_deref()
+        };
+        let mut entry = SourceStatus {
             id: (*id).to_string(),
             label: t(label_key),
-            provides_tokens: *provides_tokens,
+            provides_tokens: true,
             enabled: !disabled.contains(id),
             available: false,
             events: 0,
             quota: 0,
             error: None,
-            note: Some("Pas encore porté vers Rust".to_string()),
+            note: None,
             stats: Stats::default(),
-        });
+        };
+
+        if !entry.enabled {
+            entry.note = Some(t("source.disabled"));
+        } else if !billing::has_key(key) {
+            entry.note = Some(t(need_key));
+        } else {
+            entry.available = true;
+            let mut res = if *id == billing::ANTHROPIC {
+                billing::collect_anthropic(key, config.api_lookback_days)
+            } else {
+                billing::collect_openai(key, config.api_lookback_days)
+            };
+            entry.events = res.events.len();
+            entry.stats = res.stats;
+            if !res.errors.is_empty() {
+                entry.error = Some(res.errors.join(" ; "));
+            }
+            if res.cost.is_some() {
+                out.cost = res.cost.take();
+            }
+            out.events.append(&mut res.events);
+        }
+        out.sources.push(entry);
     }
 
     // Les journaux ne sont pas parcourus dans l'ordre chronologique : la série
