@@ -185,6 +185,7 @@ pub fn run() {
                     .snapshot(&trace_core::core::SnapshotOptions::default()),
             );
             start_refresh_loop(handle.clone());
+            start_update_checks(handle.clone());
 
             // En développement, les deux fenêtres s'ouvrent d'emblée : une
             // application qui démarre invisible ne se laisse pas éprouver, et
@@ -269,6 +270,58 @@ fn start_refresh_loop(app: tauri::AppHandle) {
             broadcast(&app, &snap);
         }
     });
+}
+
+/// Surveille les versions publiées, sans jamais rien télécharger.
+///
+/// Une seule annonce par version : réveiller quelqu'un tous les jours pour la
+/// même mise à jour est le meilleur moyen de lui faire couper le réglage — et
+/// de lui faire manquer la suivante.
+fn start_update_checks(app: tauri::AppHandle) {
+    use trace_core::update;
+
+    std::thread::spawn(move || {
+        // Au démarrage, mais pas DANS le démarrage : la première seconde
+        // appartient à l'affichage des chiffres, pas à une requête facultative.
+        std::thread::sleep(update::STARTUP_DELAY);
+        let mut announced: Option<String> = None;
+        loop {
+            let enabled = app.state::<state::AppState>().config().check_updates;
+            if let Some(found) = update::check(env!("CARGO_PKG_VERSION"), enabled) {
+                if announced.as_deref() != Some(found.version.as_str()) {
+                    announced = Some(found.version.clone());
+                    notify_update(&app, &found);
+                }
+            }
+            std::thread::sleep(update::INTERVAL);
+        }
+    });
+}
+
+/// Annonce une version disponible. L'interface, elle, ouvrira la page si
+/// l'utilisateur le demande — rien n'est installé sans son geste.
+fn notify_update(app: &tauri::AppHandle, found: &trace_core::update::Update) {
+    use tauri::Emitter;
+    use tauri_plugin_notification::NotificationExt;
+    use trace_core::i18n::t1;
+
+    let title = t1("update.available", "version", &found.version);
+    let body = found
+        .notes
+        .clone()
+        .unwrap_or_else(|| t1("update.body", "version", &found.version));
+    if let Err(e) = app
+        .notification()
+        .builder()
+        .title(&title)
+        .body(&body)
+        .show()
+    {
+        eprintln!("notification de mise à jour refusée : {e}");
+    }
+    // L'interface reçoit aussi l'annonce : une notification système se rate,
+    // un bandeau dans la fenêtre attend qu'on la regarde.
+    let _ = app.emit("trace:update-available", found);
 }
 
 /// Émet les notifications système décidées par le cœur.

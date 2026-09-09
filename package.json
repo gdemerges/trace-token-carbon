@@ -22,7 +22,8 @@
     "tauri:build": "cargo build --release -p trace-app",
     "test:rust": "cargo test",
     "cli:rust": "cargo run -q --release -p trace-cli --",
-    "icons:tauri": "node scripts/make-tauri-icons.js"
+    "icons:tauri": "node scripts/make-tauri-icons.js",
+    "tauri:bundle": "node scripts/make-tauri-icons.js && cargo tauri build"
   },
   "devDependencies": {
     "electron": "^44.1.0",

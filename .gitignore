@@ -19,3 +19,6 @@ target/
 
 # Schémas d'autorisations régénérés par `tauri-build` à chaque compilation.
 src-tauri/gen/schemas/
+
+# Paquets produits par `cargo tauri build`.
+src-tauri/gen/

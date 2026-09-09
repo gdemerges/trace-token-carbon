@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- TRACE vit dans la barre d'état : ni icône dans le Dock, ni fenêtre au
+       lancement. Le code pose déjà la politique d'activation à l'exécution,
+       mais sans cette clé le Dock affiche l'icône une fraction de seconde au
+       démarrage. -->
+  <key>LSUIElement</key>
+  <true/>
+</dict>
+</plist>

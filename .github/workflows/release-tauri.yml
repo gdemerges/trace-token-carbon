@@ -1,0 +1,114 @@
+# Publication des binaires Tauri sur un tag `v*`.
+#
+# Même contrat que la version Electron : la signature et la notarisation ne se
+# déclenchent que si les secrets sont présents. Un fork peut lancer ce workflow
+# et obtenir des binaires non signés, sans échec bruyant sur un certificat
+# qu'il n'a pas.
+name: Release (Tauri)
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # macOS se construit deux fois : une machine Apple Silicon ne produit
+          # pas un binaire Intel, et un paquet universel doublerait la taille
+          # d'une application dont c'est justement l'argument.
+          - os: macos-latest
+            label: macOS · Apple Silicon
+            target: aarch64-apple-darwin
+          - os: macos-latest
+            label: macOS · Intel
+            target: x86_64-apple-darwin
+          - os: ubuntu-latest
+            label: Linux · x86_64
+            target: x86_64-unknown-linux-gnu
+          - os: windows-latest
+            label: Windows · x86_64
+            target: x86_64-pc-windows-msvc
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Dépendances système (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      # Le cœur doit passer avant de graver quoi que ce soit dans une
+      # release : un binaire publié ne se rappelle pas.
+      - name: Éprouver le cœur
+        run: cargo test -p trace-core -p trace-cli
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # macOS — signature « Developer ID Application » puis notarisation.
+          # Absents, tauri-action produit un binaire non signé et le dit.
+          APPLE_CERTIFICATE: ${{ secrets.MAC_CERTIFICATE_P12 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.MAC_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # Windows — signature Authenticode, même logique.
+          WINDOWS_CERTIFICATE: ${{ secrets.WIN_CERTIFICATE_P12 }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WIN_CERTIFICATE_PASSWORD }}
+        with:
+          args: --target ${{ matrix.target }}
+          tagName: ${{ github.ref_name }}
+          releaseName: TRACE ${{ github.ref_name }}
+          releaseDraft: true
+          prerelease: false
+
+  # Le binaire de terminal n'est pas empaqueté par Tauri : il se publie seul.
+  cli:
+    name: CLI · ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            target: aarch64-apple-darwin
+          - os: macos-latest
+            target: x86_64-apple-darwin
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --release -p trace-cli --target ${{ matrix.target }}
+      - name: Archiver
+        shell: bash
+        run: |
+          bin=target/${{ matrix.target }}/release/trace
+          [ -f "$bin.exe" ] && bin="$bin.exe"
+          tar -czf "trace-${{ matrix.target }}.tar.gz" -C "$(dirname "$bin")" "$(basename "$bin")"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: trace-cli-${{ matrix.target }}
+          path: trace-*.tar.gz

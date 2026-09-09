@@ -284,6 +284,8 @@
   "ui.settings": "Settings",
   "ui.settingsApplied": "Settings applied",
   "ui.stale": "data frozen",
+  "update.available": "TRACE {version} is available",
+  "update.body": "A newer version has been published. Nothing was downloaded: open the releases page to install it.",
   "window.daily": "Daily",
   "window.five_hour": "5h session",
   "window.full": "{product} — {window}",

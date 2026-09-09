@@ -18,6 +18,7 @@ pub mod pricing;
 pub mod provenance;
 pub mod ratelimits;
 pub mod store;
+pub mod update;
 pub mod util;
 
 pub use models::{resolve_model, Model, CACHE_MULTIPLIERS};
