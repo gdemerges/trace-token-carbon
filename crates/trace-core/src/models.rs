@@ -241,7 +241,7 @@ const SYNTHETIC: &str = "<synthetic>";
 
 /// Surcharge utilisateur d'une entrée du registre, chargée depuis
 /// `models.override.json`. Les tarifs bougent plus vite que les versions.
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ModelOverride {
     pub label: Option<String>,

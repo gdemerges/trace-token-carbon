@@ -13,3 +13,11 @@ serde_json.workspace = true
 chrono.workspace = true
 regex.workspace = true
 dirs.workspace = true
+
+# Uniquement pour `kill(pid, 0)` : vérifier qu'un processus existe sans le
+# tuer. La bibliothèque standard n'expose pas d'équivalent.
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[target.'cfg(unix)'.dev-dependencies]
+libc = "0.2"

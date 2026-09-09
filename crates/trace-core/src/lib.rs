@@ -13,6 +13,7 @@ pub mod i18n;
 pub mod models;
 pub mod pricing;
 pub mod provenance;
+pub mod store;
 pub mod util;
 
 pub use models::{resolve_model, Model, CACHE_MULTIPLIERS};
