@@ -78,7 +78,12 @@ fn compute_bound(
 
     // Le PUE couvre le refroidissement et les pertes de distribution.
     let it_energy_wh = gpu_energy_wh + server_energy_wh;
-    Bound { energy_wh: pue * it_energy_wh, it_energy_wh, latency_s, gpu_count }
+    Bound {
+        energy_wh: pue * it_energy_wh,
+        it_energy_wh,
+        latency_s,
+        gpu_count,
+    }
 }
 
 /// Impact de fabrication du matériel, amorti sur le temps d'occupation.
@@ -146,11 +151,26 @@ pub fn estimate(tokens: &Tokens, model: &Model, opts: &Options) -> Estimate {
     let w = opts.weights.unwrap_or(TOKEN_ENERGY_WEIGHTS);
     let p = opts.params.clone().unwrap_or_else(|| model.params.clone());
 
-    let low = compute_bound(tokens, p.total.min, p.active.min, w.low(), pue_low, gpu_memory_gb);
-    let high = compute_bound(tokens, p.total.max, p.active.max, w.high(), pue_high, gpu_memory_gb);
+    let low = compute_bound(
+        tokens,
+        p.total.min,
+        p.active.min,
+        w.low(),
+        pue_low,
+        gpu_memory_gb,
+    );
+    let high = compute_bound(
+        tokens,
+        p.total.max,
+        p.active.max,
+        w.high(),
+        pue_high,
+        gpu_memory_gb,
+    );
 
-    let to_grams = |b: &Bound| (b.energy_wh / 1000.0) * grid_intensity
-        + embodied_grams_co2e(b.latency_s, b.gpu_count);
+    let to_grams = |b: &Bound| {
+        (b.energy_wh / 1000.0) * grid_intensity + embodied_grams_co2e(b.latency_s, b.gpu_count)
+    };
 
     // L'eau de refroidissement se rapporte à l'énergie informatique — c'est la
     // définition du WUE — la production d'électricité à l'énergie au compteur.
@@ -170,9 +190,21 @@ pub fn estimate(tokens: &Tokens, model: &Model, opts: &Options) -> Estimate {
     let mid_energy = mid(e_min, e_max);
 
     Estimate {
-        grams_co2e: Range { min: g_min, max: g_max, mid: mid(g_min, g_max) },
-        energy_wh: Range { min: e_min, max: e_max, mid: mid_energy },
-        water_l: Range { min: w_min, max: w_max, mid: mid(w_min, w_max) },
+        grams_co2e: Range {
+            min: g_min,
+            max: g_max,
+            mid: mid(g_min, g_max),
+        },
+        energy_wh: Range {
+            min: e_min,
+            max: e_max,
+            mid: mid_energy,
+        },
+        water_l: Range {
+            min: w_min,
+            max: w_max,
+            mid: mid(w_min, w_max),
+        },
         usage_g: (mid_energy / 1000.0) * grid_intensity,
         embodied_g: embodied_grams_co2e(mid_latency, mid_gpu),
         gpu_count: high.gpu_count,
@@ -202,7 +234,11 @@ pub struct Total {
 
 impl Default for Range {
     fn default() -> Self {
-        Range { min: 0.0, max: 0.0, mid: 0.0 }
+        Range {
+            min: 0.0,
+            max: 0.0,
+            mid: 0.0,
+        }
     }
 }
 
@@ -231,7 +267,10 @@ pub struct Pair<'a> {
 }
 
 fn total_for(pairs: &[Pair], opts: &Options) -> Total {
-    let all: Vec<Estimate> = pairs.iter().map(|p| estimate(&p.tokens, p.model, opts)).collect();
+    let all: Vec<Estimate> = pairs
+        .iter()
+        .map(|p| estimate(&p.tokens, p.model, opts))
+        .collect();
     sum(&all)
 }
 
@@ -267,7 +306,11 @@ pub fn grid_sensitivity(pairs: &[Pair], opts: &Options) -> Vec<GridRow> {
                 key: (*key).to_string(),
                 label: g.label,
                 intensity: g.value,
-                ratio: if reference > 0.0 { Some(total.grams_co2e.mid / reference) } else { None },
+                ratio: if reference > 0.0 {
+                    Some(total.grams_co2e.mid / reference)
+                } else {
+                    None
+                },
                 grams_co2e: total.grams_co2e,
             })
         })
@@ -284,7 +327,11 @@ pub struct Lever {
 }
 
 fn pinned_params(p: &ParamProfile) -> ParamProfile {
-    ParamProfile { total: pin_range(p.total), active: pin_range(p.active), ..p.clone() }
+    ParamProfile {
+        total: pin_range(p.total),
+        active: pin_range(p.active),
+        ..p.clone()
+    }
 }
 
 /// D'où vient l'incertitude : contribution de chaque levier, isolément.
@@ -301,7 +348,10 @@ fn pinned_params(p: &ParamProfile) -> ParamProfile {
 /// linéairement. C'est une analyse de sensibilité, et elle se lit comme telle.
 pub fn uncertainty(pairs: &[Pair], opts: &Options) -> Vec<Lever> {
     let pinned_weights = TOKEN_ENERGY_WEIGHTS.pinned();
-    let all_pinned = |extra: Options| Options { weights: Some(pinned_weights), ..extra };
+    let all_pinned = |extra: Options| Options {
+        weights: Some(pinned_weights),
+        ..extra
+    };
 
     // Taille des modèles : seuls les paramètres varient.
     let size = total_for(pairs, &all_pinned(opts.clone())).grams_co2e;
@@ -311,7 +361,10 @@ pub fn uncertainty(pairs: &[Pair], opts: &Options) -> Vec<Lever> {
         let all: Vec<Estimate> = pairs
             .iter()
             .map(|p| {
-                let o = Options { params: Some(pinned_params(&p.model.params)), ..opts.clone() };
+                let o = Options {
+                    params: Some(pinned_params(&p.model.params)),
+                    ..opts.clone()
+                };
                 estimate(&p.tokens, p.model, &o)
             })
             .collect();

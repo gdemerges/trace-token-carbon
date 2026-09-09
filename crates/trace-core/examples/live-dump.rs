@@ -18,7 +18,11 @@ fn main() {
             "  {} → {:.1} %  réinit. {}",
             q.kind,
             q.used_percent.unwrap_or(0.0),
-            if q.resets_at == 0 { "inconnue".into() } else { trace_core::util::day_key(q.resets_at) }
+            if q.resets_at == 0 {
+                "inconnue".into()
+            } else {
+                trace_core::util::day_key(q.resets_at)
+            }
         );
     }
 }

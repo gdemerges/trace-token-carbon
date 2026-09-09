@@ -35,12 +35,16 @@ pub fn show_dashboard(app: &AppHandle) -> tauri::Result<WebviewWindow> {
         let _ = win.set_focus();
         return Ok(win);
     }
-    let win = WebviewWindowBuilder::new(app, DASHBOARD, WebviewUrl::App("dashboard/index.html".into()))
-        .title("TRACE — tableau de bord")
-        .inner_size(1080.0, 760.0)
-        .min_inner_size(720.0, 520.0)
-        .initialization_script(BRIDGE)
-        .build()?;
+    let win = WebviewWindowBuilder::new(
+        app,
+        DASHBOARD,
+        WebviewUrl::App("dashboard/index.html".into()),
+    )
+    .title("TRACE — tableau de bord")
+    .inner_size(1080.0, 760.0)
+    .min_inner_size(720.0, 520.0)
+    .initialization_script(BRIDGE)
+    .build()?;
     Ok(win)
 }
 

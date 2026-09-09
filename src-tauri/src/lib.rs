@@ -9,8 +9,8 @@ mod state;
 mod windows;
 
 use tauri::menu::{Menu, MenuItem};
-use tauri::Manager;
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+use tauri::Manager;
 use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut, ShortcutState};
 
 /// Le raccourci global par défaut, `⌘⌥T` (`Ctrl+Alt+T` ailleurs).
@@ -41,7 +41,13 @@ fn toggle_popover(app: &tauri::AppHandle) {
 }
 
 fn tray_menu(app: &tauri::AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
-    let dashboard = MenuItem::with_id(app, "dashboard", "Tableau de bord", true, Some("CmdOrCtrl+Return"))?;
+    let dashboard = MenuItem::with_id(
+        app,
+        "dashboard",
+        "Tableau de bord",
+        true,
+        Some("CmdOrCtrl+Return"),
+    )?;
     let quit = MenuItem::with_id(app, "quit", "Quitter TRACE", true, Some("CmdOrCtrl+Q"))?;
     Menu::with_items(app, &[&dashboard, &quit])
 }
@@ -103,7 +109,12 @@ pub fn run() {
                     _ => {}
                 })
                 .on_tray_icon_event(|tray, event| {
-                    if let TrayIconEvent::Click { button, button_state, .. } = event {
+                    if let TrayIconEvent::Click {
+                        button,
+                        button_state,
+                        ..
+                    } = event
+                    {
                         if button == MouseButton::Left && button_state == MouseButtonState::Up {
                             toggle_popover(tray.app_handle());
                         }
@@ -122,7 +133,8 @@ pub fn run() {
                     false
                 }
             };
-            app.state::<state::AppState>().set_shortcut_registered(registered);
+            app.state::<state::AppState>()
+                .set_shortcut_registered(registered);
 
             start_refresh_loop(handle.clone());
 
@@ -212,7 +224,13 @@ fn start_refresh_loop(app: tauri::AppHandle) {
 fn notify(app: &tauri::AppHandle, notifications: Vec<trace_core::alerts::Notification>) {
     use tauri_plugin_notification::NotificationExt;
     for n in notifications {
-        if let Err(e) = app.notification().builder().title(&n.title).body(&n.body).show() {
+        if let Err(e) = app
+            .notification()
+            .builder()
+            .title(&n.title)
+            .body(&n.body)
+            .show()
+        {
             eprintln!("notification refusée : {e}");
         }
     }

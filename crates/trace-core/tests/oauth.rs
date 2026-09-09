@@ -38,15 +38,23 @@ fn reconnait_une_reponse_en_tableau_type() {
     assert_eq!(normalize_window(&w[0].key), Some("five_hour"));
     assert_eq!(normalize_window(&w[1].key), Some("weekly_opus"));
     assert_eq!(w[0].percent, 79.0);
-    assert!(w[0].resets_at.is_some(), "une date ISO doit être reconnue comme une réinitialisation");
+    assert!(
+        w[0].resets_at.is_some(),
+        "une date ISO doit être reconnue comme une réinitialisation"
+    );
 }
 
 #[test]
 fn une_fraction_zero_un_est_convertie_en_pourcentage() {
     // Certaines API rendent une fraction, d'autres un pourcentage. Les
     // confondre afficherait 0,79 % pour une fenêtre aux trois quarts pleine.
-    let w = extract_windows(&json!({ "five_hour": { "utilization": 0.79, "resets_at": 1788220800 } }));
-    assert!((w[0].percent - 79.0).abs() < 0.001, "obtenu {}", w[0].percent);
+    let w =
+        extract_windows(&json!({ "five_hour": { "utilization": 0.79, "resets_at": 1788220800 } }));
+    assert!(
+        (w[0].percent - 79.0).abs() < 0.001,
+        "obtenu {}",
+        w[0].percent
+    );
 }
 
 #[test]
@@ -95,5 +103,8 @@ fn une_structure_profondement_imbriquee_ne_fait_pas_boucler_l_extraction() {
         node = json!({ "nested": node });
     }
     let w = extract_windows(&node);
-    assert!(w.is_empty(), "au-delà de la profondeur admise, on n'invente rien");
+    assert!(
+        w.is_empty(),
+        "au-delà de la profondeur admise, on n'invente rien"
+    );
 }

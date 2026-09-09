@@ -88,7 +88,10 @@ fn format_until(ts: i64, now: i64) -> String {
         return tp("duration.inDays", &[("n", (h / 24).to_string())]);
     }
     if h > 0 {
-        return tp("duration.inHoursMinutes", &[("h", h.to_string()), ("m", format!("{m:02}"))]);
+        return tp(
+            "duration.inHoursMinutes",
+            &[("h", h.to_string()), ("m", format!("{m:02}"))],
+        );
     }
     tp("duration.inMinutes", &[("n", m.to_string())])
 }
@@ -96,7 +99,10 @@ fn format_until(ts: i64, now: i64) -> String {
 /// Décide quelles notifications émettre.
 pub fn evaluate(gauges: &[Gauge], config: &Config, state: &Fired, now: i64) -> Outcome {
     if !config.alerts.enabled {
-        return Outcome { notifications: Vec::new(), state: state.clone() };
+        return Outcome {
+            notifications: Vec::new(),
+            state: state.clone(),
+        };
     }
 
     let mut thresholds: Vec<f64> = config
@@ -121,8 +127,10 @@ pub fn evaluate(gauges: &[Gauge], config: &Config, state: &Fired, now: i64) -> O
         }
 
         let key = window_key(g);
-        let already: HashSet<&str> =
-            state.get(&key).map(|v| v.iter().map(String::as_str).collect()).unwrap_or_default();
+        let already: HashSet<&str> = state
+            .get(&key)
+            .map(|v| v.iter().map(String::as_str).collect())
+            .unwrap_or_default();
         let mut fired: Vec<String> = already.iter().map(|s| s.to_string()).collect();
 
         // --- trajectoire ---------------------------------------------------
@@ -135,10 +143,7 @@ pub fn evaluate(gauges: &[Gauge], config: &Config, state: &Fired, now: i64) -> O
         // `before_reset` est la condition qui la rend défendable : atteindre
         // le plafond après la réinitialisation n'est pas un incident, c'est
         // une fenêtre qui se vide à temps.
-        if config.alerts.projection
-            && !already.contains(TRAJECTORY)
-            && percent < thresholds[0]
-        {
+        if config.alerts.projection && !already.contains(TRAJECTORY) && percent < thresholds[0] {
             if let Some(p) = g.projection.as_ref().filter(|p| p.before_reset) {
                 notifications.push(Notification {
                     key: key.clone(),
@@ -149,12 +154,22 @@ pub fn evaluate(gauges: &[Gauge], config: &Config, state: &Fired, now: i64) -> O
                     title: tp(
                         "alert.trajectory.title",
                         &[
-                            ("product", if g.product.is_empty() { t("alert.limit") } else { g.product.clone() }),
+                            (
+                                "product",
+                                if g.product.is_empty() {
+                                    t("alert.limit")
+                                } else {
+                                    g.product.clone()
+                                },
+                            ),
                             ("window", g.label.to_lowercase()),
                             ("when", format_until(p.at, now)),
                         ],
                     ),
-                    body: tp("alert.trajectory.body", &[("percent", percent.round().to_string())]),
+                    body: tp(
+                        "alert.trajectory.body",
+                        &[("percent", percent.round().to_string())],
+                    ),
                     urgency: "normal",
                 });
                 fired.push(TRAJECTORY.to_string());
@@ -178,7 +193,14 @@ pub fn evaluate(gauges: &[Gauge], config: &Config, state: &Fired, now: i64) -> O
                 title: tp(
                     "alert.threshold.title",
                     &[
-                        ("product", if g.product.is_empty() { t("alert.limit") } else { g.product.clone() }),
+                        (
+                            "product",
+                            if g.product.is_empty() {
+                                t("alert.limit")
+                            } else {
+                                g.product.clone()
+                            },
+                        ),
                         ("percent", percent.round().to_string()),
                         ("window", g.label.to_lowercase()),
                     ],
@@ -199,7 +221,10 @@ pub fn evaluate(gauges: &[Gauge], config: &Config, state: &Fired, now: i64) -> O
         }
     }
 
-    Outcome { notifications, state: next }
+    Outcome {
+        notifications,
+        state: next,
+    }
 }
 
 /// Un seuil, écrit comme il est mémorisé. `80` et non `80.0` : l'état est

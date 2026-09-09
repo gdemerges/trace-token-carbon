@@ -22,7 +22,11 @@ fn per_million(n: i64, rate: f64) -> f64 {
 /// pour la gratuité. Les modèles locaux, eux, valent bien zéro.
 pub fn cost(tokens: &Tokens, model: &Model) -> Option<f64> {
     let Some(p) = model.pricing else {
-        return if model.provider == LOCAL { Some(0.0) } else { None };
+        return if model.provider == LOCAL {
+            Some(0.0)
+        } else {
+            None
+        };
     };
 
     // `cache_write5m` et `cache_write1h` sont facturés, `cache_write` ne l'est
@@ -45,7 +49,11 @@ pub fn cost(tokens: &Tokens, model: &Model) -> Option<f64> {
 /// poste d'optimisation numéro un d'un usage type Claude Code.
 pub fn cost_without_cache(tokens: &Tokens, model: &Model) -> Option<f64> {
     let Some(p) = model.pricing else {
-        return if model.provider == LOCAL { Some(0.0) } else { None };
+        return if model.provider == LOCAL {
+            Some(0.0)
+        } else {
+            None
+        };
     };
     let all_input = tokens.input + tokens.cache_read + tokens.cache_write;
     Some(per_million(all_input, p.input) + per_million(tokens.output, p.output))

@@ -28,8 +28,18 @@ fn le_total_n_est_jamais_recalcule_a_partir_des_parties() {
     // Le fournisseur seul sait ce qu'il a facturé. Déduire `total` d'une somme
     // recompterait les tokens de cache, déjà présents dans leurs champs.
     let mut acc = Tokens::empty();
-    acc.add(&Tokens { input: 10, cache_read: 100, total: 110, ..Tokens::empty() });
-    acc.add(&Tokens { input: 5, cache_read: 50, total: 55, ..Tokens::empty() });
+    acc.add(&Tokens {
+        input: 10,
+        cache_read: 100,
+        total: 110,
+        ..Tokens::empty()
+    });
+    acc.add(&Tokens {
+        input: 5,
+        cache_read: 50,
+        total: 55,
+        ..Tokens::empty()
+    });
     assert_eq!(acc.total, 165);
     assert_eq!(acc.input, 15);
     assert_eq!(acc.cache_read, 150);
@@ -44,7 +54,11 @@ fn une_ligne_incomplete_est_relue_entiere_a_la_passe_suivante() {
     let mut seen = Vec::new();
     let r1 = read_jsonl_from(&file, 0, |v| seen.push(v["n"].as_i64().unwrap()));
     assert!(r1.ok);
-    assert_eq!(seen, vec![1, 2], "la ligne tronquée ne doit pas être livrée");
+    assert_eq!(
+        seen,
+        vec![1, 2],
+        "la ligne tronquée ne doit pas être livrée"
+    );
 
     // Le producteur termine la ligne, puis en écrit une autre.
     append(&file, b"}\n{\"n\":4}\n");
@@ -78,7 +92,11 @@ fn une_ligne_corrompue_ne_casse_pas_l_indexation() {
     let mut seen = Vec::new();
     let r = read_jsonl_from(&file, 0, |v| seen.push(v["n"].as_i64().unwrap()));
     assert!(r.ok);
-    assert_eq!(seen, vec![1, 2], "les lignes saines de part et d'autre passent");
+    assert_eq!(
+        seen,
+        vec![1, 2],
+        "les lignes saines de part et d'autre passent"
+    );
 }
 
 #[test]
@@ -96,7 +114,9 @@ fn un_caractere_multi_octets_coupe_par_la_frontiere_de_lecture_survit() {
     assert!(seen.is_empty(), "rien de complet à livrer");
 
     write(&file, &complete);
-    let r2 = read_jsonl_from(&file, r1.offset, |v| seen.push(v["p"].as_str().unwrap().into()));
+    let r2 = read_jsonl_from(&file, r1.offset, |v| {
+        seen.push(v["p"].as_str().unwrap().into())
+    });
     assert!(r2.ok);
     assert_eq!(seen, vec!["éàü".to_string()]);
 }
@@ -115,9 +135,16 @@ fn un_fichier_inchange_se_signale_sans_relire() {
 
 #[test]
 fn un_fichier_absent_ne_fait_pas_reculer_l_offset() {
-    let r = read_jsonl_from(std::path::Path::new("/introuvable/nulle/part.jsonl"), 42, |_| {});
+    let r = read_jsonl_from(
+        std::path::Path::new("/introuvable/nulle/part.jsonl"),
+        42,
+        |_| {},
+    );
     assert!(!r.ok);
-    assert_eq!(r.offset, 42, "un balayage raté ne doit pas provoquer un recomptage");
+    assert_eq!(
+        r.offset, 42,
+        "un balayage raté ne doit pas provoquer un recomptage"
+    );
 }
 
 #[test]

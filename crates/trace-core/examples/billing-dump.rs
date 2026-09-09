@@ -2,7 +2,9 @@
 //! celles servies au collecteur JS. Non distribué.
 
 use serde_json::json;
-use trace_core::collectors::billing::{parse_anthropic_buckets, parse_cost_buckets, parse_openai_buckets};
+use trace_core::collectors::billing::{
+    parse_anthropic_buckets, parse_cost_buckets, parse_openai_buckets,
+};
 
 fn main() {
     let usage = vec![json!({ "starting_at": "2026-09-01T00:00:00Z", "results": [
@@ -13,9 +15,19 @@ fn main() {
     ]})];
     for e in parse_anthropic_buckets(&usage) {
         let t = e.tokens;
-        println!("A\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
-            e.model, e.project.as_deref().unwrap_or(""),
-            t.input, t.output, t.cache_read, t.cache_write, t.cache_write5m, t.cache_write1h, t.total, e.requests);
+        println!(
+            "A\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            e.model,
+            e.project.as_deref().unwrap_or(""),
+            t.input,
+            t.output,
+            t.cache_read,
+            t.cache_write,
+            t.cache_write5m,
+            t.cache_write1h,
+            t.total,
+            e.requests
+        );
     }
 
     let cost = vec![
@@ -31,8 +43,15 @@ fn main() {
     ]})];
     for e in parse_openai_buckets(&oai) {
         let t = e.tokens;
-        println!("O\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
-            e.model, e.project.as_deref().unwrap_or(""),
-            t.input, t.output, t.cache_read, t.total, e.requests);
+        println!(
+            "O\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            e.model,
+            e.project.as_deref().unwrap_or(""),
+            t.input,
+            t.output,
+            t.cache_read,
+            t.total,
+            e.requests
+        );
     }
 }

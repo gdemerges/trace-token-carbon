@@ -211,7 +211,11 @@ const PORTED: &[(&str, &str)] = &[
 /// et leur motif d'indisponibilité doit le dire — c'est la première question
 /// que se pose l'utilisateur devant une source vide.
 const BILLING: &[(&str, &str, &str)] = &[
-    (billing::ANTHROPIC, "source.anthropic-api", "source.needAnthropicKey"),
+    (
+        billing::ANTHROPIC,
+        "source.anthropic-api",
+        "source.needAnthropicKey",
+    ),
     (billing::OPENAI, "source.openai-api", "source.needOpenaiKey"),
 ];
 
@@ -256,7 +260,9 @@ pub fn collect_all(
         let previous = state.get(*id).cloned().unwrap_or_default();
         let collected = if *id == claude_code::SOURCE {
             entry.available = claude_code::is_available(None);
-            entry.available.then(|| claude_code::collect(None, &previous))
+            entry
+                .available
+                .then(|| claude_code::collect(None, &previous))
         } else {
             entry.available = codex_cli::is_available(None);
             entry.available.then(|| codex_cli::collect(None, &previous))
@@ -371,7 +377,10 @@ pub fn collect_all(
     // lecteur — les deux sources Claude côte à côte, puis Codex, puis les
     // rapports d'organisation.
     out.sources.sort_by_key(|s| {
-        DISPLAY_ORDER.iter().position(|id| *id == s.id).unwrap_or(usize::MAX)
+        DISPLAY_ORDER
+            .iter()
+            .position(|id| *id == s.id)
+            .unwrap_or(usize::MAX)
     });
     out
 }

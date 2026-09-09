@@ -182,25 +182,45 @@ where
     F: FnMut(&serde_json::Value),
 {
     let Ok(meta) = fs::metadata(file) else {
-        return ReadResult { offset, ok: false, unchanged: false };
+        return ReadResult {
+            offset,
+            ok: false,
+            unchanged: false,
+        };
     };
     let size = meta.len();
     // Fichier tronqué ou remplacé : on repart du début plutôt que de lire
     // depuis un offset qui ne veut plus rien dire.
     let mut offset = if size < offset { 0 } else { offset };
     if size == offset {
-        return ReadResult { offset, ok: true, unchanged: true };
+        return ReadResult {
+            offset,
+            ok: true,
+            unchanged: true,
+        };
     }
 
     let Ok(mut fh) = fs::File::open(file) else {
-        return ReadResult { offset, ok: false, unchanged: false };
+        return ReadResult {
+            offset,
+            ok: false,
+            unchanged: false,
+        };
     };
     if fh.seek(SeekFrom::Start(offset)).is_err() {
-        return ReadResult { offset, ok: false, unchanged: false };
+        return ReadResult {
+            offset,
+            ok: false,
+            unchanged: false,
+        };
     }
     let mut buf = Vec::with_capacity((size - offset) as usize);
     if fh.take(size - offset).read_to_end(&mut buf).is_err() {
-        return ReadResult { offset, ok: false, unchanged: false };
+        return ReadResult {
+            offset,
+            ok: false,
+            unchanged: false,
+        };
     }
 
     let mut consumed = 0usize;
@@ -225,5 +245,9 @@ where
     }
 
     offset += consumed as u64;
-    ReadResult { offset, ok: true, unchanged: false }
+    ReadResult {
+        offset,
+        ok: true,
+        unchanged: false,
+    }
 }

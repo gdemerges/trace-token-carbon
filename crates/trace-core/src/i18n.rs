@@ -109,11 +109,15 @@ pub fn tp(key: &str, params: &[(&str, String)]) -> String {
                 .find(|(k, _)| *k == "n")
                 .and_then(|(_, v)| v.parse::<f64>().ok());
             let zero_is_plural = map.get("plural_zero").and_then(Value::as_bool) != Some(false);
-            let plural = match n {
-                Some(n) if n == 0.0 => zero_is_plural,
-                Some(n) => n.abs() > 1.0,
-                None => false,
-            };
+            // Le français met zéro au singulier, l'anglais au pluriel : le
+            // choix est porté par le catalogue, pas codé ici.
+            let plural = n.is_some_and(|n| {
+                if n == 0.0 {
+                    zero_is_plural
+                } else {
+                    n.abs() > 1.0
+                }
+            });
             let form = if plural { "other" } else { "one" };
             match map.get(form).and_then(Value::as_str) {
                 Some(s) => s,

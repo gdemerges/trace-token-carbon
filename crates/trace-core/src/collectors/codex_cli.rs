@@ -44,7 +44,10 @@ pub fn collect(configured_dir: Option<&str>, state: &CollectorState) -> Collecte
     }
 
     let mut out = Collected {
-        stats: Stats { files: files.len(), ..Default::default() },
+        stats: Stats {
+            files: files.len(),
+            ..Default::default()
+        },
         ..Default::default()
     };
 
@@ -107,10 +110,17 @@ pub fn collect(configured_dir: Option<&str>, state: &CollectorState) -> Collecte
                             None => key.to_string(),
                         },
                         status: Some(
-                            if rl["rate_limit_reached_type"].is_null() { "ok" } else { "rejected" }
-                                .to_string(),
+                            if rl["rate_limit_reached_type"].is_null() {
+                                "ok"
+                            } else {
+                                "rejected"
+                            }
+                            .to_string(),
                         ),
-                        resets_at: w["resets_at"].as_f64().map(|s| (s * 1000.0) as i64).unwrap_or(0),
+                        resets_at: w["resets_at"]
+                            .as_f64()
+                            .map(|s| (s * 1000.0) as i64)
+                            .unwrap_or(0),
                         using_overage: false,
                         cause: Cause::Window,
                         used_percent: Some(used_percent),
@@ -163,7 +173,13 @@ pub fn collect(configured_dir: Option<&str>, state: &CollectorState) -> Collecte
 
         out.state.files.insert(
             key,
-            FileCursor { offset: res.offset, seen: Vec::new(), model: Some(model), project, session },
+            FileCursor {
+                offset: res.offset,
+                seen: Vec::new(),
+                model: Some(model),
+                project,
+                session,
+            },
         );
         out.events.append(&mut events);
         out.quota.append(&mut quota);

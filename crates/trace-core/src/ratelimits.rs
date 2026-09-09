@@ -48,9 +48,21 @@ pub struct WindowSpec {
 }
 
 pub const WINDOWS: &[WindowSpec] = &[
-    WindowSpec { id: "five_hour", hours: 5.0, live_only: false },
-    WindowSpec { id: "weekly", hours: 168.0, live_only: false },
-    WindowSpec { id: "weekly_opus", hours: 168.0, live_only: true },
+    WindowSpec {
+        id: "five_hour",
+        hours: 5.0,
+        live_only: false,
+    },
+    WindowSpec {
+        id: "weekly",
+        hours: 168.0,
+        live_only: false,
+    },
+    WindowSpec {
+        id: "weekly_opus",
+        hours: 168.0,
+        live_only: true,
+    },
 ];
 
 /// Nom du produit auquel la fenêtre se rattache.
@@ -146,7 +158,10 @@ pub fn consumption_between(events: &[&Event], from: i64, to: i64) -> Consumption
         }
         c.tokens.add(&e.tokens);
         c.requests += if e.requests != 0 { e.requests } else { 1 };
-        c.by_model.entry(e.model.clone()).or_insert_with(Tokens::empty).add(&e.tokens);
+        c.by_model
+            .entry(e.model.clone())
+            .or_insert_with(Tokens::empty)
+            .add(&e.tokens);
     }
     c
 }
@@ -156,10 +171,7 @@ pub fn consumption_between(events: &[&Event], from: i64, to: i64) -> Consumption
 /// consommation « pondérée », qui suit de bien plus près le comportement réel
 /// des plafonds qu'un total brut dominé par le cache.
 pub fn weighted_usage(t: &Tokens) -> f64 {
-    t.input as f64
-        + t.output as f64 * 5.0
-        + t.cache_write as f64 * 1.25
-        + t.cache_read as f64 * 0.1
+    t.input as f64 + t.output as f64 * 5.0 + t.cache_write as f64 * 1.25 + t.cache_read as f64 * 0.1
 }
 
 /// Déduit le plafond d'une fenêtre à partir d'un pourcentage relevé par
@@ -223,7 +235,11 @@ pub fn calibrate_from_rejections(
             at = r.ts;
         }
     }
-    (best > 0.0).then_some(Calibration { limit: best, observed_at: at, samples: rejections.len() })
+    (best > 0.0).then_some(Calibration {
+        limit: best,
+        observed_at: at,
+        samples: rejections.len(),
+    })
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -288,13 +304,16 @@ struct Scale {
 /// le pourcentage du serveur rapporté à la consommation mesurée sous lui.
 fn scale_of(g: &Gauge) -> Option<Scale> {
     let percent = g.percent?;
-    let limit = g.limit.or_else(|| {
-        (g.used > 0.0 && percent > 0.0).then(|| g.used / (percent / 100.0))
-    })?;
+    let limit = g
+        .limit
+        .or_else(|| (g.used > 0.0 && percent > 0.0).then(|| g.used / (percent / 100.0)))?;
     if !limit.is_finite() || limit <= 0.0 {
         return None;
     }
-    Some(Scale { limit, remaining: (((100.0 - percent) / 100.0) * limit).max(0.0) })
+    Some(Scale {
+        limit,
+        remaining: (((100.0 - percent) / 100.0) * limit).max(0.0),
+    })
 }
 
 /// Temps réel jusqu'à saturation d'une fenêtre longue, verrou des 5 h compris.
@@ -370,7 +389,11 @@ pub fn project_saturation(
     }
     let scale = scale_of(gauge)?;
 
-    let family = if gauge.provider == "openai" { "openai" } else { "anthropic" };
+    let family = if gauge.provider == "openai" {
+        "openai"
+    } else {
+        "anthropic"
+    };
     let recent = consumption_between(&window_events(events, family), now - PACE_WINDOW_MS, now);
     let pace_used = weighted_usage(&recent.tokens);
     if pace_used <= 0.0 {
@@ -383,16 +406,20 @@ pub fn project_saturation(
     let mut in_ms = scale.remaining / rate_per_ms;
     let mut throttled = false;
     if gauge.window_hours > 5.0 {
-        let five = siblings.iter().find(|s| {
-            s.provider == gauge.provider && s.window_hours == 5.0 && s.id != gauge.id
-        });
+        let five = siblings
+            .iter()
+            .find(|s| s.provider == gauge.provider && s.window_hours == 5.0 && s.id != gauge.id);
         if let Some(five) = five {
             if let Some(resets_at) = five.resets_at.filter(|r| *r > now) {
                 if let Some(five_scale) = scale_of(five) {
                     // Rien dans l'horizon simulé : la fenêtre longue se
                     // réinitialisera avant d'être pleine, rien à annoncer.
                     let (capped, was_throttled) = throttle_by_short_window(
-                        scale.remaining, rate_per_ms, resets_at, &five_scale, now,
+                        scale.remaining,
+                        rate_per_ms,
+                        resets_at,
+                        &five_scale,
+                        now,
                     )?;
                     in_ms = capped;
                     throttled = was_throttled;
@@ -408,7 +435,10 @@ pub fn project_saturation(
         at: now + in_ms as i64,
         in_ms,
         rate_per_hour: rate_per_ms * HOUR_MS,
-        before_reset: gauge.resets_at.map(|r| (now + in_ms as i64) < r).unwrap_or(true),
+        before_reset: gauge
+            .resets_at
+            .map(|r| (now + in_ms as i64) < r)
+            .unwrap_or(true),
         throttled,
     })
 }
@@ -446,7 +476,9 @@ pub fn compute_gauges(events: &[Event], quota: &[Quota], config: &Config, now: i
             // venait d'arriver.
             let live = quota
                 .iter()
-                .filter(|q| q.source == "anthropic-oauth" && q.kind == w.id && q.used_percent.is_some())
+                .filter(|q| {
+                    q.source == "anthropic-oauth" && q.kind == w.id && q.used_percent.is_some()
+                })
                 .max_by_key(|q| q.ts);
             let live_age = live.map(|q| now - q.ts);
             let live_fresh = live_age.is_some_and(|a| a < LIVE_FRESH_MS);
@@ -466,7 +498,14 @@ pub fn compute_gauges(events: &[Event], quota: &[Quota], config: &Config, now: i
             let mut limit_source: Option<String> = None;
             if let Some(cfg) = configured {
                 limit = Some(cfg);
-                limit_source = Some(if meta_source == Some("user") { "user" } else { "configured" }.into());
+                limit_source = Some(
+                    if meta_source == Some("user") {
+                        "user"
+                    } else {
+                        "configured"
+                    }
+                    .into(),
+                );
             }
 
             // Le direct écrase tout ce qui précède.
@@ -485,13 +524,22 @@ pub fn compute_gauges(events: &[Event], quota: &[Quota], config: &Config, now: i
                 product: product("anthropic").into(),
                 full_label: tp(
                     "window.full",
-                    &[("product", product("anthropic").into()), ("window", label.to_lowercase())],
+                    &[
+                        ("product", product("anthropic").into()),
+                        ("window", label.to_lowercase()),
+                    ],
                 ),
                 label,
                 window_hours: w.hours,
                 starts_at,
-                resets_at: live.and_then(|q| (q.resets_at != 0).then_some(q.resets_at)).or(resets_at),
-                rolling: if live.is_some_and(|q| q.resets_at != 0) { false } else { rolling },
+                resets_at: live
+                    .and_then(|q| (q.resets_at != 0).then_some(q.resets_at))
+                    .or(resets_at),
+                rolling: if live.is_some_and(|q| q.resets_at != 0) {
+                    false
+                } else {
+                    rolling
+                },
                 tokens: c.tokens,
                 requests: c.requests,
                 by_model: c.by_model,
@@ -523,7 +571,10 @@ pub fn compute_gauges(events: &[Event], quota: &[Quota], config: &Config, now: i
     // jauge toujours à jour, à 0 % si Codex n'a pas servi depuis.
     let codex_events = window_events(events, "openai");
     let mut by_window: HashMap<String, &Quota> = HashMap::new();
-    for q in quota.iter().filter(|q| q.source == "codex-cli" && q.used_percent.is_some()) {
+    for q in quota
+        .iter()
+        .filter(|q| q.source == "codex-cli" && q.used_percent.is_some())
+    {
         by_window
             .entry(q.kind.clone())
             .and_modify(|cur| {
@@ -547,15 +598,18 @@ pub fn compute_gauges(events: &[Event], quota: &[Quota], config: &Config, now: i
     for (kind, q) in codex {
         let hours = q.window_minutes.map(|m| m / 60.0).unwrap_or(5.0);
         let span = (hours * HOUR_MS) as i64;
-        let reported_resets_at = if q.resets_at != 0 { q.resets_at } else { q.ts + span };
+        let reported_resets_at = if q.resets_at != 0 {
+            q.resets_at
+        } else {
+            q.ts + span
+        };
         let expired = reported_resets_at <= now;
         let used_percent = q.used_percent.unwrap_or(0.0);
 
         // Plafond déduit du dernier relevé du fournisseur.
         let mut limit = None;
         if used_percent > 0.0 {
-            let at_report =
-                consumption_between(&codex_events, reported_resets_at - span, q.ts);
+            let at_report = consumption_between(&codex_events, reported_resets_at - span, q.ts);
             let used_at_report = weighted_usage(&at_report.tokens);
             if used_at_report > 0.0 {
                 limit = Some(used_at_report / (used_percent / 100.0));
@@ -565,7 +619,11 @@ pub fn compute_gauges(events: &[Event], quota: &[Quota], config: &Config, now: i
         // Fenêtre à afficher : celle du fournisseur si elle court encore,
         // sinon une fenêtre glissante se terminant maintenant.
         let resets_at = (!expired).then_some(reported_resets_at);
-        let starts_at = if expired { now - span } else { reported_resets_at - span };
+        let starts_at = if expired {
+            now - span
+        } else {
+            reported_resets_at - span
+        };
 
         let c = consumption_between(&codex_events, starts_at, now);
         let used = weighted_usage(&c.tokens);
@@ -574,7 +632,11 @@ pub fn compute_gauges(events: &[Event], quota: &[Quota], config: &Config, now: i
             // La fenêtre annoncée court toujours : le chiffre du serveur fait foi.
             (Some(used_percent), Some("provider".to_string()), false)
         } else if let Some(l) = limit {
-            (Some((used / l * 100.0).min(100.0)), Some("derived".to_string()), true)
+            (
+                Some((used / l * 100.0).min(100.0)),
+                Some("derived".to_string()),
+                true,
+            )
         } else if used > 0.0 {
             (None, None, false)
         } else {
@@ -589,7 +651,10 @@ pub fn compute_gauges(events: &[Event], quota: &[Quota], config: &Config, now: i
             product: product("openai").into(),
             full_label: tp(
                 "window.full",
-                &[("product", product("openai").into()), ("window", label.to_lowercase())],
+                &[
+                    ("product", product("openai").into()),
+                    ("window", label.to_lowercase()),
+                ],
             ),
             label,
             window_hours: hours,
@@ -643,7 +708,10 @@ pub fn apply_user_calibration(
     };
 
     let claude_events = window_events(events, "anthropic");
-    let known = quota.iter().filter(|q| q.kind == w.id && q.resets_at > now).max_by_key(|q| q.ts);
+    let known = quota
+        .iter()
+        .filter(|q| q.kind == w.id && q.resets_at > now)
+        .max_by_key(|q| q.ts);
     let span = (w.hours * HOUR_MS) as i64;
     let starts_at = known.map(|q| q.resets_at - span).unwrap_or(now - span);
 

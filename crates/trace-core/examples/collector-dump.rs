@@ -25,11 +25,20 @@ fn main() {
             let t = &e.tokens;
             format!(
                 "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
-                e.ts, e.source, e.model,
+                e.ts,
+                e.source,
+                e.model,
                 e.project.as_deref().unwrap_or(""),
                 e.session.as_deref().unwrap_or(""),
-                t.input, t.output, t.cache_read, t.cache_write,
-                t.cache_write5m, t.cache_write1h, t.thinking, t.total, e.requests
+                t.input,
+                t.output,
+                t.cache_read,
+                t.cache_write,
+                t.cache_write5m,
+                t.cache_write1h,
+                t.thinking,
+                t.total,
+                e.requests
             )
         })
         .collect();
@@ -44,9 +53,11 @@ fn main() {
         .map(|x| {
             format!(
                 "{}\t{}\t{}\t{}\t{}\t{}",
-                x.ts, x.kind,
+                x.ts,
+                x.kind,
                 x.status.as_deref().unwrap_or(""),
-                x.resets_at, x.using_overage,
+                x.resets_at,
+                x.using_overage,
                 format!("{:?}", x.cause).to_lowercase()
             )
         })

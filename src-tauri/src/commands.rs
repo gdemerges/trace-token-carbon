@@ -27,9 +27,16 @@ fn snapshot_options(options: Option<Value>) -> SnapshotOptions {
     };
     let days = &o["days"];
     if days.as_str() == Some("all") {
-        return SnapshotOptions { all: true, ..SnapshotOptions::default() };
+        return SnapshotOptions {
+            all: true,
+            ..SnapshotOptions::default()
+        };
     }
-    SnapshotOptions { days: days.as_i64(), all: false, to: o["to"].as_i64() }
+    SnapshotOptions {
+        days: days.as_i64(),
+        all: false,
+        to: o["to"].as_i64(),
+    }
 }
 
 fn to_value<T: serde::Serialize>(v: &T) -> Value {

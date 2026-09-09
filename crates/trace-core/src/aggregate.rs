@@ -83,7 +83,12 @@ where
         let Some(key) = key_of(e) else { continue };
         let g = groups.entry(key.clone()).or_insert_with(|| {
             group_order.push(key.clone());
-            Bucket { tokens: Tokens::empty(), requests: 0, models: HashMap::new(), order: Vec::new() }
+            Bucket {
+                tokens: Tokens::empty(),
+                requests: 0,
+                models: HashMap::new(),
+                order: Vec::new(),
+            }
         });
         g.tokens.add(&e.tokens);
         g.requests += if e.requests != 0 { e.requests } else { 1 };
@@ -99,7 +104,9 @@ where
     group_order
         .into_iter()
         .map(|key| {
-            let b = groups.remove(&key).expect("clé issue de l'ordre d'insertion");
+            let b = groups
+                .remove(&key)
+                .expect("clé issue de l'ordre d'insertion");
 
             // Chiffrage : par modèle, puis somme. Jamais l'inverse.
             let mut slices: Vec<(ModelSlice, carbon::Estimate, f64)> = b
@@ -131,7 +138,7 @@ where
             let cost_without_cache_usd = slices.iter().map(|(_, _, w)| w).sum();
             let carbon_total = carbon::sum(slices.iter().map(|(_, e, _)| e));
 
-            slices.sort_by(|a, b| b.0.tokens.total.cmp(&a.0.tokens.total));
+            slices.sort_by_key(|s| std::cmp::Reverse(s.0.tokens.total));
 
             Group {
                 key,
@@ -198,7 +205,12 @@ fn daily_series(events: &[Event], from: i64, to: i64, opts: &Options) -> Vec<Day
             .and_then(|dt| Local.from_local_datetime(&dt).single())
             .map(|dt| dt.timestamp_millis())
             .unwrap_or(0);
-        let key = format!("{:04}-{:02}-{:02}", cursor.year(), cursor.month(), cursor.day());
+        let key = format!(
+            "{:04}-{:02}-{:02}",
+            cursor.year(),
+            cursor.month(),
+            cursor.day()
+        );
         let g = by_day.get(&key);
         series.push(DayPoint {
             date: key,
@@ -211,7 +223,11 @@ fn daily_series(events: &[Event], from: i64, to: i64, opts: &Options) -> Vec<Day
                 .map(|g| {
                     g.models
                         .iter()
-                        .map(|m| DayModel { id: m.id.clone(), label: m.label.clone(), total: m.tokens.total })
+                        .map(|m| DayModel {
+                            id: m.id.clone(),
+                            label: m.label.clone(),
+                            total: m.tokens.total,
+                        })
                         .collect()
                 })
                 .unwrap_or_default(),
@@ -361,14 +377,20 @@ pub fn report(events: &[Event], opts: &Options) -> Report {
         .collect();
 
     let mut by_model = group_by(&in_range, |e| Some(e.model.clone()), opts);
-    by_model.sort_by(|a, b| b.tokens.total.cmp(&a.tokens.total));
+    by_model.sort_by_key(|g| std::cmp::Reverse(g.tokens.total));
 
     let mut by_project = group_by(
         &in_range,
-        |e| Some(e.project.clone().unwrap_or_else(|| "sans projet".to_string())),
+        |e| {
+            Some(
+                e.project
+                    .clone()
+                    .unwrap_or_else(|| "sans projet".to_string()),
+            )
+        },
         opts,
     );
-    by_project.sort_by(|a, b| b.tokens.total.cmp(&a.tokens.total));
+    by_project.sort_by_key(|g| std::cmp::Reverse(g.tokens.total));
 
     let mut tokens = Tokens::empty();
     let mut requests = 0;
@@ -408,18 +430,34 @@ pub fn report(events: &[Event], opts: &Options) -> Report {
     let resolved: Vec<_> = by_model
         .iter()
         .filter(|g| !g.models.is_empty() && g.tokens.total > 0)
-        .map(|g| (g.tokens, resolve_model(&g.key, opts.model_overrides.as_ref())))
+        .map(|g| {
+            (
+                g.tokens,
+                resolve_model(&g.key, opts.model_overrides.as_ref()),
+            )
+        })
         .collect();
     let pairs: Vec<Pair> = resolved
         .iter()
-        .map(|(tokens, model)| Pair { tokens: *tokens, model })
+        .map(|(tokens, model)| Pair {
+            tokens: *tokens,
+            model,
+        })
         .collect();
 
     let cache_denominator = tokens.cache_read + tokens.input + tokens.cache_write;
     let totals = Totals {
         equivalents: carbon::equivalents(carbon_total.grams_co2e.mid),
-        carbon_sensitivity: if pairs.is_empty() { vec![] } else { carbon::grid_sensitivity(&pairs, &opts.carbon) },
-        carbon_uncertainty: if pairs.is_empty() { vec![] } else { carbon::uncertainty(&pairs, &opts.carbon) },
+        carbon_sensitivity: if pairs.is_empty() {
+            vec![]
+        } else {
+            carbon::grid_sensitivity(&pairs, &opts.carbon)
+        },
+        carbon_uncertainty: if pairs.is_empty() {
+            vec![]
+        } else {
+            carbon::uncertainty(&pairs, &opts.carbon)
+        },
         cache_savings_usd: (cost_without_cache_usd - cost_usd).max(0.0),
         cache_hit_ratio: if cache_denominator > 0 {
             tokens.cache_read as f64 / cache_denominator as f64
@@ -467,7 +505,11 @@ pub fn report(events: &[Event], opts: &Options) -> Report {
             tokens: pct_change(totals.tokens.total as f64, prev_tokens.total as f64),
             cost: pct_change(totals.cost_usd, prev_cost),
             carbon: pct_change(totals.carbon.grams_co2e.mid, prev_carbon.grams_co2e.mid),
-            previous: Previous { tokens: prev_tokens, cost_usd: prev_cost, carbon: prev_carbon },
+            previous: Previous {
+                tokens: prev_tokens,
+                cost_usd: prev_cost,
+                carbon: prev_carbon,
+            },
             significant: None,
         },
         daily: daily_series(&in_range, from, to, opts),
@@ -503,8 +545,10 @@ pub fn export_rows(events: &[Event], opts: &Options) -> Vec<Vec<String>> {
     // mêmes requêtes serait pire qu'un affichage faux, puisqu'il survit à
     // l'application et part dans un tableur.
     let (measured, _) = provenance::dedupe_families(events);
-    let in_range: Vec<Event> =
-        measured.into_iter().filter(|e| e.ts >= from && e.ts <= to).collect();
+    let in_range: Vec<Event> = measured
+        .into_iter()
+        .filter(|e| e.ts >= from && e.ts <= to)
+        .collect();
 
     let groups = group_by(
         &in_range,
@@ -521,10 +565,24 @@ pub fn export_rows(events: &[Event], opts: &Options) -> Vec<Vec<String>> {
     );
 
     let header: Vec<String> = [
-        "date", "source", "modele", "fournisseur", "projet",
-        "requetes", "tokens_entree", "tokens_sortie", "cache_ecrit", "cache_lu", "tokens_total",
-        "cout_usd", "cout_sans_cache_usd", "gco2e_min", "gco2e_median", "gco2e_max",
-        "energie_wh", "eau_l",
+        "date",
+        "source",
+        "modele",
+        "fournisseur",
+        "projet",
+        "requetes",
+        "tokens_entree",
+        "tokens_sortie",
+        "cache_ecrit",
+        "cache_lu",
+        "tokens_total",
+        "cout_usd",
+        "cout_sans_cache_usd",
+        "gco2e_min",
+        "gco2e_median",
+        "gco2e_max",
+        "energie_wh",
+        "eau_l",
     ]
     .iter()
     .map(|s| s.to_string())
@@ -538,7 +596,8 @@ pub fn export_rows(events: &[Event], opts: &Options) -> Vec<Vec<String>> {
             vec![
                 parts.first().unwrap_or(&"").to_string(),
                 parts.get(1).unwrap_or(&"").to_string(),
-                m.map(|m| m.label.clone()).unwrap_or_else(|| parts.get(2).unwrap_or(&"").to_string()),
+                m.map(|m| m.label.clone())
+                    .unwrap_or_else(|| parts.get(2).unwrap_or(&"").to_string()),
                 m.map(|m| m.provider.clone()).unwrap_or_default(),
                 parts.get(3).unwrap_or(&"").to_string(),
                 g.requests.to_string(),
@@ -549,7 +608,11 @@ pub fn export_rows(events: &[Event], opts: &Options) -> Vec<Vec<String>> {
                 g.tokens.total.to_string(),
                 // Un coût inconnu reste VIDE, jamais 0 : dans un tableur, un
                 // zéro se somme et se fait passer pour de la gratuité.
-                if g.cost_unknown { String::new() } else { format!("{:.6}", g.cost_usd) },
+                if g.cost_unknown {
+                    String::new()
+                } else {
+                    format!("{:.6}", g.cost_usd)
+                },
                 format!("{:.6}", g.cost_without_cache_usd),
                 format!("{:.3}", g.carbon.grams_co2e.min),
                 format!("{:.3}", g.carbon.grams_co2e.mid),
@@ -581,7 +644,14 @@ pub fn export_rows(events: &[Event], opts: &Options) -> Vec<Vec<String>> {
 /// audité.
 pub fn methodology_rows(grid_key: Option<&str>) -> Vec<Vec<String>> {
     let mut rows = vec![[
-        "groupe", "facteur", "valeur", "unite", "source", "citation", "version_figee", "reserve",
+        "groupe",
+        "facteur",
+        "valeur",
+        "unite",
+        "source",
+        "citation",
+        "version_figee",
+        "reserve",
     ]
     .iter()
     .map(|s| s.to_string())

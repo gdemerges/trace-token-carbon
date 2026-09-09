@@ -19,7 +19,13 @@ const DAY_MS: i64 = 86_400_000;
 /// principe que du nouveau. Cette clé protège malgré tout du cas où un fichier
 /// tronqué force un ré-scan complet depuis le début.
 fn event_key(e: &Event) -> String {
-    format!("{}|{}|{}|{}", e.source, e.ts, e.session.as_deref().unwrap_or(""), e.tokens.total)
+    format!(
+        "{}|{}|{}|{}",
+        e.source,
+        e.ts,
+        e.session.as_deref().unwrap_or(""),
+        e.tokens.total
+    )
 }
 
 fn quota_key(q: &Quota) -> String {
@@ -38,7 +44,10 @@ where
         return existing;
     }
     let seen: std::collections::HashSet<String> = existing.iter().map(&key_of).collect();
-    let added: Vec<T> = incoming.into_iter().filter(|r| !seen.contains(&key_of(r))).collect();
+    let added: Vec<T> = incoming
+        .into_iter()
+        .filter(|r| !seen.contains(&key_of(r)))
+        .collect();
     if added.is_empty() {
         return existing;
     }
@@ -88,8 +97,10 @@ pub fn refresh(config: Config, persist: bool) -> State {
     // agrégats horaires. Une relecture complète — provoquée par un
     // élargissement de la rétention ou un fichier tronqué — y ramènerait le
     // détail déjà replié, qui s'ajouterait à son propre agrégat.
-    let incoming_stream: Vec<Event> =
-        incoming_stream.into_iter().filter(|e| e.ts >= compacted_through).collect();
+    let incoming_stream: Vec<Event> = incoming_stream
+        .into_iter()
+        .filter(|e| e.ts >= compacted_through)
+        .collect();
 
     let stream = merge_records(previous_stream, incoming_stream, event_key, |e| e.ts);
     let daily = provenance::merge_daily(previous_daily, incoming_daily);
@@ -138,7 +149,11 @@ pub fn refresh(config: Config, persist: bool) -> State {
     // `save_index` applique la rétention. On garde l'index RETENU, pas celui
     // d'avant élagage : sinon la vue en mémoire et le fichier divergent, et le
     // nombre d'événements changerait tout seul au redémarrage suivant.
-    let mut index = if persist { store::save_index(next, &config) } else { next };
+    let mut index = if persist {
+        store::save_index(next, &config)
+    } else {
+        next
+    };
     index.collectors = collected.state;
 
     State {
@@ -205,7 +220,10 @@ pub fn snapshot(state: &State, opts: &SnapshotOptions) -> Snapshot {
     // Horizon réel : jusqu'où les sources permettent de remonter. Sans cette
     // information, une période d'un an paraît vide « à cause de TRACE », alors
     // que c'est Claude Code qui purge ses sessions au bout de deux mois.
-    let mut horizon = Horizon { from: None, by_source: HashMap::new() };
+    let mut horizon = Horizon {
+        from: None,
+        by_source: HashMap::new(),
+    };
     for e in &state.events {
         horizon.from = Some(horizon.from.map_or(e.ts, |f: i64| f.min(e.ts)));
         horizon
@@ -240,7 +258,12 @@ pub fn snapshot(state: &State, opts: &SnapshotOptions) -> Snapshot {
     let mut gauges = compute_gauges(&state.events, &state.quota, config, to);
 
     // La jauge en direct porte l'échéance du prochain relevé.
-    if let Some(next) = state.live_stats.as_ref().map(|l| l.next_attempt_in).filter(|n| *n > 0) {
+    if let Some(next) = state
+        .live_stats
+        .as_ref()
+        .map(|l| l.next_attempt_in)
+        .filter(|n| *n > 0)
+    {
         for g in &mut gauges {
             if matches!(g.limit_source.as_deref(), Some("live") | Some("live-stale")) {
                 g.next_live_in = Some(next);
@@ -279,7 +302,10 @@ pub fn snapshot(state: &State, opts: &SnapshotOptions) -> Snapshot {
     // Jamais de clé vers l'interface : elle affiche seulement qu'il y en a une.
     let mut safe_config = config.clone();
     let has_keys = HashMap::from([
-        ("anthropic".to_string(), safe_config.anthropic_admin_key.is_some()),
+        (
+            "anthropic".to_string(),
+            safe_config.anthropic_admin_key.is_some(),
+        ),
         ("openai".to_string(), safe_config.openai_admin_key.is_some()),
     ]);
     safe_config.anthropic_admin_key = None;
@@ -325,9 +351,11 @@ fn live_status(state: &State) -> Option<serde_json::Value> {
     let l = state.live_stats.as_ref()?;
     let waiting = l.next_attempt_in > 0 && l.next_attempt_reason == Some("backoff");
     let pacing = l.next_attempt_in > 0 && l.next_attempt_reason == Some("cadence");
-    let error = l.errors.first().cloned().or_else(|| {
-        waiting.then(|| crate::i18n::t("oauth.suspended"))
-    });
+    let error = l
+        .errors
+        .first()
+        .cloned()
+        .or_else(|| waiting.then(|| crate::i18n::t("oauth.suspended")));
     Some(serde_json::json!({
         "ok": l.errors.is_empty() && !waiting,
         "waiting": waiting,

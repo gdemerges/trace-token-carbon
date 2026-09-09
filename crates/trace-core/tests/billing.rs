@@ -8,7 +8,7 @@
 
 use serde_json::json;
 use trace_core::collectors::billing::{
-    parse_anthropic_buckets, parse_cost_buckets, parse_openai_buckets, has_key,
+    has_key, parse_anthropic_buckets, parse_cost_buckets, parse_openai_buckets,
 };
 
 #[test]
@@ -59,10 +59,16 @@ fn anthropic_ventile_le_cache_par_ttl_sans_le_compter_deux_fois() {
         }]
     })];
     let t = parse_anthropic_buckets(&buckets)[0].tokens;
-    assert_eq!(t.cache_write, 1000, "le total d'écriture est la somme des deux TTL");
+    assert_eq!(
+        t.cache_write, 1000,
+        "le total d'écriture est la somme des deux TTL"
+    );
     assert_eq!(t.cache_write5m, 300);
     assert_eq!(t.cache_write1h, 700);
-    assert_eq!(t.total, 1000, "et non 2000 : l'écriture n'est comptée qu'une fois");
+    assert_eq!(
+        t.total, 1000,
+        "et non 2000 : l'écriture n'est comptée qu'une fois"
+    );
 }
 
 #[test]
@@ -88,7 +94,10 @@ fn openai_retranche_le_cache_de_l_entree() {
         }]
     })];
     let e = parse_openai_buckets(&buckets);
-    assert_eq!(e[0].tokens.input, 2000, "12 000 déclarés, dont 10 000 servis par le cache");
+    assert_eq!(
+        e[0].tokens.input, 2000,
+        "12 000 déclarés, dont 10 000 servis par le cache"
+    );
     assert_eq!(e[0].tokens.cache_read, 10_000);
     assert_eq!(e[0].tokens.total, 12_500);
     assert_eq!(e[0].requests, 3);
@@ -117,7 +126,10 @@ fn un_horodatage_en_secondes_comme_en_iso_est_reconnu() {
         "start_time": 1788220800,
         "results": [{ "model": "m", "output_tokens": 1 }]
     })]);
-    assert!(iso[0].ts > 1_700_000_000_000, "les ISO doivent devenir des ms");
+    assert!(
+        iso[0].ts > 1_700_000_000_000,
+        "les ISO doivent devenir des ms"
+    );
     assert_eq!(secs[0].ts, 1_788_220_800_000, "les secondes epoch aussi");
 }
 

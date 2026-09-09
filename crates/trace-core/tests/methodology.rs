@@ -46,7 +46,11 @@ fn les_sources_a_figer_sont_listees_plutot_qu_oubliees() {
     // ce n'est pas encore le cas, et le test le garde visible.
     assert!(!todo.is_empty());
     for s in &todo {
-        assert!(!s.url.is_empty(), "{} : une source à figer doit au moins porter son URL", s.id);
+        assert!(
+            !s.url.is_empty(),
+            "{} : une source à figer doit au moins porter son URL",
+            s.id
+        );
     }
     // Les dérivations internes, elles, sont figées par leur version.
     assert!(todo.iter().all(|s| s.id != "traceDerived"));
@@ -71,7 +75,10 @@ fn l_annexe_s_exporte_avec_un_en_tete_complet() {
     let rows = methodology_rows(Some("us-average"));
     assert_eq!(rows[0].len(), 8);
     assert_eq!(rows[0][6], "version_figee");
-    assert!(rows.len() > 20, "une annexe d'une poignée de lignes ne prouverait rien");
+    assert!(
+        rows.len() > 20,
+        "une annexe d'une poignée de lignes ne prouverait rien"
+    );
     // Toutes les lignes ont la même largeur : un CSV bancal casse le tableur.
     assert!(rows.iter().all(|r| r.len() == 8));
 }

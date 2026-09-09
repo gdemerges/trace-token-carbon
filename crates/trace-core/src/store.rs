@@ -31,7 +31,9 @@ pub fn base_dir() -> PathBuf {
     let home = crate::util::home_dir();
     #[cfg(target_os = "macos")]
     {
-        home.join("Library").join("Application Support").join("TRACE")
+        home.join("Library")
+            .join("Application Support")
+            .join("TRACE")
     }
     #[cfg(target_os = "windows")]
     {
@@ -182,7 +184,11 @@ impl Default for Config {
             },
             limits: HashMap::new(),
             limit_meta: HashMap::new(),
-            alerts: AlertsConfig { enabled: true, thresholds: vec![80.0, 95.0], projection: true },
+            alerts: AlertsConfig {
+                enabled: true,
+                thresholds: vec![80.0, 95.0],
+                projection: true,
+            },
             locale: "auto".into(),
             shortcut: "CommandOrControl+Alt+T".into(),
             launch_at_login: false,
@@ -237,7 +243,10 @@ struct Owner {
 
 /// Se déclare propriétaire de l'index. L'application appelle ceci à chaque cycle.
 pub fn claim_ownership(now: i64) -> bool {
-    let owner = Owner { pid: std::process::id(), at: now };
+    let owner = Owner {
+        pid: std::process::id(),
+        at: now,
+    };
     let json = serde_json::to_string(&owner).unwrap_or_default();
     write_atomic(&owner_path(), &json, 0o600).is_ok()
 }
@@ -324,7 +333,10 @@ pub struct Index {
 pub const INDEX_VERSION: u32 = 2;
 
 fn empty_index() -> Index {
-    Index { version: INDEX_VERSION, ..Index::default() }
+    Index {
+        version: INDEX_VERSION,
+        ..Index::default()
+    }
 }
 
 pub fn load_index(config: &Config) -> Index {
@@ -380,9 +392,18 @@ pub struct Compacted {
 /// Ce qui est perdu, et assumé : la session. Un agrégat horaire recouvre
 /// plusieurs sessions, on n'en retient donc aucune plutôt que d'en inventer
 /// une.
-pub fn compact(events: Vec<Event>, older_than_days: i64, now: i64, fallback_through: i64) -> Compacted {
+pub fn compact(
+    events: Vec<Event>,
+    older_than_days: i64,
+    now: i64,
+    fallback_through: i64,
+) -> Compacted {
     if older_than_days <= 0 {
-        return Compacted { events, compacted_through: fallback_through, folded: 0 };
+        return Compacted {
+            events,
+            compacted_through: fallback_through,
+            folded: 0,
+        };
     }
     let cutoff = now - older_than_days * DAY_MS;
     let mut recent = Vec::new();
@@ -440,14 +461,20 @@ pub fn compact(events: Vec<Event>, older_than_days: i64, now: i64, fallback_thro
     let mut all: Vec<Event> = if order.is_empty() {
         recent
     } else {
-        let mut compacted: Vec<Event> =
-            order.into_iter().filter_map(|k| buckets.remove(&k)).collect();
+        let mut compacted: Vec<Event> = order
+            .into_iter()
+            .filter_map(|k| buckets.remove(&k))
+            .collect();
         compacted.extend(recent);
         compacted.sort_by_key(|e| e.ts);
         compacted
     };
     all.shrink_to_fit();
-    Compacted { events: all, compacted_through: cutoff, folded }
+    Compacted {
+        events: all,
+        compacted_through: cutoff,
+        folded,
+    }
 }
 
 /// Signature bon marché de l'état persistable.
@@ -469,7 +496,9 @@ pub fn index_signature(idx: &Index, retention_days: i64) -> String {
         idx.compacted_through,
         // Les offsets des collecteurs changent dès qu'un fichier grossit, même
         // si aucune ligne exploitable n'en sort.
-        serde_json::to_string(&idx.collectors).map(|s| s.len()).unwrap_or(0)
+        serde_json::to_string(&idx.collectors)
+            .map(|s| s.len())
+            .unwrap_or(0)
     )
 }
 
@@ -512,7 +541,9 @@ pub fn save_index(idx: Index, config: &Config) -> Index {
 
     let signature = index_signature(&trimmed, config.retention_days);
     {
-        let Ok(last) = LAST_SIGNATURE.lock() else { return trimmed };
+        let Ok(last) = LAST_SIGNATURE.lock() else {
+            return trimmed;
+        };
         if last.as_deref() == Some(signature.as_str()) {
             return trimmed; // rien n'a bougé
         }

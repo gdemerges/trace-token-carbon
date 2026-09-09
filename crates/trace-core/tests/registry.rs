@@ -7,15 +7,34 @@ use trace_core::pricing::{cost, cost_without_cache};
 use trace_core::util::Tokens;
 
 fn tokens(input: i64, output: i64) -> Tokens {
-    Tokens { input, output, ..Tokens::empty() }
+    Tokens {
+        input,
+        output,
+        ..Tokens::empty()
+    }
 }
 
 #[test]
 fn resolution_des_identifiants_dates_vers_le_modele_canonique() {
-    assert_eq!(resolve_model("claude-sonnet-4-5-20250929", None).id, "claude-sonnet-4-5");
-    assert_eq!(resolve_model("claude-opus-4-5-20251101", None).id, "claude-opus-4-5");
-    assert_eq!(resolve_model("claude-opus-5", None).pricing.unwrap().output, 25.0);
-    assert_eq!(resolve_model("claude-sonnet-5", None).pricing.unwrap().input, 2.0);
+    assert_eq!(
+        resolve_model("claude-sonnet-4-5-20250929", None).id,
+        "claude-sonnet-4-5"
+    );
+    assert_eq!(
+        resolve_model("claude-opus-4-5-20251101", None).id,
+        "claude-opus-4-5"
+    );
+    assert_eq!(
+        resolve_model("claude-opus-5", None).pricing.unwrap().output,
+        25.0
+    );
+    assert_eq!(
+        resolve_model("claude-sonnet-5", None)
+            .pricing
+            .unwrap()
+            .input,
+        2.0
+    );
 }
 
 #[test]
@@ -25,7 +44,10 @@ fn l_ordre_du_registre_protege_les_entrees_specifiques() {
     // 15 $ par million sans que rien ne signale l'erreur.
     assert_eq!(resolve_model("claude-opus-4-5", None).id, "claude-opus-4-5");
     assert_eq!(resolve_model("claude-opus-4-1", None).id, "claude-opus-4-1");
-    assert_eq!(resolve_model("claude-opus-4-20250101", None).id, "claude-opus-4-0");
+    assert_eq!(
+        resolve_model("claude-opus-4-20250101", None).id,
+        "claude-opus-4-0"
+    );
     assert_eq!(resolve_model("gpt-5-mini", None).id, "gpt-5-mini");
     assert_eq!(resolve_model("gpt-4.1-mini", None).id, "gpt-4.1-mini");
 }
@@ -34,7 +56,10 @@ fn l_ordre_du_registre_protege_les_entrees_specifiques() {
 fn un_modele_inconnu_reste_visible_plutot_que_disparaitre() {
     let m = resolve_model("un-modele-jamais-vu", None);
     assert_eq!(m.params.confidence, Confidence::Unknown);
-    assert!(m.pricing.is_none(), "un tarif inconnu doit rester absent, pas devenir 0");
+    assert!(
+        m.pricing.is_none(),
+        "un tarif inconnu doit rester absent, pas devenir 0"
+    );
 }
 
 #[test]
@@ -113,7 +138,12 @@ fn un_fournisseur_sans_detail_de_ttl_est_attribue_au_cinq_minutes() {
     assert_eq!((total, w5, w1), (1_000_000, 1_000_000, 0));
 
     let model = resolve_model("claude-opus-5", None);
-    let t = Tokens { cache_write: total, cache_write5m: w5, cache_write1h: w1, ..Tokens::empty() };
+    let t = Tokens {
+        cache_write: total,
+        cache_write5m: w5,
+        cache_write1h: w1,
+        ..Tokens::empty()
+    };
     let got = cost(&t, &model).unwrap();
     assert!((got - 5.0 * CACHE_MULTIPLIERS.write5m).abs() < 1e-9);
 }
@@ -130,7 +160,13 @@ fn un_detail_de_ttl_present_est_respecte_tel_quel() {
 fn un_cout_inconnu_reste_absent_jamais_zero() {
     // Un coût inconnu ne doit pas se fondre dans un total en se faisant passer
     // pour la gratuité.
-    assert_eq!(cost(&tokens(1_000_000, 0), &resolve_model("modele-inconnu", None)), None);
+    assert_eq!(
+        cost(
+            &tokens(1_000_000, 0),
+            &resolve_model("modele-inconnu", None)
+        ),
+        None
+    );
 }
 
 #[test]

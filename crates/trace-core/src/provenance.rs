@@ -72,11 +72,36 @@ pub const UNKNOWN: SourceMeta = SourceMeta {
 
 pub fn meta(source: &str) -> SourceMeta {
     match source {
-        "claude-code" => SourceMeta { family: "anthropic", grain: Grain::Request, authoritative: false, label: "Claude Code" },
-        "anthropic-oauth" => SourceMeta { family: "anthropic", grain: Grain::Window, authoritative: true, label: "Claude en direct" },
-        "anthropic-api" => SourceMeta { family: "anthropic", grain: Grain::Daily, authoritative: true, label: "API Anthropic" },
-        "codex-cli" => SourceMeta { family: "openai", grain: Grain::Request, authoritative: false, label: "Codex CLI" },
-        "openai-api" => SourceMeta { family: "openai", grain: Grain::Daily, authoritative: true, label: "API OpenAI" },
+        "claude-code" => SourceMeta {
+            family: "anthropic",
+            grain: Grain::Request,
+            authoritative: false,
+            label: "Claude Code",
+        },
+        "anthropic-oauth" => SourceMeta {
+            family: "anthropic",
+            grain: Grain::Window,
+            authoritative: true,
+            label: "Claude en direct",
+        },
+        "anthropic-api" => SourceMeta {
+            family: "anthropic",
+            grain: Grain::Daily,
+            authoritative: true,
+            label: "API Anthropic",
+        },
+        "codex-cli" => SourceMeta {
+            family: "openai",
+            grain: Grain::Request,
+            authoritative: false,
+            label: "Codex CLI",
+        },
+        "openai-api" => SourceMeta {
+            family: "openai",
+            grain: Grain::Daily,
+            authoritative: true,
+            label: "API OpenAI",
+        },
         _ => UNKNOWN,
     }
 }
@@ -149,7 +174,10 @@ pub fn dedupe_families(events: &[Event]) -> (Vec<Event>, usize) {
             if m.grain != Grain::Daily {
                 return true;
             }
-            if covered.get(m.family).is_some_and(|s| s.contains(&day_key(e.ts))) {
+            if covered
+                .get(m.family)
+                .is_some_and(|s| s.contains(&day_key(e.ts)))
+            {
                 dropped += 1;
                 return false;
             }
@@ -229,8 +257,10 @@ pub fn reconciliation(events: &[Event], from: i64, to: i64) -> Vec<FamilyReconci
             // sans chiffre facturé n'est pas un écart de 100 %, c'est une
             // absence de mesure — les confondre transformerait la table en
             // générateur d'alarmes.
-            let mut days: Vec<DayComparison> =
-                days.into_values().filter(|d| d.local > 0 && d.billed > 0).collect();
+            let mut days: Vec<DayComparison> = days
+                .into_values()
+                .filter(|d| d.local > 0 && d.billed > 0)
+                .collect();
             if days.is_empty() {
                 return None;
             }

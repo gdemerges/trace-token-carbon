@@ -46,7 +46,11 @@ fn fetch(req: ureq::Request, provider: &str, hint_key: &str) -> Result<Value, St
         Err(ureq::Error::Status(code, res)) => {
             // La cause numéro un est l'usage d'une clé standard là où une clé
             // Admin est requise : on le dit, plutôt que de rendre un 401 nu.
-            let hint = if code == 401 || code == 403 { t(hint_key) } else { String::new() };
+            let hint = if code == 401 || code == 403 {
+                t(hint_key)
+            } else {
+                String::new()
+            };
             let body = res.into_string().unwrap_or_default();
             let body: String = body.chars().take(200).collect();
             Err(format!("{provider} {code}{hint}: {body}"))
@@ -70,7 +74,11 @@ fn bucket_ts(b: &Value) -> i64 {
             }
             Value::Number(num) => {
                 if let Some(v) = num.as_f64() {
-                    return if v > 1e11 { v as i64 } else { (v * 1000.0) as i64 };
+                    return if v > 1e11 {
+                        v as i64
+                    } else {
+                        (v * 1000.0) as i64
+                    };
                 }
             }
             _ => {}
@@ -84,11 +92,7 @@ fn bucket_ts(b: &Value) -> i64 {
 // ---------------------------------------------------------------------------
 
 /// Suit la pagination `has_more` / `next_page`.
-fn anthropic_pages(
-    url: &str,
-    params: &[(&str, String)],
-    key: &str,
-) -> Result<Vec<Value>, String> {
+fn anthropic_pages(url: &str, params: &[(&str, String)], key: &str) -> Result<Vec<Value>, String> {
     let a = agent();
     let mut out = Vec::new();
     let mut page: Option<String> = None;
@@ -152,7 +156,11 @@ pub fn collect_anthropic(key: Option<&str>, lookback_days: i64) -> Collected {
         ])
         .collect();
 
-    match anthropic_pages(&format!("{ANTHROPIC_BASE}/usage_report/messages"), &usage_params, key) {
+    match anthropic_pages(
+        &format!("{ANTHROPIC_BASE}/usage_report/messages"),
+        &usage_params,
+        key,
+    ) {
         Err(e) => errors.push(format!("usage: {e}")),
         Ok(buckets) => {
             out.events.extend(parse_anthropic_buckets(&buckets));
@@ -160,8 +168,11 @@ pub fn collect_anthropic(key: Option<&str>, lookback_days: i64) -> Collected {
     }
 
     // --- coût facturé ------------------------------------------------------
-    let cost_params: Vec<(&str, String)> =
-        range.iter().cloned().chain([("limit", "31".to_string())]).collect();
+    let cost_params: Vec<(&str, String)> = range
+        .iter()
+        .cloned()
+        .chain([("limit", "31".to_string())])
+        .collect();
     match anthropic_pages(&format!("{ANTHROPIC_BASE}/cost_report"), &cost_params, key) {
         Err(e) => errors.push(format!("cost: {e}")),
         Ok(buckets) => {
@@ -245,8 +256,11 @@ pub fn parse_anthropic_buckets(buckets: &[Value]) -> Vec<Event> {
             let w5 = n(&cc["ephemeral_5m_input_tokens"]);
             let w1 = n(&cc["ephemeral_1h_input_tokens"]);
             let declared = w5 + w1;
-            let raw_write =
-                if declared != 0 { declared } else { n(&r["cache_creation_input_tokens"]) };
+            let raw_write = if declared != 0 {
+                declared
+            } else {
+                n(&r["cache_creation_input_tokens"])
+            };
             let (cache_write, cache_write5m, cache_write1h) =
                 Tokens::split_cache_write(raw_write, w5, w1);
 
@@ -311,7 +325,13 @@ pub fn parse_openai_buckets(buckets: &[Value]) -> Vec<Event> {
                 model: r["model"].as_str().unwrap_or("unknown").to_string(),
                 project: r["project_id"].as_str().map(str::to_string),
                 session: None,
-                tokens: Tokens { input, output, cache_read, total, ..Tokens::empty() },
+                tokens: Tokens {
+                    input,
+                    output,
+                    cache_read,
+                    total,
+                    ..Tokens::empty()
+                },
                 requests: n(&r["num_model_requests"]).max(1),
                 compacted: None,
             });

@@ -15,7 +15,11 @@ use trace_core::util::Tokens;
 const H: i64 = 3_600_000;
 
 fn tokens(output: i64) -> Tokens {
-    Tokens { output, total: output, ..Tokens::empty() }
+    Tokens {
+        output,
+        total: output,
+        ..Tokens::empty()
+    }
 }
 
 fn ev(ts: i64, output: i64) -> Event {
@@ -47,7 +51,10 @@ fn rejection(ts: i64, resets_at: i64, cause: Cause) -> Quota {
 }
 
 fn five_hour(gauges: &[Gauge]) -> &Gauge {
-    gauges.iter().find(|g| g.id == "anthropic-five_hour").expect("la jauge 5 h")
+    gauges
+        .iter()
+        .find(|g| g.id == "anthropic-five_hour")
+        .expect("la jauge 5 h")
 }
 
 #[test]
@@ -58,7 +65,10 @@ fn la_fenetre_glissante_regarde_en_arriere_pas_en_avant() {
     let events = vec![ev(now - 2 * H, 1000)];
     let g = compute_gauges(&events, &[], &Config::default(), now);
     let g = five_hour(&g);
-    assert!(g.used > 0.0, "la fenêtre glissante doit couvrir les 5 dernières heures");
+    assert!(
+        g.used > 0.0,
+        "la fenêtre glissante doit couvrir les 5 dernières heures"
+    );
     assert!(g.rolling);
     assert!(g.starts_at < now && g.starts_at >= now - 5 * H);
 }
@@ -77,7 +87,10 @@ fn un_refus_429_est_mesure_mais_ne_devient_pas_une_echelle() {
     // ...mais elle ne pilote aucun pourcentage : elle s'est révélée fausse
     // d'un facteur 2,6 face au chiffre réel du serveur.
     assert_eq!(g.percent, None);
-    assert!(g.used > 0.0, "la consommation de la fenêtre reste affichable");
+    assert!(
+        g.used > 0.0,
+        "la consommation de la fenêtre reste affichable"
+    );
 }
 
 #[test]
@@ -91,8 +104,14 @@ fn un_refus_pour_plafond_de_depense_ne_calibre_pas_la_fenetre() {
     let gs = compute_gauges(&events, &quota, &Config::default(), now);
     let g = five_hour(&gs);
     assert_eq!(g.limit, None);
-    assert_eq!(g.percent, None, "mieux vaut aucune échelle qu'une échelle fausse");
-    assert!(g.calibration.is_none(), "un refus de dépense n'entre même pas dans la mesure");
+    assert_eq!(
+        g.percent, None,
+        "mieux vaut aucune échelle qu'une échelle fausse"
+    );
+    assert!(
+        g.calibration.is_none(),
+        "un refus de dépense n'entre même pas dans la mesure"
+    );
 }
 
 #[test]
@@ -111,19 +130,50 @@ fn un_plafond_renseigne_prime_sur_le_calibrage() {
 #[test]
 fn la_ponderation_reflete_le_cout_reel_des_classes_de_tokens() {
     let w = |t: Tokens| weighted_usage(&t);
-    assert!(w(Tokens { output: 100, ..Tokens::empty() }) > w(Tokens { cache_read: 100, ..Tokens::empty() }));
-    assert!(w(Tokens { input: 100, ..Tokens::empty() }) > w(Tokens { cache_read: 100, ..Tokens::empty() }));
+    assert!(
+        w(Tokens {
+            output: 100,
+            ..Tokens::empty()
+        }) > w(Tokens {
+            cache_read: 100,
+            ..Tokens::empty()
+        })
+    );
+    assert!(
+        w(Tokens {
+            input: 100,
+            ..Tokens::empty()
+        }) > w(Tokens {
+            cache_read: 100,
+            ..Tokens::empty()
+        })
+    );
     // Un total brut est dominé par le cache, qui pèse dix fois moins : c'est
     // toute la raison d'être de la pondération.
-    assert!(w(Tokens { cache_read: 1000, ..Tokens::empty() }) < w(Tokens { output: 100, ..Tokens::empty() }));
+    assert!(
+        w(Tokens {
+            cache_read: 1000,
+            ..Tokens::empty()
+        }) < w(Tokens {
+            output: 100,
+            ..Tokens::empty()
+        })
+    );
 }
 
 #[test]
 fn le_releve_de_l_utilisateur_donne_exactement_le_pourcentage_saisi() {
     let now = trace_core::util::now_ms();
     let events = vec![ev(now - 2 * H, 100_000)];
-    let cfg = apply_user_calibration(&Config::default(), &events, &[], "anthropic-five_hour", 72.0, now)
-        .expect("calibrage possible");
+    let cfg = apply_user_calibration(
+        &Config::default(),
+        &events,
+        &[],
+        "anthropic-five_hour",
+        72.0,
+        now,
+    )
+    .expect("calibrage possible");
 
     let gs = compute_gauges(&events, &[], &cfg, now);
     let g = five_hour(&gs);
@@ -140,8 +190,15 @@ fn le_releve_de_l_utilisateur_prime_sur_le_calibrage_automatique() {
     let resets_at = now - H;
     let events = vec![ev(resets_at - 4 * H, 500_000), ev(now - 60_000, 50_000)];
     let quota = vec![rejection(resets_at - 60_000, resets_at, Cause::Window)];
-    let cfg = apply_user_calibration(&Config::default(), &events, &quota, "anthropic-five_hour", 40.0, now)
-        .expect("calibrage possible");
+    let cfg = apply_user_calibration(
+        &Config::default(),
+        &events,
+        &quota,
+        "anthropic-five_hour",
+        40.0,
+        now,
+    )
+    .expect("calibrage possible");
     let gs = compute_gauges(&events, &quota, &cfg, now);
     let g = five_hour(&gs);
     assert_eq!(g.limit_source.as_deref(), Some("user"));
@@ -151,8 +208,15 @@ fn le_releve_de_l_utilisateur_prime_sur_le_calibrage_automatique() {
 #[test]
 fn calibrer_sans_consommation_mesuree_echoue_explicitement() {
     let now = trace_core::util::now_ms();
-    let err = apply_user_calibration(&Config::default(), &[], &[], "anthropic-five_hour", 50.0, now)
-        .expect_err("sans consommation, le produit en croix n'a pas de sens");
+    let err = apply_user_calibration(
+        &Config::default(),
+        &[],
+        &[],
+        "anthropic-five_hour",
+        50.0,
+        now,
+    )
+    .expect_err("sans consommation, le produit en croix n'a pas de sens");
     assert!(!err.is_empty());
 }
 
@@ -162,7 +226,15 @@ fn le_releve_en_direct_ecrase_le_calibrage_local() {
     let events = vec![ev(now - 2 * H, 100_000)];
     // L'utilisateur a calibré à 72 %, mais le serveur dit 15 %. Aucune
     // reconstruction locale ne peut faire mieux qu'un chiffre du fournisseur.
-    let cfg = apply_user_calibration(&Config::default(), &events, &[], "anthropic-five_hour", 72.0, now).unwrap();
+    let cfg = apply_user_calibration(
+        &Config::default(),
+        &events,
+        &[],
+        "anthropic-five_hour",
+        72.0,
+        now,
+    )
+    .unwrap();
     let mut live = rejection(now - 60_000, now + 3 * H, Cause::Window);
     live.source = "anthropic-oauth".into();
     live.status = None;
@@ -172,7 +244,10 @@ fn le_releve_en_direct_ecrase_le_calibrage_local() {
     let g = five_hour(&gs);
     assert_eq!(g.percent, Some(15.0));
     assert_eq!(g.limit_source.as_deref(), Some("live"));
-    assert!(!g.calibratable, "inutile de proposer un calage quand le serveur répond");
+    assert!(
+        !g.calibratable,
+        "inutile de proposer un calage quand le serveur répond"
+    );
 }
 
 #[test]
@@ -234,7 +309,10 @@ fn codex_dont_la_fenetre_a_expire_repart_a_zero_pas_au_chiffre_perime() {
     // Aucune activité Codex depuis : la fenêtre s'est réinitialisée, et
     // afficher 80 % laisserait croire à une saturation qui n'existe plus.
     let gs = compute_gauges(&[], &[q], &Config::default(), now);
-    let g = gs.iter().find(|g| g.id == "codex-five_hour").expect("la jauge Codex");
+    let g = gs
+        .iter()
+        .find(|g| g.id == "codex-five_hour")
+        .expect("la jauge Codex");
     assert_eq!(g.percent, Some(0.0));
     assert_eq!(g.limit_source.as_deref(), Some("reset"));
     assert!(g.rolling);
@@ -258,7 +336,10 @@ fn une_fenetre_que_le_fournisseur_ne_rapporte_plus_disparait() {
     // Une fenêtre de 5 h dont le dernier relevé date de 54 jours, à côté d'une
     // mensuelle du jour : la première a disparu du jeu de limites du
     // fournisseur, la garder produirait une jauge fantôme.
-    let quota = vec![mk("five_hour", now - 54 * 24 * H, 300.0), mk("monthly", now - 60_000, 43_200.0)];
+    let quota = vec![
+        mk("five_hour", now - 54 * 24 * H, 300.0),
+        mk("monthly", now - 60_000, 43_200.0),
+    ];
     let gs = compute_gauges(&[], &quota, &Config::default(), now);
     assert!(gs.iter().any(|g| g.id == "codex-monthly"));
     assert!(!gs.iter().any(|g| g.id == "codex-five_hour"));
@@ -281,7 +362,11 @@ fn des_fenetres_relevees_ensemble_sont_toutes_conservees() {
     };
     let quota = vec![mk("five_hour", 300.0), mk("monthly", 43_200.0)];
     let gs = compute_gauges(&[], &quota, &Config::default(), now);
-    assert_eq!(gs.len(), 2, "publiées dans le même relevé, elles valent toutes les deux");
+    assert_eq!(
+        gs.len(),
+        2,
+        "publiées dans le même relevé, elles valent toutes les deux"
+    );
 }
 
 #[test]
@@ -290,7 +375,15 @@ fn sans_activite_recente_aucune_projection() {
     // Consommation ancienne, rien dans la fenêtre de cadence : annoncer
     // « dans 340 h » serait du bruit.
     let events = vec![ev(now - 4 * H, 100_000)];
-    let cfg = apply_user_calibration(&Config::default(), &events, &[], "anthropic-five_hour", 50.0, now).unwrap();
+    let cfg = apply_user_calibration(
+        &Config::default(),
+        &events,
+        &[],
+        "anthropic-five_hour",
+        50.0,
+        now,
+    )
+    .unwrap();
     let gs = compute_gauges(&events, &[], &cfg, now);
     assert!(five_hour(&gs).projection.is_none());
 }
@@ -311,10 +404,16 @@ fn une_fenetre_longue_n_est_pas_consommable_d_une_traite() {
     weekly.resets_at = now + 5 * 24 * H;
 
     let gs = compute_gauges(&events, &[five, weekly], &Config::default(), now);
-    let w = gs.iter().find(|g| g.id == "anthropic-weekly").expect("la jauge hebdomadaire");
+    let w = gs
+        .iter()
+        .find(|g| g.id == "anthropic-weekly")
+        .expect("la jauge hebdomadaire");
     let p = w.projection.as_ref().expect("une projection");
     // La limite de cinq heures s'interpose : l'ignorer annonçait l'épuisement
     // d'une semaine en une nuit. Le délai doit donc contenir du temps d'attente.
-    assert!(p.throttled, "la fenêtre courte doit brider la projection hebdomadaire");
+    assert!(
+        p.throttled,
+        "la fenêtre courte doit brider la projection hebdomadaire"
+    );
     assert!(p.in_ms > 5.0 * 3_600_000.0);
 }

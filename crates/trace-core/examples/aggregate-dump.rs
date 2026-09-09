@@ -23,7 +23,11 @@ fn fo(x: Option<f64>) -> String {
 fn main() {
     let dir = std::env::var("TRACE_CC_DIR").ok();
     let collected = claude_code::collect(dir.as_deref(), &CollectorState::default());
-    let opts = Options { from: Some(FROM), to: Some(TO), ..Options::default() };
+    let opts = Options {
+        from: Some(FROM),
+        to: Some(TO),
+        ..Options::default()
+    };
     let rep = report(&collected.events, &opts);
 
     println!("eventCount\t{}", rep.event_count);
@@ -32,18 +36,34 @@ fn main() {
     let k = &t.tokens;
     println!(
         "tokens\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
-        k.input, k.output, k.cache_read, k.cache_write, k.cache_write5m, k.cache_write1h, k.thinking, k.total
+        k.input,
+        k.output,
+        k.cache_read,
+        k.cache_write,
+        k.cache_write5m,
+        k.cache_write1h,
+        k.thinking,
+        k.total
     );
     println!("requests\t{}", t.requests);
     println!(
         "cost\t{}\t{}\t{}\t{}\t{}",
-        f(t.cost_usd), f(t.cost_without_cache_usd), f(t.cache_savings_usd), f(t.cache_hit_ratio), t.cost_unknown
+        f(t.cost_usd),
+        f(t.cost_without_cache_usd),
+        f(t.cache_savings_usd),
+        f(t.cache_hit_ratio),
+        t.cost_unknown
     );
     let c = &t.carbon;
     println!(
         "carbon\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
-        f(c.grams_co2e.min), f(c.grams_co2e.mid), f(c.grams_co2e.max),
-        f(c.energy_wh.mid), f(c.water_l.mid), f(c.usage_g), f(c.embodied_g)
+        f(c.grams_co2e.min),
+        f(c.grams_co2e.mid),
+        f(c.grams_co2e.max),
+        f(c.energy_wh.mid),
+        f(c.water_l.mid),
+        f(c.usage_g),
+        f(c.embodied_g)
     );
     for s in &t.carbon_sensitivity {
         println!("sens\t{}\t{}\t{}", s.key, f(s.grams_co2e.mid), fo(s.ratio));
@@ -56,24 +76,73 @@ fn main() {
     }
     println!(
         "trend\t{}\t{}\t{}\t{}\t{}",
-        fo(rep.trend.tokens), fo(rep.trend.cost), fo(rep.trend.carbon),
-        rep.trend.previous.tokens.total, f(rep.trend.previous.cost_usd)
+        fo(rep.trend.tokens),
+        fo(rep.trend.cost),
+        fo(rep.trend.carbon),
+        rep.trend.previous.tokens.total,
+        f(rep.trend.previous.cost_usd)
     );
     for g in &rep.by_model {
-        let inner: Vec<String> = g.models.iter().map(|m| format!("{}:{}", m.id, m.tokens.total)).collect();
-        println!("model\t{}\t{}\t{}\t{}\t{}\t{}", g.key, g.tokens.total, g.requests, f(g.cost_usd), f(g.carbon.grams_co2e.mid), inner.join(","));
+        let inner: Vec<String> = g
+            .models
+            .iter()
+            .map(|m| format!("{}:{}", m.id, m.tokens.total))
+            .collect();
+        println!(
+            "model\t{}\t{}\t{}\t{}\t{}\t{}",
+            g.key,
+            g.tokens.total,
+            g.requests,
+            f(g.cost_usd),
+            f(g.carbon.grams_co2e.mid),
+            inner.join(",")
+        );
     }
     for g in &rep.by_project {
-        println!("project\t{}\t{}\t{}\t{}\t{}", g.key, g.tokens.total, g.requests, f(g.cost_usd), f(g.carbon.grams_co2e.mid));
+        println!(
+            "project\t{}\t{}\t{}\t{}\t{}",
+            g.key,
+            g.tokens.total,
+            g.requests,
+            f(g.cost_usd),
+            f(g.carbon.grams_co2e.mid)
+        );
     }
     for d in &rep.daily {
-        let inner: Vec<String> = d.models.iter().map(|m| format!("{}:{}", m.id, m.total)).collect();
-        println!("day\t{}\t{}\t{}\t{}\t{}\t{}\t{}", d.date, d.ts, d.tokens.total, d.requests, f(d.cost_usd), f(d.grams_co2e), inner.join(","));
+        let inner: Vec<String> = d
+            .models
+            .iter()
+            .map(|m| format!("{}:{}", m.id, m.total))
+            .collect();
+        println!(
+            "day\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            d.date,
+            d.ts,
+            d.tokens.total,
+            d.requests,
+            f(d.cost_usd),
+            f(d.grams_co2e),
+            inner.join(",")
+        );
     }
     for h in &rep.hours {
-        println!("hour\t{}\t{}\t{}\t{}\t{}", h.hour, h.tokens, h.requests, f(h.cost_usd), f(h.grams_co2e));
+        println!(
+            "hour\t{}\t{}\t{}\t{}\t{}",
+            h.hour,
+            h.tokens,
+            h.requests,
+            f(h.cost_usd),
+            f(h.grams_co2e)
+        );
     }
     for rc in &rep.reconciliation {
-        println!("recon\t{}\t{}\t{}\t{}\t{}", rc.family, rc.local, rc.billed, fo(rc.delta_pct), rc.days.len());
+        println!(
+            "recon\t{}\t{}\t{}\t{}\t{}",
+            rc.family,
+            rc.local,
+            rc.billed,
+            fo(rc.delta_pct),
+            rc.days.len()
+        );
     }
 }

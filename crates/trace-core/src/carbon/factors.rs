@@ -13,7 +13,6 @@
 
 use crate::i18n::t;
 use crate::models::Range;
-use std::sync::LazyLock;
 
 /// Constantes EcoLogits.
 pub struct Ecologits;
@@ -133,7 +132,11 @@ pub fn pin_range(r: Range) -> Range {
     } else {
         (r.min + r.max) / 2.0
     };
-    Range { min: v, max: v, mid: v }
+    Range {
+        min: v,
+        max: v,
+        mid: v,
+    }
 }
 
 /// Infrastructure par fournisseur.
@@ -260,13 +263,16 @@ const GRID_TABLE: &[(&str, f64, &str)] = &[
 ];
 
 pub fn grid(key: &str) -> Option<Grid> {
-    GRID_TABLE.iter().find(|(k, _, _)| *k == key).map(|(k, v, s)| Grid {
-        key: k,
-        label: t(&format!("grid.{k}")),
-        value: *v,
-        source: s,
-        basis: "location-based",
-    })
+    GRID_TABLE
+        .iter()
+        .find(|(k, _, _)| *k == key)
+        .map(|(k, v, s)| Grid {
+            key: k,
+            label: t(&format!("grid.{k}")),
+            value: *v,
+            source: s,
+            basis: "location-based",
+        })
 }
 
 pub fn grid_keys() -> Vec<&'static str> {
@@ -302,28 +308,65 @@ pub struct Equivalent {
     pub note: &'static str,
 }
 
-pub static EQUIVALENT_TABLE: LazyLock<Vec<(&'static str, &'static str, f64, &'static str, &'static str)>> =
-    LazyLock::new(|| {
-        vec![
-            ("car", "km", 120.0, "🚗", "Voiture particulière moyenne, usage seul (hors fabrication du véhicule)."),
-            ("streaming", "h", 36.0, "📺", "Ordre de grandeur très dépendant du terminal, de la définition et du réseau."),
-            ("phone", "", 8.0, "🔋", "Une charge complète sur le mix français, hors fabrication de l’appareil."),
-            ("tgv", "km", 2.3, "🚆", "Par voyageur-kilomètre, sur le mix électrique français."),
-            ("beef", "g", 27.0, "🥩", "Viande bovine, du champ à l’assiette. Périmètre cycle de vie, contrairement aux autres équivalents."),
-        ]
-    });
+/// Un équivalent, avant que son libellé ne soit traduit. Le libellé dépend de
+/// la langue courante : il ne peut donc pas vivre dans une constante.
+struct EquivalentSpec {
+    key: &'static str,
+    unit: &'static str,
+    g_per_unit: f64,
+    icon: &'static str,
+    note: &'static str,
+}
+
+const EQUIVALENT_TABLE: &[EquivalentSpec] = &[
+    EquivalentSpec {
+        key: "car",
+        unit: "km",
+        g_per_unit: 120.0,
+        icon: "\u{1F697}",
+        note: "Voiture particulière moyenne, usage seul (hors fabrication du véhicule).",
+    },
+    EquivalentSpec {
+        key: "streaming",
+        unit: "h",
+        g_per_unit: 36.0,
+        icon: "\u{1F4FA}",
+        note: "Ordre de grandeur très dépendant du terminal, de la définition et du réseau.",
+    },
+    EquivalentSpec {
+        key: "phone",
+        unit: "",
+        g_per_unit: 8.0,
+        icon: "\u{1F50B}",
+        note: "Une charge complète sur le mix français, hors fabrication de l\u{2019}appareil.",
+    },
+    EquivalentSpec {
+        key: "tgv",
+        unit: "km",
+        g_per_unit: 2.3,
+        icon: "\u{1F686}",
+        note: "Par voyageur-kilomètre, sur le mix électrique français.",
+    },
+    EquivalentSpec {
+        key: "beef",
+        unit: "g",
+        g_per_unit: 27.0,
+        icon: "\u{1F969}",
+        note: "Viande bovine, du champ à l\u{2019}assiette. Périmètre cycle de vie, contrairement aux autres équivalents.",
+    },
+];
 
 pub fn equivalent_specs() -> Vec<Equivalent> {
     EQUIVALENT_TABLE
         .iter()
-        .map(|(key, unit, g, icon, note)| Equivalent {
-            key,
-            label: t(&format!("equiv.{key}")),
-            unit,
-            g_per_unit: *g,
-            icon,
+        .map(|e| Equivalent {
+            key: e.key,
+            label: t(&format!("equiv.{}", e.key)),
+            unit: e.unit,
+            g_per_unit: e.g_per_unit,
+            icon: e.icon,
             source: "ademe",
-            note,
+            note: e.note,
         })
         .collect()
 }
@@ -344,7 +387,14 @@ pub struct FactorRow {
     pub note: String,
 }
 
-fn row(group: &'static str, key: String, value: String, unit: &'static str, source_id: &'static str, note: &str) -> FactorRow {
+fn row(
+    group: &'static str,
+    key: String,
+    value: String,
+    unit: &'static str,
+    source_id: &'static str,
+    note: &str,
+) -> FactorRow {
     let s = super::sources::source(source_id);
     FactorRow {
         group,
@@ -354,7 +404,11 @@ fn row(group: &'static str, key: String, value: String, unit: &'static str, sour
         source: source_id,
         citation: super::sources::cite(source_id),
         pinned: s.is_some_and(|s| s.pinned),
-        note: if note.is_empty() { s.map(|s| s.note.to_string()).unwrap_or_default() } else { note.to_string() },
+        note: if note.is_empty() {
+            s.map(|s| s.note.to_string()).unwrap_or_default()
+        } else {
+            note.to_string()
+        },
     }
 }
 
@@ -378,7 +432,8 @@ const G_EQUIV: &str = "Équivalent de communication";
 pub fn factor_table(grid_key: Option<&str>) -> Vec<FactorRow> {
     let mut rows = Vec::new();
 
-    let m = |k: &str, v: String, u: &'static str, note: &str| (k.to_string(), v, u, note.to_string());
+    let m =
+        |k: &str, v: String, u: &'static str, note: &str| (k.to_string(), v, u, note.to_string());
     for (key, value, unit, note) in [
         m("MODEL_QUANTIZATION_BITS", Ecologits::MODEL_QUANTIZATION_BITS.to_string(), "bits",
           "Hypothèse de service en production. Aucun fournisseur fermé ne publie sa quantification ; elle ne joue que sur le nombre de GPU nécessaires, donc sur la part serveur et la fabrication."),
@@ -406,12 +461,26 @@ pub fn factor_table(grid_key: Option<&str>) -> Vec<FactorRow> {
     let w = TOKEN_ENERGY_WEIGHTS;
     for (key, r, note) in [
         ("output", w.output, "Référence, 1.0 par définition."),
-        ("input", w.input, "Bilan de FLOPs du prefill, MFU 40 % (borne basse) à MFU faible (borne haute)."),
+        (
+            "input",
+            w.input,
+            "Bilan de FLOPs du prefill, MFU 40 % (borne basse) à MFU faible (borne haute).",
+        ),
         ("cacheWrite", w.cache_write, "Prefill + persistance du KV."),
-        ("cacheRead", w.cache_read, "Lecture mémoire et attention seules ; projections et FFN économisés."),
+        (
+            "cacheRead",
+            w.cache_read,
+            "Lecture mémoire et attention seules ; projections et FFN économisés.",
+        ),
     ] {
-        rows.push(row(G_WEIGHTS, key.to_string(), format!("{} – {}", r.min, r.max),
-                      "équivalent-token de sortie", "traceDerived", note));
+        rows.push(row(
+            G_WEIGHTS,
+            key.to_string(),
+            format!("{} – {}", r.min, r.max),
+            "équivalent-token de sortie",
+            "traceDerived",
+            note,
+        ));
     }
 
     // Le mix retenu, et lui seul, quand l'appelant le précise.
@@ -421,23 +490,52 @@ pub fn factor_table(grid_key: Option<&str>) -> Vec<FactorRow> {
     };
     for k in keys {
         let Some(g) = grid(k) else { continue };
-        rows.push(row(G_GRID, g.label.clone(), g.value.to_string(), "gCO2e/kWh", g.source,
-                      &format!("Approche {}.", g.basis)));
+        rows.push(row(
+            G_GRID,
+            g.label.clone(),
+            g.value.to_string(),
+            "gCO2e/kWh",
+            g.source,
+            &format!("Approche {}.", g.basis),
+        ));
     }
 
     for key in ["anthropic", "openai", "local", "unknown"] {
         let i = provider_infra(key);
-        rows.push(row(G_INFRA, format!("{} — PUE", i.label), format!("{} – {}", i.pue.min, i.pue.max),
-                      "sans dimension", i.source, i.basis));
-        rows.push(row(G_INFRA, format!("{} — eau sur site", i.label), format!("{} – {}", i.wue_l.min, i.wue_l.max),
-                      "L/kWh", if i.wue_l.max > 0.0 { "waterFootprint" } else { i.source },
-                      &format!("Hébergement : {}.", i.hosts)));
+        rows.push(row(
+            G_INFRA,
+            format!("{} — PUE", i.label),
+            format!("{} – {}", i.pue.min, i.pue.max),
+            "sans dimension",
+            i.source,
+            i.basis,
+        ));
+        rows.push(row(
+            G_INFRA,
+            format!("{} — eau sur site", i.label),
+            format!("{} – {}", i.wue_l.min, i.wue_l.max),
+            "L/kWh",
+            if i.wue_l.max > 0.0 {
+                "waterFootprint"
+            } else {
+                i.source
+            },
+            &format!("Hébergement : {}.", i.hosts),
+        ));
         if grid_key.is_some() {
             continue; // le mix retenu est déjà cité plus haut
         }
-        let label = grid(i.grid_key).map(|g| g.label).unwrap_or_else(|| i.grid_key.to_string());
-        rows.push(row(G_INFRA, format!("{} — mix par défaut", i.label), label, "zone", i.source,
-                      &format!("Hypothèse de localisation pour {key}.")));
+        let label = grid(i.grid_key)
+            .map(|g| g.label)
+            .unwrap_or_else(|| i.grid_key.to_string());
+        rows.push(row(
+            G_INFRA,
+            format!("{} — mix par défaut", i.label),
+            label,
+            "zone",
+            i.source,
+            &format!("Hypothèse de localisation pour {key}."),
+        ));
     }
 
     rows.push(row(G_WATER, "OFFSITE_L_PER_KWH".to_string(),
@@ -446,7 +544,14 @@ pub fn factor_table(grid_key: Option<&str>) -> Vec<FactorRow> {
                   "Eau consommée pour produire l'électricité, hors site. Fourchette couvrant les mix électriques courants, faute d'un facteur par pays."));
 
     for e in equivalent_specs() {
-        rows.push(row(G_EQUIV, e.label, e.g_per_unit.to_string(), "gCO2e/unité", e.source, e.note));
+        rows.push(row(
+            G_EQUIV,
+            e.label,
+            e.g_per_unit.to_string(),
+            "gCO2e/unité",
+            e.source,
+            e.note,
+        ));
     }
 
     rows

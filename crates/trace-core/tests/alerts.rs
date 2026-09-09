@@ -50,7 +50,10 @@ fn config() -> Config {
 }
 
 fn thresholds(o: &alerts::Outcome) -> Vec<String> {
-    o.notifications.iter().map(|n| n.threshold.clone()).collect()
+    o.notifications
+        .iter()
+        .map(|n| n.threshold.clone())
+        .collect()
 }
 
 #[test]
@@ -92,7 +95,10 @@ fn jamais_sur_une_source_d_echelle_non_fiable() {
         let mut g = gauge(99.0);
         g.limit_source = Some(source.into());
         let r = alerts::evaluate(&[g], &config(), &HashMap::new(), T0);
-        assert!(r.notifications.is_empty(), "{source} ne doit pas déclencher d'alerte");
+        assert!(
+            r.notifications.is_empty(),
+            "{source} ne doit pas déclencher d'alerte"
+        );
     }
     for source in ["live", "live-stale", "user", "provider", "configured"] {
         let mut g = gauge(99.0);
@@ -106,7 +112,10 @@ fn jamais_sur_une_source_d_echelle_non_fiable() {
 fn un_bond_de_zero_a_quatre_vingt_seize_ne_produit_qu_une_notification() {
     let r = alerts::evaluate(&[gauge(96.0)], &config(), &HashMap::new(), T0);
     assert_eq!(r.notifications.len(), 1);
-    assert_eq!(r.notifications[0].threshold, "95", "le seuil le plus haut franchi");
+    assert_eq!(
+        r.notifications[0].threshold, "95",
+        "le seuil le plus haut franchi"
+    );
     assert_eq!(r.notifications[0].urgency, "critical");
 }
 
@@ -141,7 +150,9 @@ fn l_etat_des_fenetres_mortes_n_est_pas_conserve() {
 fn desactivables_et_seuils_personnalisables() {
     let mut off = config();
     off.alerts.enabled = false;
-    assert!(alerts::evaluate(&[gauge(99.0)], &off, &HashMap::new(), T0).notifications.is_empty());
+    assert!(alerts::evaluate(&[gauge(99.0)], &off, &HashMap::new(), T0)
+        .notifications
+        .is_empty());
 
     let mut custom = config();
     custom.alerts.thresholds = vec![50.0];
@@ -187,7 +198,9 @@ fn une_saturation_posterieure_a_la_reinitialisation_n_alerte_pas() {
         before_reset: false,
         throttled: false,
     });
-    assert!(alerts::evaluate(&[g], &cfg, &HashMap::new(), T0).notifications.is_empty());
+    assert!(alerts::evaluate(&[g], &cfg, &HashMap::new(), T0)
+        .notifications
+        .is_empty());
 }
 
 #[test]

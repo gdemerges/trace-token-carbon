@@ -122,9 +122,14 @@ fn read_mac_keychain() -> Option<String> {
 fn read_credentials_file() -> Option<String> {
     let candidates = [
         home_dir().join(".claude").join(".credentials.json"),
-        home_dir().join(".config").join("claude").join(".credentials.json"),
+        home_dir()
+            .join(".config")
+            .join("claude")
+            .join(".credentials.json"),
     ];
-    candidates.iter().find_map(|p| std::fs::read_to_string(p).ok())
+    candidates
+        .iter()
+        .find_map(|p| std::fs::read_to_string(p).ok())
 }
 
 struct Token {
@@ -153,7 +158,10 @@ fn load_token() -> Result<Token, String> {
         .find(|v| v.is_object())
         .unwrap_or(&creds);
 
-    let Some(value) = o["accessToken"].as_str().or_else(|| o["access_token"].as_str()) else {
+    let Some(value) = o["accessToken"]
+        .as_str()
+        .or_else(|| o["access_token"].as_str())
+    else {
         return Err(t("oauth.noToken"));
     };
 
@@ -161,7 +169,9 @@ fn load_token() -> Result<Token, String> {
     if expires_at.is_some_and(|e| e < now_ms()) {
         return Err(t("oauth.expired"));
     }
-    Ok(Token { value: value.to_string() })
+    Ok(Token {
+        value: value.to_string(),
+    })
 }
 
 /// Une fenêtre reconnue dans la réponse.
@@ -173,11 +183,22 @@ pub struct FoundWindow {
 }
 
 fn percent_of(o: &serde_json::Map<String, Value>) -> Option<f64> {
-    for k in ["utilization", "used_percent", "usedPercent", "percent_used", "percentUsed", "percent"] {
+    for k in [
+        "utilization",
+        "used_percent",
+        "usedPercent",
+        "percent_used",
+        "percentUsed",
+        "percent",
+    ] {
         if let Some(v) = o.get(k).and_then(Value::as_f64) {
             // Certaines API rendent une fraction (0..1), d'autres un
             // pourcentage. Les confondre donnerait 0,8 % au lieu de 80 %.
-            return Some(if (0.0..=1.0).contains(&v) { v * 100.0 } else { v });
+            return Some(if (0.0..=1.0).contains(&v) {
+                v * 100.0
+            } else {
+                v
+            });
         }
     }
     None
@@ -189,7 +210,11 @@ fn reset_of(o: &serde_json::Map<String, Value>) -> Option<i64> {
             Some(Value::Number(n)) => {
                 let v = n.as_f64()?;
                 // Secondes ou millisecondes : au-delà de 1e11, c'est déjà des ms.
-                return Some(if v > 1e11 { v as i64 } else { (v * 1000.0) as i64 });
+                return Some(if v > 1e11 {
+                    v as i64
+                } else {
+                    (v * 1000.0) as i64
+                });
             }
             Some(Value::String(s)) => {
                 if let Ok(d) = chrono::DateTime::parse_from_rfc3339(s) {
@@ -255,7 +280,11 @@ pub fn normalize_window(key: &str) -> Option<&'static str> {
         return Some("five_hour");
     }
     if has(&["seven_day", "weekly", "week", "7d"]) {
-        return Some(if k.contains("opus") { "weekly_opus" } else { "weekly" });
+        return Some(if k.contains("opus") {
+            "weekly_opus"
+        } else {
+            "weekly"
+        });
     }
     if k.contains("opus") {
         return Some("weekly_opus");
@@ -287,7 +316,11 @@ fn cached(c: &Cache, reason: &str, min_interval: i64) -> Collected {
     // était à un quart d'heure. Toute la mécanique écrite pour « dire pourquoi
     // le chiffre ne bouge pas » était aveugle au cas le PLUS courant.
     let backoff_until = c.state.retry_after;
-    let paced_until = if c.state.fetched_at != 0 { c.state.fetched_at + min_interval } else { 0 };
+    let paced_until = if c.state.fetched_at != 0 {
+        c.state.fetched_at + min_interval
+    } else {
+        0
+    };
     let next_at = backoff_until.max(paced_until);
 
     let errors = match (&c.state.last_error, c.state.retry_after > now) {
@@ -385,7 +418,11 @@ pub fn collect(min_interval: i64, persisted: Option<&LiveState>) -> Collected {
     });
 
     if !should_call {
-        let reason = if forced { "report en cours" } else { "relevé récent réutilisé" };
+        let reason = if forced {
+            "report en cours"
+        } else {
+            "relevé récent réutilisé"
+        };
         return with_cache(|c| cached(c, reason, min_interval));
     }
 
@@ -416,8 +453,14 @@ pub fn collect(min_interval: i64, persisted: Option<&LiveState>) -> Collected {
         Err(ureq::Error::Status(code, res)) => {
             // `Retry-After` fait autorité quand le serveur le donne ; sinon
             // report exponentiel, plafonné.
-            let retry_after = res.header("retry-after").and_then(|h| h.parse::<i64>().ok());
-            let base = if code == 429 { BACKOFF_RATE_LIMIT_MS } else { BACKOFF_TRANSIENT_MS };
+            let retry_after = res
+                .header("retry-after")
+                .and_then(|h| h.parse::<i64>().ok());
+            let base = if code == 429 {
+                BACKOFF_RATE_LIMIT_MS
+            } else {
+                BACKOFF_TRANSIENT_MS
+            };
             let hint = match code {
                 401 => t("oauth.rejectedToken"),
                 429 => t("oauth.tooManyRequests"),
@@ -435,7 +478,11 @@ pub fn collect(min_interval: i64, persisted: Option<&LiveState>) -> Collected {
             });
         }
         Err(e) => {
-            let msg = if e.to_string().contains("timed out") { t("oauth.timeout") } else { e.to_string() };
+            let msg = if e.to_string().contains("timed out") {
+                t("oauth.timeout")
+            } else {
+                e.to_string()
+            };
             return fail_transient(&msg, min_interval);
         }
     };
@@ -469,7 +516,11 @@ pub fn collect(min_interval: i64, persisted: Option<&LiveState>) -> Collected {
             last_error: None,
             failures: 0,
         };
-        Collected { quota: quota.clone(), ..Collected::default() }.with_live(LiveStats {
+        Collected {
+            quota: quota.clone(),
+            ..Collected::default()
+        }
+        .with_live(LiveStats {
             configured: true,
             from_cache: false,
             age_ms: Some(0),
@@ -482,7 +533,11 @@ pub fn collect(min_interval: i64, persisted: Option<&LiveState>) -> Collected {
             windows: quota.len(),
             // Si la forme de la réponse change, on veut pouvoir le
             // diagnostiquer sans deviner — sans jamais exposer le contenu.
-            errors: if windows.is_empty() { vec![t("oauth.unknownShape")] } else { vec![] },
+            errors: if windows.is_empty() {
+                vec![t("oauth.unknownShape")]
+            } else {
+                vec![]
+            },
             note: None,
             state: c.state.clone(),
         })

@@ -24,8 +24,15 @@ struct Colors {
     red: &'static str,
 }
 
-const PLAIN: Colors =
-    Colors { dim: "", off: "", b: "", amber: "", teal: "", blue: "", red: "" };
+const PLAIN: Colors = Colors {
+    dim: "",
+    off: "",
+    b: "",
+    amber: "",
+    teal: "",
+    blue: "",
+    red: "",
+};
 const FANCY: Colors = Colors {
     dim: "\x1b[2m",
     off: "\x1b[0m",
@@ -71,7 +78,10 @@ fn until(ts: Option<i64>) -> Option<String> {
     Some(if h >= 24 {
         t1("duration.days", "n", h / 24)
     } else if h > 0 {
-        tp("duration.hoursMinutes", &[("h", h.to_string()), ("m", format!("{m:02}"))])
+        tp(
+            "duration.hoursMinutes",
+            &[("h", h.to_string()), ("m", format!("{m:02}"))],
+        )
     } else {
         t1("duration.minutes", "n", m)
     })
@@ -114,9 +124,15 @@ fn main() {
         .find_map(|a| a.strip_prefix("--days="))
         .unwrap_or("30");
     let opts = if raw_days == "all" {
-        SnapshotOptions { all: true, ..SnapshotOptions::default() }
+        SnapshotOptions {
+            all: true,
+            ..SnapshotOptions::default()
+        }
     } else {
-        SnapshotOptions { days: raw_days.parse().ok(), ..SnapshotOptions::default() }
+        SnapshotOptions {
+            days: raw_days.parse().ok(),
+            ..SnapshotOptions::default()
+        }
     };
 
     // L'index appartient à l'application tant qu'elle tourne. `save_index` le
@@ -148,7 +164,12 @@ fn main() {
         // faute d'échéance à annoncer.
         let note = match &left {
             Some(w) => t1("cli.resetIn", "when", w),
-            None => format!("{}{}{}", c.dim, t(origin_key(g.limit_source.as_deref())), c.off),
+            None => format!(
+                "{}{}{}",
+                c.dim,
+                t(origin_key(g.limit_source.as_deref())),
+                c.off
+            ),
         };
         // La trajectoire ne s'affiche que si la saturation précède la
         // réinitialisation : sinon la fenêtre se vide d'abord, et l'annoncer
@@ -156,12 +177,20 @@ fn main() {
         let proj = match g.projection.as_ref().filter(|p| p.before_reset) {
             Some(p) => {
                 let when = until(Some(p.at)).unwrap_or_else(|| t("cli.underMinute"));
-                let key = if p.throttled { "cli.fullThrottled" } else { "cli.full" };
+                let key = if p.throttled {
+                    "cli.fullThrottled"
+                } else {
+                    "cli.full"
+                };
                 format!("  {}{}{}", c.red, t1(key, "when", when), c.off)
             }
             None => String::new(),
         };
-        let label = if g.full_label.is_empty() { &g.label } else { &g.full_label };
+        let label = if g.full_label.is_empty() {
+            &g.label
+        } else {
+            &g.full_label
+        };
         println!(
             " {}{}{} {} {}  {note}{proj}",
             c.b,
@@ -176,10 +205,27 @@ fn main() {
     println!();
     println!(
         " {}{} {}{}   {}{}{} {}{}{}   {}{}{} {}{}{}   {}{}{} {}CO₂e{}",
-        c.dim, pad_start(&snap.range.days.to_string(), 3), t("cli.days"), c.off,
-        c.amber, pad(&tokens(tot.tokens.total as f64), 9), c.off, c.dim, t("cli.tokens"), c.off,
-        c.blue, pad(&usd(cost_or_none(tot)), 9), c.off, c.dim, t("cli.cost"), c.off,
-        c.teal, pad(&co2(carbon.mid), 8), c.off, c.dim, c.off
+        c.dim,
+        pad_start(&snap.range.days.to_string(), 3),
+        t("cli.days"),
+        c.off,
+        c.amber,
+        pad(&tokens(tot.tokens.total as f64), 9),
+        c.off,
+        c.dim,
+        t("cli.tokens"),
+        c.off,
+        c.blue,
+        pad(&usd(cost_or_none(tot)), 9),
+        c.off,
+        c.dim,
+        t("cli.cost"),
+        c.off,
+        c.teal,
+        pad(&co2(carbon.mid), 8),
+        c.off,
+        c.dim,
+        c.off
     );
     println!(
         " {}          {} {}  {} {}   {} – {}{}",
@@ -201,7 +247,14 @@ fn main() {
         println!();
         println!(
             " {}{}{}     {} {}{} – {}{}",
-            c.dim, t("cli.water"), c.off, pad(&water(w.mid), 10), c.dim, water(w.min), water(w.max), c.off
+            c.dim,
+            t("cli.water"),
+            c.off,
+            pad(&water(w.mid), 10),
+            c.dim,
+            water(w.min),
+            water(w.max),
+            c.off
         );
         println!();
         println!(" {}{}{}", c.dim, t("cli.elsewhere"), c.off);
@@ -235,13 +288,24 @@ fn main() {
         let total = tot.tokens.total.max(1) as f64;
         for m in &snap.report.by_model {
             let share = (m.tokens.total as f64 / total) * 100.0;
-            let label = m.models.first().map(|x| x.label.clone()).unwrap_or_else(|| m.key.clone());
+            let label = m
+                .models
+                .first()
+                .map(|x| x.label.clone())
+                .unwrap_or_else(|| m.key.clone());
             println!(
                 " {} {}  {}  {}  {}",
                 pad(&label, 22),
                 pad_start(&tokens(m.tokens.total as f64), 9),
                 pad_start(&format!("{} %", num(share, 1)), 7),
-                pad_start(&usd(if m.cost_unknown { None } else { Some(m.cost_usd) }), 9),
+                pad_start(
+                    &usd(if m.cost_unknown {
+                        None
+                    } else {
+                        Some(m.cost_usd)
+                    }),
+                    9
+                ),
                 pad_start(&co2(m.carbon.grams_co2e.mid), 8)
             );
         }
@@ -261,7 +325,9 @@ fn main() {
                 .error
                 .clone()
                 .or_else(|| s.note.clone())
-                .unwrap_or_else(|| t1("cli.requestsInRange", "n", num(s.events_in_range as f64, 0)));
+                .unwrap_or_else(|| {
+                    t1("cli.requestsInRange", "n", num(s.events_in_range as f64, 0))
+                });
             println!(" {mark} {} {}{}{}", pad(&s.label, 30), c.dim, detail, c.off);
         }
 
@@ -275,13 +341,22 @@ fn main() {
                 c.dim,
                 pad(&r.family, 28),
                 c.off,
-                tp("cli.recon", &[("local", tokens(r.local as f64)), ("billed", tokens(r.billed as f64))]),
+                tp(
+                    "cli.recon",
+                    &[
+                        ("local", tokens(r.local as f64)),
+                        ("billed", tokens(r.billed as f64))
+                    ]
+                ),
                 hot,
-                tp("cli.reconDelta", &[
-                    ("pct", num(delta.abs(), 1)),
-                    ("dir", dir),
-                    ("days", r.days.len().to_string())
-                ]),
+                tp(
+                    "cli.reconDelta",
+                    &[
+                        ("pct", num(delta.abs(), 1)),
+                        ("dir", dir),
+                        ("days", r.days.len().to_string())
+                    ]
+                ),
                 c.off
             );
         }

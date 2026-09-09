@@ -23,7 +23,10 @@ impl Sandbox {
         std::fs::write(self.0.join(name), content).unwrap();
     }
     fn append(&self, name: &str, content: &str) {
-        let mut f = std::fs::OpenOptions::new().append(true).open(self.0.join(name)).unwrap();
+        let mut f = std::fs::OpenOptions::new()
+            .append(true)
+            .open(self.0.join(name))
+            .unwrap();
         f.write_all(content.as_bytes()).unwrap();
     }
 }
@@ -53,7 +56,13 @@ fn les_reecritures_de_streaming_ne_sont_comptees_qu_une_fois() {
     // au fil du streaming. Les compter doublerait la facture affichée.
     s.write(
         "session.jsonl",
-        &format!("{}\n{}\n{}\n{}\n", line("msg_A", 50), line("msg_A", 50), line("msg_A", 50), line("msg_B", 70)),
+        &format!(
+            "{}\n{}\n{}\n{}\n",
+            line("msg_A", 50),
+            line("msg_A", 50),
+            line("msg_A", 50),
+            line("msg_B", 70)
+        ),
     );
 
     let r = claude_code::collect(s.path(), &CollectorState::default());
@@ -72,7 +81,11 @@ fn la_lecture_incrementale_ne_recompte_pas_l_existant() {
 
     s.append("s.jsonl", &format!("{}\n", simple("c")));
     let second = claude_code::collect(s.path(), &first.state);
-    assert_eq!(second.events.len(), 1, "seule la ligne ajoutée doit remonter");
+    assert_eq!(
+        second.events.len(),
+        1,
+        "seule la ligne ajoutée doit remonter"
+    );
 }
 
 #[test]
@@ -82,7 +95,11 @@ fn une_derniere_ligne_incomplete_est_ignoree_puis_reprise() {
     // Claude Code écrit pendant qu'on lit : la dernière ligne est tronquée.
     s.write("s.jsonl", &format!("{}\n{}", simple("a"), &b[..40]));
     let first = claude_code::collect(s.path(), &CollectorState::default());
-    assert_eq!(first.events.len(), 1, "la ligne tronquée ne doit pas être comptée");
+    assert_eq!(
+        first.events.len(),
+        1,
+        "la ligne tronquée ne doit pas être comptée"
+    );
 
     // Le processus finit sa ligne : elle doit être reprise, exactement une fois.
     s.write("s.jsonl", &format!("{}\n{}\n", simple("a"), b));
@@ -110,7 +127,10 @@ fn les_quota_limits_sont_extraits_et_convertis_en_millisecondes() {
     let r = claude_code::collect(s.path(), &CollectorState::default());
     assert_eq!(r.quota.len(), 1);
     assert_eq!(r.quota[0].kind, "five_hour");
-    assert_eq!(r.quota[0].resets_at, 1_788_220_800_000, "les secondes epoch doivent devenir des ms");
+    assert_eq!(
+        r.quota[0].resets_at, 1_788_220_800_000,
+        "les secondes epoch doivent devenir des ms"
+    );
 }
 
 #[test]
@@ -137,14 +157,19 @@ fn un_journal_sans_ventilation_de_ttl_reste_tarifable() {
     // Les versions anciennes ne portent que `cache_creation_input_tokens`.
     // Le repli l'attribue au TTL 5 minutes, sans quoi l'écriture de cache
     // disparaîtrait du coût.
-    let usage: serde_json::Value =
-        serde_json::from_str(r#"{"input_tokens":5,"output_tokens":2,"cache_creation_input_tokens":300}"#)
-            .unwrap();
+    let usage: serde_json::Value = serde_json::from_str(
+        r#"{"input_tokens":5,"output_tokens":2,"cache_creation_input_tokens":300}"#,
+    )
+    .unwrap();
     let t = claude_code::extract_tokens(&usage);
     assert_eq!(t.cache_write, 300);
     assert_eq!(t.cache_write5m, 300);
     assert_eq!(t.cache_write1h, 0);
-    assert_eq!(t.total, 5 + 2 + 300, "le total ne compte l'écriture qu'une fois");
+    assert_eq!(
+        t.total,
+        5 + 2 + 300,
+        "le total ne compte l'écriture qu'une fois"
+    );
 }
 
 #[test]
@@ -155,7 +180,10 @@ fn une_ecriture_en_ttl_une_heure_pure_ne_bascule_pas_sur_le_cinq_minutes() {
     .unwrap();
     let t = claude_code::extract_tokens(&usage);
     assert_eq!(t.cache_write, 700);
-    assert_eq!(t.cache_write5m, 0, "sans quoi l'écriture serait facturée deux fois");
+    assert_eq!(
+        t.cache_write5m, 0,
+        "sans quoi l'écriture serait facturée deux fois"
+    );
     assert_eq!(t.cache_write1h, 700);
 }
 
@@ -171,5 +199,8 @@ fn un_message_sans_consommation_ne_produit_pas_d_evenement() {
         ),
     );
     let r = claude_code::collect(s.path(), &CollectorState::default());
-    assert!(r.events.is_empty(), "un tour à zéro token n'est pas une requête à compter");
+    assert!(
+        r.events.is_empty(),
+        "un tour à zéro token n'est pas une requête à compter"
+    );
 }

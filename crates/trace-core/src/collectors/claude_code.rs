@@ -51,16 +51,24 @@ pub fn rejection_cause(rec: &Value) -> Cause {
         .unwrap_or_default()
         .to_lowercase();
 
-    if ["spend limit", "spending limit", "credit balance", "out of credits"]
-        .iter()
-        .any(|p| text.contains(p))
+    if [
+        "spend limit",
+        "spending limit",
+        "credit balance",
+        "out of credits",
+    ]
+    .iter()
+    .any(|p| text.contains(p))
     {
         return Cause::Spend;
     }
     if text.contains("weekly limit") {
         return Cause::Weekly;
     }
-    if ["session limit", "usage limit", "rate limit"].iter().any(|p| text.contains(p)) {
+    if ["session limit", "usage limit", "rate limit"]
+        .iter()
+        .any(|p| text.contains(p))
+    {
         return Cause::Window;
     }
     Cause::Unknown
@@ -81,7 +89,11 @@ pub fn extract_tokens(usage: &Value) -> Tokens {
     // `cache_creation_input_tokens` sert de repli pour les versions de
     // journaux qui ne la fournissent pas.
     let declared = w5 + w1;
-    let raw_total = if declared != 0 { declared } else { n(&usage["cache_creation_input_tokens"]) };
+    let raw_total = if declared != 0 {
+        declared
+    } else {
+        n(&usage["cache_creation_input_tokens"])
+    };
     let (cache_write, cache_write5m, cache_write1h) = Tokens::split_cache_write(raw_total, w5, w1);
 
     let thinking = n(&usage["output_tokens_details"]["thinking_tokens"]);
@@ -108,8 +120,13 @@ pub fn collect(configured_dir: Option<&str>, state: &CollectorState) -> Collecte
     });
 
     let mut out = Collected {
-        state: CollectorState { files: Default::default() },
-        stats: Stats { files: files.len(), ..Default::default() },
+        state: CollectorState {
+            files: Default::default(),
+        },
+        stats: Stats {
+            files: files.len(),
+            ..Default::default()
+        },
         ..Default::default()
     };
 
@@ -131,7 +148,10 @@ pub fn collect(configured_dir: Option<&str>, state: &CollectorState) -> Collecte
                 quota.push(Quota {
                     source: SOURCE.to_string(),
                     ts: parse_ts(rec["timestamp"].as_str()).unwrap_or_else(now_ms),
-                    kind: limits["rateLimitType"].as_str().unwrap_or("unknown").to_string(),
+                    kind: limits["rateLimitType"]
+                        .as_str()
+                        .unwrap_or("unknown")
+                        .to_string(),
                     status: limits["status"].as_str().map(str::to_string),
                     resets_at: (resets_at * 1000.0) as i64,
                     using_overage: limits["isUsingOverage"].as_bool().unwrap_or(false),
