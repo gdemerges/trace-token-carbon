@@ -311,6 +311,10 @@ pub struct Index {
     pub collectors: HashMap<String, CollectorState>,
     pub events: Vec<Event>,
     pub quota: Vec<Quota>,
+    /// Le dernier relevé direct et son éventuel report, persistés pour qu'un
+    /// redémarrage ne refrappe pas l'API et n'hérite pas d'une attente muette.
+    #[serde(default)]
+    pub live: crate::collectors::anthropic_oauth::LiveState,
     /// Signalé à l'appelant quand la rétention a été élargie et que les offsets
     /// ont été remis à zéro. Non persisté.
     #[serde(skip)]
@@ -341,6 +345,7 @@ pub fn load_index(config: &Config) -> Index {
             collectors: HashMap::new(),
             events: idx.events,
             quota: idx.quota,
+            live: idx.live,
             // La relecture complète repasserait sur des périodes déjà
             // repliées : la borne de compaction voyage avec l'index pour que
             // la fusion sache écarter ce détail redevenu inutile.
@@ -501,6 +506,7 @@ pub fn save_index(idx: Index, config: &Config) -> Index {
         collectors: idx.collectors,
         events: folded.events,
         quota: idx.quota.into_iter().filter(|q| q.ts >= cutoff).collect(),
+        live: idx.live,
         reindexed: false,
     };
 

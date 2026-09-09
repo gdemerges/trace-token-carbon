@@ -272,6 +272,11 @@ pub struct Gauge {
     pub plan: Option<String>,
     pub calibratable: bool,
     pub projection: Option<Projection>,
+    /// Échéance du prochain relevé direct. Sans elle, un pourcentage qui ne
+    /// bouge pas pendant un quart d'heure se lit comme une panne, alors que
+    /// c'est la cadence qui protège du 429.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub next_live_in: Option<i64>,
 }
 
 struct Scale {
@@ -504,6 +509,7 @@ pub fn compute_gauges(events: &[Event], quota: &[Quota], config: &Config, now: i
                 // Inutile de proposer un calage manuel quand le serveur répond.
                 calibratable: live.is_none(),
                 projection: None,
+                next_live_in: None,
             });
         }
     }
@@ -608,6 +614,7 @@ pub fn compute_gauges(events: &[Event], quota: &[Quota], config: &Config, now: i
             plan: q.plan.clone(),
             calibratable: false,
             projection: None,
+            next_live_in: None,
         });
     }
 

@@ -13,6 +13,7 @@ serde_json.workspace = true
 chrono.workspace = true
 regex.workspace = true
 dirs.workspace = true
+ureq.workspace = true
 
 # Uniquement pour `kill(pid, 0)` : vérifier qu'un processus existe sans le
 # tuer. La bibliothèque standard n'expose pas d'équivalent.

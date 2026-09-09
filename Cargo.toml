@@ -25,6 +25,10 @@ serde_json = "1"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 regex = "1"
 dirs = "5"
+# Client HTTP bloquant, TLS pur Rust. `reqwest` embarquerait tokio pour trois
+# requêtes par quart d'heure — tout un ordonnanceur asynchrone dans un binaire
+# qu'on a justement choisi Tauri pour garder petit.
+ureq = { version = "2", default-features = false, features = ["tls", "json", "gzip"] }
 
 # Le binaire est distribué : on optimise pour la taille autant que pour la
 # vitesse. Le travail réel est de la lecture de fichiers, pas du calcul.

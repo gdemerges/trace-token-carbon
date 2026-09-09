@@ -4,6 +4,7 @@
 //! ou API du fournisseur — et rend des événements dans une forme unique. Aucun
 //! ne demande de mot de passe, aucun n'envoie quoi que ce soit ailleurs.
 
+pub mod anthropic_oauth;
 pub mod claude_code;
 pub mod codex_cli;
 
@@ -129,6 +130,10 @@ pub struct Collected {
     pub quota: Vec<Quota>,
     pub state: CollectorState,
     pub stats: Stats,
+    /// Rempli par le seul collecteur qui interroge le réseau : l'interface a
+    /// besoin de dire POURQUOI un chiffre ne bouge pas, et la cadence normale
+    /// n'est pas une panne.
+    pub live: Option<anthropic_oauth::LiveStats>,
 }
 
 /// Taille de la fenêtre de déduplication, en identifiants.
@@ -172,6 +177,11 @@ pub struct CollectedAll {
     pub quota: Vec<Quota>,
     pub sources: Vec<SourceStatus>,
     pub state: HashMap<String, CollectorState>,
+    /// L'état du relevé direct, à persister avec l'index.
+    pub live: anthropic_oauth::LiveState,
+    /// Ce que le relevé direct rapporte de lui-même, pour que l'interface
+    /// puisse dire pourquoi un chiffre ne bouge pas.
+    pub live_stats: Option<anthropic_oauth::LiveStats>,
 }
 
 /// Les collecteurs déjà portés, dans l'ordre d'affichage.
@@ -185,7 +195,6 @@ const PORTED: &[(&str, &str)] = &[
 /// absente de la liste se lirait comme une source qui n'existe pas, alors
 /// qu'elle existe et ne fonctionne simplement pas encore.
 const PENDING: &[(&str, &str, bool)] = &[
-    ("anthropic-oauth", "source.anthropic-oauth", false),
     ("anthropic-api", "source.anthropic-api", true),
     ("openai-api", "source.openai-api", true),
 ];
@@ -198,6 +207,7 @@ const PENDING: &[(&str, &str, bool)] = &[
 pub fn collect_all(
     config: &crate::store::Config,
     state: &HashMap<String, CollectorState>,
+    live: &anthropic_oauth::LiveState,
 ) -> CollectedAll {
     use crate::i18n::t;
 
@@ -244,6 +254,44 @@ pub fn collect_all(
                 out.quota.append(&mut res.quota);
                 out.state.insert((*id).to_string(), res.state);
             }
+        }
+        out.sources.push(entry);
+    }
+
+    // --- relevé direct ------------------------------------------------------
+    // Le seul collecteur qui interroge le réseau. Il ne remonte pas de tokens
+    // mais des taux d'occupation, et il est le seul chiffre juste sur les
+    // fenêtres : aucune reconstruction locale ne fait mieux.
+    {
+        let id = anthropic_oauth::SOURCE;
+        let mut entry = SourceStatus {
+            id: id.to_string(),
+            label: t("source.anthropic-oauth"),
+            provides_tokens: false,
+            enabled: !disabled.contains(id),
+            available: false,
+            events: 0,
+            quota: 0,
+            error: None,
+            note: None,
+            stats: Stats::default(),
+        };
+        if !entry.enabled {
+            entry.note = Some(t("source.disabled"));
+        } else if !anthropic_oauth::is_available() {
+            entry.note = Some(t("source.needClaudeLogin"));
+        } else {
+            entry.available = true;
+            let mut res = anthropic_oauth::collect(anthropic_oauth::MIN_INTERVAL_MS, Some(live));
+            entry.quota = res.quota.len();
+            if let Some(l) = res.live.take() {
+                if !l.errors.is_empty() {
+                    entry.error = Some(l.errors.join(" ; "));
+                }
+                out.live = l.state.clone();
+                out.live_stats = Some(l);
+            }
+            out.quota.append(&mut res.quota);
         }
         out.sources.push(entry);
     }

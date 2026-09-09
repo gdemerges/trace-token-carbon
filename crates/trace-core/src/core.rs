@@ -55,12 +55,14 @@ pub struct State {
     pub events: Vec<Event>,
     pub quota: Vec<Quota>,
     pub sources: Vec<SourceStatus>,
+    /// Ce que le relevé direct rapporte de lui-même au dernier passage.
+    pub live_stats: Option<crate::collectors::anthropic_oauth::LiveStats>,
 }
 
 /// Rafraîchit toutes les sources et rend l'état à afficher.
 pub fn refresh(config: Config, persist: bool) -> State {
     let idx = store::load_index(&config);
-    let collected = collect_all(&config, &idx.collectors);
+    let collected = collect_all(&config, &idx.collectors, &idx.live);
 
     // Deux régimes de fusion, parce que deux natures d'enregistrement.
     //
@@ -126,6 +128,7 @@ pub fn refresh(config: Config, persist: bool) -> State {
         events,
         quota,
         compacted_through,
+        live: collected.live.clone(),
         ..Index::default()
     };
 
@@ -139,6 +142,7 @@ pub fn refresh(config: Config, persist: bool) -> State {
         events: index.events.clone(),
         quota: index.quota.clone(),
         sources: collected.sources,
+        live_stats: collected.live_stats,
         index,
         config,
     }
@@ -227,7 +231,16 @@ pub fn snapshot(state: &State, opts: &SnapshotOptions) -> Snapshot {
     };
 
     let mut rep = report(&state.events, &report_opts);
-    let gauges = compute_gauges(&state.events, &state.quota, config, to);
+    let mut gauges = compute_gauges(&state.events, &state.quota, config, to);
+
+    // La jauge en direct porte l'échéance du prochain relevé.
+    if let Some(next) = state.live_stats.as_ref().map(|l| l.next_attempt_in).filter(|n| *n > 0) {
+        for g in &mut gauges {
+            if matches!(g.limit_source.as_deref(), Some("live") | Some("live-stale")) {
+                g.next_live_in = Some(next);
+            }
+        }
+    }
 
     // Une période de comparaison presque vide produit des variations absurdes
     // (+15 000 %). On la signale plutôt que de l'afficher telle quelle.
@@ -274,8 +287,7 @@ pub fn snapshot(state: &State, opts: &SnapshotOptions) -> Snapshot {
             all: opts.all,
         },
         data_horizon: horizon,
-        // Le relevé direct n'est pas encore porté : rien à dire de son état.
-        live_status: None,
+        live_status: live_status(state),
         report: rep,
         gauges,
         sources,
@@ -284,6 +296,32 @@ pub fn snapshot(state: &State, opts: &SnapshotOptions) -> Snapshot {
         methodology: None,
         stale_error: None,
     }
+}
+
+/// L'état du relevé direct, tel que l'interface doit le présenter.
+///
+/// Une source en attente après un échec n'est PAS « ok » : la première version
+/// ne regardait que l'erreur, or un report hérité d'un redémarrage n'a pas de
+/// motif. L'interface n'affichait donc rien et l'utilisateur voyait un chiffre
+/// figé sans explication.
+///
+/// La cadence, elle, se dit sur la jauge elle-même et non dans un bandeau
+/// d'alerte : c'est le fonctionnement nominal, pas un incident.
+fn live_status(state: &State) -> Option<serde_json::Value> {
+    let l = state.live_stats.as_ref()?;
+    let waiting = l.next_attempt_in > 0 && l.next_attempt_reason == Some("backoff");
+    let pacing = l.next_attempt_in > 0 && l.next_attempt_reason == Some("cadence");
+    let error = l.errors.first().cloned().or_else(|| {
+        waiting.then(|| crate::i18n::t("oauth.suspended"))
+    });
+    Some(serde_json::json!({
+        "ok": l.errors.is_empty() && !waiting,
+        "waiting": waiting,
+        "pacing": pacing,
+        "error": error,
+        "ageMs": l.age_ms,
+        "nextAttemptIn": l.next_attempt_in,
+    }))
 }
 
 /// Recale une jauge sur un pourcentage relevé par l'utilisateur et enregistre
