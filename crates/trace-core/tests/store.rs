@@ -293,18 +293,38 @@ fn une_signature_inchangee_evite_de_reecrire() {
 ///
 /// Le PID 1 servait à cela côté JS. C'est vrai sous Unix, où init ne meurt
 /// jamais ; Windows n'a pas d'init, et le test s'y trompait de conclusion.
-fn alive_pid() -> u32 {
-    parent_pid()
+/// Le parent y répondait, mais il obligeait à marquer les cas `cfg(unix)` —
+/// et le chemin Windows de la détection, qui est le moins évident des deux,
+/// n'était alors éprouvé nulle part.
+///
+/// On lance donc un vrai processus, sur les deux systèmes. Il vit le temps du
+/// test et se fait tuer à sa sortie.
+struct LiveProcess(std::process::Child);
+
+impl LiveProcess {
+    fn spawn() -> Self {
+        let mut cmd = if cfg!(windows) {
+            let mut c = std::process::Command::new("cmd");
+            c.args(["/c", "timeout", "/t", "30", "/nobreak"]);
+            c
+        } else {
+            let mut c = std::process::Command::new("sh");
+            c.args(["-c", "sleep 30"]);
+            c
+        };
+        LiveProcess(cmd.spawn().expect("un processus enfant"))
+    }
+
+    fn pid(&self) -> u32 {
+        self.0.id()
+    }
 }
 
-#[cfg(unix)]
-fn parent_pid() -> u32 {
-    unsafe { libc::getppid() as u32 }
-}
-
-#[cfg(not(unix))]
-fn parent_pid() -> u32 {
-    std::process::id()
+impl Drop for LiveProcess {
+    fn drop(&mut self) {
+        let _ = self.0.kill();
+        let _ = self.0.wait();
+    }
 }
 
 fn mark_owner(pid: u32, at: i64) {
@@ -319,12 +339,12 @@ fn notre_propre_marque_ne_nous_bloque_pas() {
     assert!(!store::owned_by_another(now));
 }
 
-#[cfg(unix)]
 #[test]
 fn une_marque_fraiche_d_un_processus_vivant_nous_met_en_lecture_seule() {
     let _s = Sandbox::new("prop-vivant");
     let now = trace_core::util::now_ms();
-    mark_owner(alive_pid(), now);
+    let live = LiveProcess::spawn();
+    mark_owner(live.pid(), now);
     assert!(store::owned_by_another(now));
 }
 
@@ -332,7 +352,8 @@ fn une_marque_fraiche_d_un_processus_vivant_nous_met_en_lecture_seule() {
 fn une_marque_perimee_ne_condamne_pas_l_index() {
     let _s = Sandbox::new("prop-perime");
     let now = trace_core::util::now_ms();
-    mark_owner(parent_pid(), now - store::OWNER_STALE_MS - 1000);
+    let live = LiveProcess::spawn();
+    mark_owner(live.pid(), now - store::OWNER_STALE_MS - 1000);
     assert!(
         !store::owned_by_another(now),
         "un propriétaire tué sans relâcher ne bloque pas à vie"
@@ -348,7 +369,6 @@ fn un_processus_mort_ne_condamne_pas_l_index() {
     assert!(!store::owned_by_another(now));
 }
 
-#[cfg(unix)]
 #[test]
 fn un_second_processus_n_ecrase_pas_l_index_du_premier() {
     let _s = Sandbox::new("prop-ecrasement");
@@ -363,7 +383,8 @@ fn un_second_processus_n_ecrase_pas_l_index_du_premier() {
     let written = std::fs::read(store::index_path()).unwrap();
 
     // Un autre processus tient désormais la marque.
-    mark_owner(alive_pid(), now);
+    let live = LiveProcess::spawn();
+    mark_owner(live.pid(), now);
     store::reset_signature();
     let result = store::save_index(index_with(vec![]), &config);
 
