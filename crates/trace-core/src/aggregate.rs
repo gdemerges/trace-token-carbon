@@ -17,6 +17,8 @@ use chrono::{Datelike, Local, TimeZone, Timelike};
 use serde::Serialize;
 use std::collections::HashMap;
 
+const DAY_MS: i64 = 86_400_000;
+
 #[derive(Debug, Clone, Default)]
 pub struct Options {
     pub from: Option<i64>,
@@ -343,7 +345,7 @@ fn pct_change(cur: f64, prev: f64) -> Option<f64> {
 /// Rapport complet sur une période.
 pub fn report(events: &[Event], opts: &Options) -> Report {
     let to = opts.to.unwrap_or_else(now_ms);
-    let from = opts.from.unwrap_or(to - 30 * 86_400_000);
+    let from = opts.from.unwrap_or(to - 30 * DAY_MS);
 
     // Le chiffre facturé et la mesure locale décrivent les MÊMES requêtes :
     // les sommer doublait le total dès qu'une clé Admin était renseignée. On
@@ -479,4 +481,142 @@ pub fn report(events: &[Event], opts: &Options) -> Report {
         by_model,
         by_project,
     }
+}
+
+// ---------------------------------------------------------------------------
+// Export
+// ---------------------------------------------------------------------------
+
+/// Lignes d'export, en format LONG : une ligne par (jour, source, modèle,
+/// projet), toutes colonnes renseignées.
+///
+/// La première version mélangeait deux tables dans un même fichier — des
+/// lignes journalières dont huit colonnes sur treize restaient vides, suivies
+/// de lignes « TOTAL » par modèle. Illisible par un tableur, inexploitable en
+/// tableau croisé. Un format long se pivote, se filtre et se somme sans
+/// retraitement.
+pub fn export_rows(events: &[Event], opts: &Options) -> Vec<Vec<String>> {
+    let to = opts.to.unwrap_or_else(now_ms);
+    let from = opts.from.unwrap_or(to - 30 * DAY_MS);
+
+    // Même départage que le rapport : un export qui compterait deux fois les
+    // mêmes requêtes serait pire qu'un affichage faux, puisqu'il survit à
+    // l'application et part dans un tableur.
+    let (measured, _) = provenance::dedupe_families(events);
+    let in_range: Vec<Event> =
+        measured.into_iter().filter(|e| e.ts >= from && e.ts <= to).collect();
+
+    let groups = group_by(
+        &in_range,
+        |e| {
+            Some(format!(
+                "{}\u{0}{}\u{0}{}\u{0}{}",
+                day_key(e.ts),
+                e.source,
+                e.model,
+                e.project.as_deref().unwrap_or("")
+            ))
+        },
+        opts,
+    );
+
+    let header: Vec<String> = [
+        "date", "source", "modele", "fournisseur", "projet",
+        "requetes", "tokens_entree", "tokens_sortie", "cache_ecrit", "cache_lu", "tokens_total",
+        "cout_usd", "cout_sans_cache_usd", "gco2e_min", "gco2e_median", "gco2e_max",
+        "energie_wh", "eau_l",
+    ]
+    .iter()
+    .map(|s| s.to_string())
+    .collect();
+
+    let mut body: Vec<Vec<String>> = groups
+        .iter()
+        .map(|g| {
+            let parts: Vec<&str> = g.key.split('\u{0}').collect();
+            let m = g.models.first();
+            vec![
+                parts.first().unwrap_or(&"").to_string(),
+                parts.get(1).unwrap_or(&"").to_string(),
+                m.map(|m| m.label.clone()).unwrap_or_else(|| parts.get(2).unwrap_or(&"").to_string()),
+                m.map(|m| m.provider.clone()).unwrap_or_default(),
+                parts.get(3).unwrap_or(&"").to_string(),
+                g.requests.to_string(),
+                g.tokens.input.to_string(),
+                g.tokens.output.to_string(),
+                g.tokens.cache_write.to_string(),
+                g.tokens.cache_read.to_string(),
+                g.tokens.total.to_string(),
+                // Un coût inconnu reste VIDE, jamais 0 : dans un tableur, un
+                // zéro se somme et se fait passer pour de la gratuité.
+                if g.cost_unknown { String::new() } else { format!("{:.6}", g.cost_usd) },
+                format!("{:.6}", g.cost_without_cache_usd),
+                format!("{:.3}", g.carbon.grams_co2e.min),
+                format!("{:.3}", g.carbon.grams_co2e.mid),
+                format!("{:.3}", g.carbon.grams_co2e.max),
+                format!("{:.3}", g.carbon.energy_wh.mid),
+                format!("{:.3}", g.carbon.water_l.mid),
+            ]
+        })
+        .collect();
+
+    // Ordre chronologique, puis décroissant en volume : lisible tel quel.
+    body.sort_by(|a, b| {
+        a[0].cmp(&b[0]).then_with(|| {
+            let n = |s: &String| s.parse::<i64>().unwrap_or(0);
+            n(&b[10]).cmp(&n(&a[10]))
+        })
+    });
+
+    let mut rows = vec![header];
+    rows.extend(body);
+    rows
+}
+
+/// Annexe méthodologique : un facteur par ligne, avec sa citation.
+///
+/// Se joint à l'export de données. Un tableau de grammes sans les facteurs qui
+/// l'ont produit n'est pas vérifiable — et la colonne `version_figee` dit,
+/// ligne à ligne, ce qui reste à relever sur la publication avant un usage
+/// audité.
+pub fn methodology_rows(grid_key: Option<&str>) -> Vec<Vec<String>> {
+    let mut rows = vec![[
+        "groupe", "facteur", "valeur", "unite", "source", "citation", "version_figee", "reserve",
+    ]
+    .iter()
+    .map(|s| s.to_string())
+    .collect::<Vec<String>>()];
+
+    for r in crate::carbon::factors::factor_table(grid_key) {
+        rows.push(vec![
+            r.group.to_string(),
+            r.key,
+            r.value,
+            r.unit.to_string(),
+            r.source.to_string(),
+            r.citation,
+            if r.pinned { "oui" } else { "non" }.to_string(),
+            r.note,
+        ]);
+    }
+    rows
+}
+
+/// Sérialise en CSV, avec échappement RFC 4180.
+pub fn to_csv(rows: &[Vec<String>]) -> String {
+    rows.iter()
+        .map(|r| {
+            r.iter()
+                .map(|c| {
+                    if c.contains([',', '"', ';', '\n', '\r']) {
+                        format!("\"{}\"", c.replace('"', "\"\""))
+                    } else {
+                        c.clone()
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join(",")
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }

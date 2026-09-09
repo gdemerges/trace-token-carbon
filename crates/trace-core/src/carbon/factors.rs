@@ -307,9 +307,9 @@ pub static EQUIVALENT_TABLE: LazyLock<Vec<(&'static str, &'static str, f64, &'st
         vec![
             ("car", "km", 120.0, "🚗", "Voiture particulière moyenne, usage seul (hors fabrication du véhicule)."),
             ("streaming", "h", 36.0, "📺", "Ordre de grandeur très dépendant du terminal, de la définition et du réseau."),
-            ("phone", "", 8.0, "🔋", "Une charge complète sur le mix français, hors fabrication de l'appareil."),
+            ("phone", "", 8.0, "🔋", "Une charge complète sur le mix français, hors fabrication de l’appareil."),
             ("tgv", "km", 2.3, "🚆", "Par voyageur-kilomètre, sur le mix électrique français."),
-            ("beef", "g", 27.0, "🥩", "Viande bovine, du champ à l'assiette. Périmètre cycle de vie, contrairement aux autres équivalents."),
+            ("beef", "g", 27.0, "🥩", "Viande bovine, du champ à l’assiette. Périmètre cycle de vie, contrairement aux autres équivalents."),
         ]
     });
 
@@ -326,4 +326,128 @@ pub fn equivalent_specs() -> Vec<Equivalent> {
             note,
         })
         .collect()
+}
+
+/// Une ligne de l'annexe méthodologique.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FactorRow {
+    pub group: &'static str,
+    pub key: String,
+    pub value: String,
+    pub unit: &'static str,
+    pub source: &'static str,
+    pub citation: String,
+    /// Version et date relevées sur la publication : condition d'entrée dans
+    /// un livrable audité.
+    pub pinned: bool,
+    pub note: String,
+}
+
+fn row(group: &'static str, key: String, value: String, unit: &'static str, source_id: &'static str, note: &str) -> FactorRow {
+    let s = super::sources::source(source_id);
+    FactorRow {
+        group,
+        key,
+        value,
+        unit,
+        source: source_id,
+        citation: super::sources::cite(source_id),
+        pinned: s.is_some_and(|s| s.pinned),
+        note: if note.is_empty() { s.map(|s| s.note.to_string()).unwrap_or_default() } else { note.to_string() },
+    }
+}
+
+const G_METHOD: &str = "Méthode d’inférence";
+const G_WEIGHTS: &str = "Pondération par classe de token";
+const G_GRID: &str = "Mix électrique";
+const G_INFRA: &str = "Infrastructure du fournisseur";
+const G_WATER: &str = "Empreinte eau";
+const G_EQUIV: &str = "Équivalent de communication";
+
+/// Tableau des facteurs employés, prêt à être annexé à un rapport : une ligne
+/// par constante, avec sa valeur, son unité et sa citation.
+///
+/// La méthodologie voyage AVEC le chiffre. La construire et ne jamais la
+/// montrer reviendrait à demander de croire un total dont aucun terme n'est
+/// vérifiable — exactement ce qu'un chiffre carbone ne doit pas être.
+///
+/// `grid_key` restreint la citation au seul mix effectivement retenu : citer
+/// les onze quand le calcul n'en emploie qu'un est la faute qu'un vérificateur
+/// relève en premier.
+pub fn factor_table(grid_key: Option<&str>) -> Vec<FactorRow> {
+    let mut rows = Vec::new();
+
+    let m = |k: &str, v: String, u: &'static str, note: &str| (k.to_string(), v, u, note.to_string());
+    for (key, value, unit, note) in [
+        m("MODEL_QUANTIZATION_BITS", Ecologits::MODEL_QUANTIZATION_BITS.to_string(), "bits",
+          "Hypothèse de service en production. Aucun fournisseur fermé ne publie sa quantification ; elle ne joue que sur le nombre de GPU nécessaires, donc sur la part serveur et la fabrication."),
+        m("GPU_ENERGY_ALPHA", Ecologits::GPU_ENERGY_ALPHA.to_string(), "Wh/token/Md-paramètres",
+          "Régression EcoLogits sur modèles ouverts, extrapolée aux modèles fermés."),
+        m("GPU_ENERGY_BETA", Ecologits::GPU_ENERGY_BETA.to_string(), "Wh/token", ""),
+        m("GPU_LATENCY_ALPHA", Ecologits::GPU_LATENCY_ALPHA.to_string(), "s/token/Md-paramètres", ""),
+        m("GPU_LATENCY_BETA", Ecologits::GPU_LATENCY_BETA.to_string(), "s/token", ""),
+        m("GPU_MEMORY_GB", Ecologits::GPU_MEMORY_GB.to_string(), "Go",
+          "Serveur de référence A100 80 Go. Le matériel réellement employé par les fournisseurs est plus récent (H100/H200, TPU) et vraisemblablement plus efficace : le calcul est donc plutôt conservateur."),
+        m("SERVER_GPU_COUNT", Ecologits::SERVER_GPU_COUNT.to_string(), "GPU", ""),
+        m("SERVER_POWER_W", Ecologits::SERVER_POWER_W.to_string(), "W", "Hors GPU."),
+    ] {
+        rows.push(row(G_METHOD, key, value, unit, "ecologits", &note));
+    }
+    for (key, value, unit, note) in [
+        m("GPU_EMBODIED_GWP_KG", Ecologits::GPU_EMBODIED_GWP_KG.to_string(), "kgCO2e/GPU", ""),
+        m("SERVER_EMBODIED_GWP_KG", Ecologits::SERVER_EMBODIED_GWP_KG.to_string(), "kgCO2e/serveur", "Hors GPU."),
+        m("HARDWARE_LIFESPAN_S", Ecologits::HARDWARE_LIFESPAN_S.to_string(), "s",
+          "Amortissement sur 5 ans. Une durée de vie réelle plus courte en centre de données majorerait la part de fabrication."),
+    ] {
+        rows.push(row(G_METHOD, key, value, unit, "boavizta", &note));
+    }
+
+    let w = TOKEN_ENERGY_WEIGHTS;
+    for (key, r, note) in [
+        ("output", w.output, "Référence, 1.0 par définition."),
+        ("input", w.input, "Bilan de FLOPs du prefill, MFU 40 % (borne basse) à MFU faible (borne haute)."),
+        ("cacheWrite", w.cache_write, "Prefill + persistance du KV."),
+        ("cacheRead", w.cache_read, "Lecture mémoire et attention seules ; projections et FFN économisés."),
+    ] {
+        rows.push(row(G_WEIGHTS, key.to_string(), format!("{} – {}", r.min, r.max),
+                      "équivalent-token de sortie", "traceDerived", note));
+    }
+
+    // Le mix retenu, et lui seul, quand l'appelant le précise.
+    let keys: Vec<&str> = match grid_key {
+        Some(k) => vec![k],
+        None => grid_keys(),
+    };
+    for k in keys {
+        let Some(g) = grid(k) else { continue };
+        rows.push(row(G_GRID, g.label.clone(), g.value.to_string(), "gCO2e/kWh", g.source,
+                      &format!("Approche {}.", g.basis)));
+    }
+
+    for key in ["anthropic", "openai", "local", "unknown"] {
+        let i = provider_infra(key);
+        rows.push(row(G_INFRA, format!("{} — PUE", i.label), format!("{} – {}", i.pue.min, i.pue.max),
+                      "sans dimension", i.source, i.basis));
+        rows.push(row(G_INFRA, format!("{} — eau sur site", i.label), format!("{} – {}", i.wue_l.min, i.wue_l.max),
+                      "L/kWh", if i.wue_l.max > 0.0 { "waterFootprint" } else { i.source },
+                      &format!("Hébergement : {}.", i.hosts)));
+        if grid_key.is_some() {
+            continue; // le mix retenu est déjà cité plus haut
+        }
+        let label = grid(i.grid_key).map(|g| g.label).unwrap_or_else(|| i.grid_key.to_string());
+        rows.push(row(G_INFRA, format!("{} — mix par défaut", i.label), label, "zone", i.source,
+                      &format!("Hypothèse de localisation pour {key}.")));
+    }
+
+    rows.push(row(G_WATER, "OFFSITE_L_PER_KWH".to_string(),
+                  format!("{} – {}", Water::OFFSITE_L_PER_KWH.min, Water::OFFSITE_L_PER_KWH.max),
+                  "L/kWh", "waterFootprint",
+                  "Eau consommée pour produire l'électricité, hors site. Fourchette couvrant les mix électriques courants, faute d'un facteur par pays."));
+
+    for e in equivalent_specs() {
+        rows.push(row(G_EQUIV, e.label, e.g_per_unit.to_string(), "gCO2e/unité", e.source, e.note));
+    }
+
+    rows
 }

@@ -81,6 +81,26 @@ impl AppState {
         Ok(())
     }
 
+    /// L'export, construit sur la MÊME période que ce qui est affiché.
+    pub fn export_csv(&self, opts: &SnapshotOptions) -> String {
+        use trace_core::aggregate::{export_rows, methodology_rows, to_csv, Options};
+        let s = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        let snap = core::snapshot(&s, opts);
+        let report_opts = Options {
+            from: Some(snap.range.from),
+            to: Some(snap.range.to),
+            carbon: trace_core::carbon::Options {
+                grid_key: Some(s.config.carbon.grid_key.clone()),
+                pue: s.config.carbon.pue,
+                ..Default::default()
+            },
+            model_overrides: Some(s.config.model_overrides.clone()),
+        };
+        let data = to_csv(&export_rows(&s.events, &report_opts));
+        let method = to_csv(&methodology_rows(Some(&s.config.carbon.grid_key)));
+        format!("{data}\n\n{method}")
+    }
+
     pub fn set_shortcut_registered(&self, ok: bool) {
         self.shortcut_registered.store(ok, Ordering::Relaxed);
     }

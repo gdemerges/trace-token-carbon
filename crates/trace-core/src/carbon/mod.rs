@@ -9,6 +9,7 @@
 //! des modèles fermés ne sont pas publics.
 
 pub mod factors;
+pub mod sources;
 
 use crate::models::{Model, ParamProfile, Range};
 use crate::util::Tokens;

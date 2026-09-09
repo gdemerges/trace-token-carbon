@@ -188,10 +188,9 @@ pub struct Snapshot {
     pub sources: Vec<SourceStatus>,
     pub config: Config,
     pub has_keys: HashMap<String, bool>,
-    /// L'annexe méthodologique — la table des facteurs et leurs citations.
-    /// Reste à porter : c'est de la donnée et de la mise en forme, aucun
-    /// chiffre affiché n'en dépend.
-    pub methodology: Option<serde_json::Value>,
+    /// L'annexe méthodologique : la table des facteurs, leurs citations, et
+    /// ce qu'il reste à figer avant qu'un livrable soit opposable.
+    pub methodology: serde_json::Value,
     pub stale_error: Option<String>,
     /// Ce que les sources rapportent au-delà des tokens — pour l'instant, le
     /// coût facturé par Anthropic.
@@ -300,7 +299,10 @@ pub fn snapshot(state: &State, opts: &SnapshotOptions) -> Snapshot {
         sources,
         config: safe_config,
         has_keys,
-        methodology: None,
+        methodology: serde_json::json!({
+            "factors": crate::carbon::factors::factor_table(Some(&config.carbon.grid_key)),
+            "unpinned": crate::carbon::sources::unpinned_sources(),
+        }),
         stale_error: None,
         extra: match &state.cost {
             Some(c) => serde_json::json!({ "anthropic-api": { "cost": c } }),

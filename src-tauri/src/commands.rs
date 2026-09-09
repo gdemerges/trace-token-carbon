@@ -86,10 +86,35 @@ fn sys_locale() -> Option<String> {
     sys_locale::get_locale()
 }
 
+/// Enregistre une clé Admin.
+///
+/// Une chaîne vide EFFACE la clé plutôt que d'en stocker une vide : c'est le
+/// geste par lequel l'utilisateur retire son accès, et une chaîne vide passée
+/// à l'API produirait un 401 incompréhensible.
 #[tauri::command]
-pub fn key_set(provider: String, _value: String) -> bool {
-    eprintln!("key_set non porté ({provider}) : les collecteurs réseau restent à faire");
-    false
+pub fn key_set(state: State<'_, AppState>, provider: String, value: String) -> bool {
+    let key = value.trim();
+    let field = match provider.as_str() {
+        "anthropic" => "anthropicAdminKey",
+        "openai" => "openaiAdminKey",
+        other => {
+            eprintln!("fournisseur inconnu : {other}");
+            return false;
+        }
+    };
+    let patch = json!({ field: if key.is_empty() { Value::Null } else { Value::from(key) } });
+    match state.patch_config(patch) {
+        Ok(_) => {
+            // La clé change ce que les sources peuvent lire : on relit tout de
+            // suite plutôt que d'attendre le prochain cycle.
+            state.refresh();
+            true
+        }
+        Err(e) => {
+            eprintln!("key_set : {e}");
+            false
+        }
+    }
 }
 
 #[tauri::command]
@@ -117,10 +142,13 @@ pub fn popover_close(app: AppHandle) {
     }
 }
 
+/// Rend l'export CSV, données et annexe méthodologique.
+///
+/// Un tableau de grammes sans les facteurs qui l'ont produit n'est pas
+/// vérifiable : les deux partent ensemble, séparés par une ligne vide.
 #[tauri::command]
-pub fn export_csv(_options: Option<Value>) -> Option<String> {
-    eprintln!("export_csv non porté");
-    None
+pub fn export_csv(state: State<'_, AppState>, options: Option<Value>) -> String {
+    state.export_csv(&snapshot_options(options))
 }
 
 #[tauri::command]
