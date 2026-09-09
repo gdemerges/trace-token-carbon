@@ -25,3 +25,8 @@ serde_json.workspace = true
 tauri = { version = "2", features = ["tray-icon", "image-png", "macos-private-api"] }
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-opener = "2"
+
+# La langue du système, correctement : `LANG` est fixé par le terminal et vaut
+# souvent « en_US » sur un poste français. macOS répond `AppleLanguages`,
+# Windows et Linux ont chacun leur source.
+sys-locale = "0.3"

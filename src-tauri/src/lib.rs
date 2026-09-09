@@ -1,16 +1,15 @@
 //! La coquille : barre d'état, popover, tableau de bord.
 //!
-//! Ce lot est délibérément une COQUILLE. Le cœur n'est pas encore porté :
-//! `snapshot` sert un instantané produit par la version JS (voir
-//! `scripts/dev-fixture.js`), pour éprouver ce qui ne peut l'être autrement —
-//! l'empreinte réelle du binaire, et le rendu du SVG écrit à la main par
-//! WKWebView plutôt que par Chromium. Si les jauges passent mal, autant le
-//! savoir avant de porter deux mille lignes.
+//! L'instantané servi ici est RÉEL : il vient de `trace_core`, qui lit les
+//! journaux de la machine. Ce module ne fait que ce qu'une coquille doit
+//! faire — ouvrir des fenêtres, tenir une icône, relayer des appels.
 
 mod commands;
+mod state;
 mod windows;
 
 use tauri::menu::{Menu, MenuItem};
+use tauri::Manager;
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut, ShortcutState};
 
@@ -77,6 +76,7 @@ pub fn run() {
             commands::open_external,
             commands::quit,
         ])
+        .manage(state::AppState::boot())
         .setup(|app| {
             let handle = app.handle().clone();
 
@@ -113,10 +113,17 @@ pub fn run() {
             use tauri_plugin_global_shortcut::GlobalShortcutExt;
             // Un raccourci déjà pris par une autre application n'est pas une
             // raison de refuser de démarrer : l'icône reste cliquable, et
-            // `shortcut_status` permettra de le dire dans les réglages.
-            if let Err(e) = app.global_shortcut().register(default_shortcut()) {
-                eprintln!("raccourci global indisponible : {e}");
-            }
+            // `shortcut_status` le dit dans les réglages.
+            let registered = match app.global_shortcut().register(default_shortcut()) {
+                Ok(()) => true,
+                Err(e) => {
+                    eprintln!("raccourci global indisponible : {e}");
+                    false
+                }
+            };
+            app.state::<state::AppState>().set_shortcut_registered(registered);
+
+            start_refresh_loop(handle.clone());
 
             // En développement, les deux fenêtres s'ouvrent d'emblée : une
             // application qui démarre invisible ne se laisse pas éprouver, et
@@ -152,17 +159,52 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("construction de l'application")
         .run(|_app, event| {
-            // Fermer le tableau de bord ne quitte pas : TRACE reste dans la
-            // barre d'état, c'est tout son propos.
-            if let tauri::RunEvent::ExitRequested { api, .. } = event {
-                api.prevent_exit();
+            match event {
+                // Fermer le tableau de bord ne quitte pas : TRACE reste dans
+                // la barre d'état, c'est tout son propos.
+                tauri::RunEvent::ExitRequested { api, .. } => api.prevent_exit(),
+                // On relâche la marque de propriété en partant : le processus
+                // suivant n'a pas à attendre cinq minutes qu'elle périme.
+                tauri::RunEvent::Exit => trace_core::store::release_ownership(),
+                _ => {}
             }
         });
 }
 
+/// Rafraîchit en boucle et pousse le résultat aux fenêtres ouvertes.
+///
+/// Un fil dédié plutôt qu'une tâche asynchrone : le cœur est synchrone, et le
+/// travail — relire des fichiers — n'a rien à gagner à un ordonnanceur. Ce qui
+/// compte est de ne pas le faire sur le fil de l'interface, où il figerait les
+/// fenêtres le temps de la lecture.
+fn start_refresh_loop(app: tauri::AppHandle) {
+    std::thread::spawn(move || loop {
+        let interval = {
+            let state = app.state::<state::AppState>();
+            let secs = state.config().refresh_interval_sec.clamp(10, 3600);
+            std::time::Duration::from_secs(secs)
+        };
+        std::thread::sleep(interval);
+
+        let state = app.state::<state::AppState>();
+        state.refresh();
+        // On ne peint que si quelqu'un regarde : recalculer un instantané
+        // complet pour l'envoyer à des fenêtres fermées était précisément ce
+        // que le dernier commit de la version Electron avait supprimé.
+        let watching = app
+            .webview_windows()
+            .values()
+            .any(|w| w.is_visible().unwrap_or(false));
+        if !watching {
+            continue;
+        }
+        let snap = state.snapshot(&trace_core::core::SnapshotOptions::default());
+        broadcast(&app, &snap);
+    });
+}
+
 /// Diffuse un nouvel instantané aux fenêtres ouvertes.
-#[allow(dead_code)]
-pub fn broadcast(app: &tauri::AppHandle, snapshot: &serde_json::Value) {
+fn broadcast<T: serde::Serialize + Clone>(app: &tauri::AppHandle, snapshot: &T) {
     use tauri::Emitter;
     let _ = app.emit("trace:update", snapshot);
 }

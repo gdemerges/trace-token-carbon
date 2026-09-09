@@ -18,7 +18,6 @@
     "dist:linux": "node scripts/make-icons.js && node scripts/make-logos.js && electron-builder --linux",
     "icons": "node scripts/make-icons.js",
     "logos": "node scripts/make-logos.js",
-    "fixture": "node scripts/dev-fixture.js",
     "tauri:dev": "cargo run -p trace-app",
     "tauri:build": "cargo build --release -p trace-app",
     "test:rust": "cargo test"

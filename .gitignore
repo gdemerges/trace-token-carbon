@@ -17,9 +17,5 @@ index.json
 # Artefacts de compilation Rust.
 target/
 
-# Instantané de développement : noms de projets et volumétries réelles, produit
-# localement par `npm run fixture`. Voir scripts/dev-fixture.js.
-src-tauri/fixtures/
-
 # Schémas d'autorisations régénérés par `tauri-build` à chaque compilation.
 src-tauri/gen/schemas/

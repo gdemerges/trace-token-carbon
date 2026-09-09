@@ -1,117 +1,103 @@
 //! La surface IPC, reprise une pour une de `src/main/preload.js`.
 //!
-//! ÉCHAFAUDAGE. Tant que le cœur n'est pas porté, `snapshot` sert le fichier
-//! produit par `npm run fixture` — un instantané réel, produit par la version
-//! JS, gardé hors du dépôt parce qu'il porte les noms de projets et les
-//! volumétries de qui l'a produit. En son absence, l'état vide, qui est un cas
-//! de rendu à éprouver de toute façon.
+//! L'instantané est désormais RÉEL : il vient de `trace_core`, qui lit les
+//! journaux de la machine, résout les modèles, chiffre le coût et l'empreinte
+//! et reconstruit les fenêtres de limitation. La fixture de développement a
+//! disparu avec elle.
 //!
-//! Chaque commande porte donc soit son implémentation définitive (celles qui
-//! ne dépendent que des fenêtres), soit un `todo` explicite. Aucune ne ment en
-//! rendant une valeur plausible.
+//! Ce qui reste non porté le dit au journal plutôt que de rendre une valeur
+//! plausible : les trois collecteurs réseau, et l'annexe méthodologique.
 
+use crate::state::AppState;
 use crate::windows;
 use serde_json::{json, Value};
-use tauri::AppHandle;
+use tauri::{AppHandle, State};
+use trace_core::core::SnapshotOptions;
+use trace_core::i18n;
 
-/// Chemin de la fixture de développement, relatif au crate.
-const FIXTURE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/fixtures/snapshot.dev.json");
-
-/// Instantané vide, dans la forme exacte que le renderer attend.
+/// Traduit les options venues de l'interface.
 ///
-/// Ce n'est pas un bouche-trou : c'est l'état d'une machine sur laquelle
-/// aucune source n'a encore rien produit, et il doit se peindre correctement.
-fn empty_snapshot() -> Value {
-    let tokens = json!({
-        "input": 0, "output": 0, "cacheWrite": 0, "cacheWrite5m": 0,
-        "cacheWrite1h": 0, "cacheRead": 0, "thinking": 0, "total": 0
-    });
-    let carbon = json!({
-        "gramsCO2e": { "min": 0, "max": 0, "mid": 0 },
-        "energyWh": { "min": 0, "max": 0, "mid": 0 },
-        "waterL": { "min": 0, "max": 0, "mid": 0 }
-    });
-    json!({
-        "generatedAt": trace_core::util::now_ms(),
-        "range": { "days": 30, "from": 0, "to": trace_core::util::now_ms() },
-        "staleError": null,
-        "liveStatus": null,
-        "gauges": [],
-        "sources": [],
-        "hasKeys": {},
-        "config": { "shortcut": "CommandOrControl+Alt+T", "lang": "fr" },
-        "report": {
-            "eventCount": 0,
-            "totals": {
-                "tokens": tokens,
-                "requests": 0,
-                "costUSD": 0,
-                "cacheSavingsUSD": 0,
-                "costUnknown": false,
-                "carbon": carbon
-            },
-            "byModel": [], "byProject": [], "byDay": [], "byHour": [],
-            "trend": { "significant": false, "previous": { "tokens": tokens } }
-        }
-    })
+/// Le renderer envoie `days: 'all'` pour « aussi loin que possible » : une
+/// chaîne là où les autres valeurs sont des nombres. On la reconnaît ici
+/// plutôt que de laisser la désérialisation échouer en silence et retomber sur
+/// trente jours sans rien dire.
+fn snapshot_options(options: Option<Value>) -> SnapshotOptions {
+    let Some(o) = options else {
+        return SnapshotOptions::default();
+    };
+    let days = &o["days"];
+    if days.as_str() == Some("all") {
+        return SnapshotOptions { all: true, ..SnapshotOptions::default() };
+    }
+    SnapshotOptions { days: days.as_i64(), all: false, to: o["to"].as_i64() }
 }
 
-fn fixture_or_empty() -> Value {
-    match std::fs::read_to_string(FIXTURE) {
-        Ok(text) => serde_json::from_str(&text).unwrap_or_else(|e| {
-            eprintln!("fixture illisible ({e}) : on sert l'état vide");
-            empty_snapshot()
-        }),
-        Err(_) => empty_snapshot(),
+fn to_value<T: serde::Serialize>(v: &T) -> Value {
+    serde_json::to_value(v).unwrap_or(Value::Null)
+}
+
+#[tauri::command]
+pub fn snapshot(state: State<'_, AppState>, options: Option<Value>) -> Value {
+    to_value(&state.snapshot(&snapshot_options(options)))
+}
+
+#[tauri::command]
+pub fn refresh(state: State<'_, AppState>) -> Value {
+    state.refresh();
+    to_value(&state.snapshot(&SnapshotOptions::default()))
+}
+
+#[tauri::command]
+pub fn config_get(state: State<'_, AppState>) -> Value {
+    // Jamais de clé vers l'interface : elle n'a besoin que de savoir qu'il y
+    // en a une, ce que porte `hasKeys` dans l'instantané.
+    let mut c = state.config();
+    c.anthropic_admin_key = None;
+    c.openai_admin_key = None;
+    to_value(&c)
+}
+
+#[tauri::command]
+pub fn config_set(state: State<'_, AppState>, patch: Value) -> Value {
+    match state.patch_config(patch) {
+        Ok(c) => to_value(&c),
+        Err(e) => {
+            eprintln!("config_set : {e}");
+            config_get(state)
+        }
     }
 }
 
+/// Le catalogue de traductions, servi tel quel. C'est du JSON des deux côtés :
+/// rien à porter, seulement à livrer.
 #[tauri::command]
-pub fn snapshot(_options: Option<Value>) -> Value {
-    fixture_or_empty()
+pub fn strings(state: State<'_, AppState>) -> Value {
+    let locale = i18n::resolve_locale(Some(&state.config().locale), sys_locale().as_deref());
+    i18n::set_locale(locale);
+    json!({ "lang": locale, "strings": i18n::catalog_json(locale) })
 }
 
-#[tauri::command]
-pub fn refresh() -> Value {
-    fixture_or_empty()
-}
-
-#[tauri::command]
-pub fn config_get() -> Value {
-    json!({ "shortcut": "CommandOrControl+Alt+T", "lang": "fr", "defaultRangeDays": 30 })
-}
-
-#[tauri::command]
-pub fn config_set(patch: Value) -> Value {
-    // Écrire la configuration suppose le portage de `store` : tant qu'il n'est
-    // pas là, on ne prétend pas avoir enregistré.
-    eprintln!("config_set non porté, ignoré : {patch}");
-    config_get()
-}
-
-/// Le catalogue de traductions, servi tel quel depuis `src/i18n`.
+/// Langue du système.
 ///
-/// C'est du JSON des deux côtés : rien à porter, seulement à livrer.
-#[tauri::command]
-pub fn strings() -> Value {
-    const FR: &str = include_str!("../../src/i18n/fr.json");
-    const EN: &str = include_str!("../../src/i18n/en.json");
-    let lang = if std::env::var("TRACE_LANG").as_deref() == Ok("en") { "en" } else { "fr" };
-    let catalog: Value = serde_json::from_str(if lang == "en" { EN } else { FR })
-        .expect("catalogue de traductions valide");
-    json!({ "lang": lang, "strings": catalog })
+/// Surtout pas `LANG` : le terminal la fixe, et elle vaut couramment
+/// « en_US.UTF-8 » sur un poste réglé en français — l'application lancée
+/// depuis un terminal s'affichait alors en anglais. On demande au système.
+fn sys_locale() -> Option<String> {
+    sys_locale::get_locale()
 }
 
 #[tauri::command]
 pub fn key_set(provider: String, _value: String) -> bool {
-    eprintln!("key_set non porté ({provider}) : le trousseau reste à faire");
+    eprintln!("key_set non porté ({provider}) : les collecteurs réseau restent à faire");
     false
 }
 
 #[tauri::command]
-pub fn calibrate(gauge_id: String, percent: f64) -> Value {
-    eprintln!("calibrate non porté ({gauge_id} → {percent})");
-    fixture_or_empty()
+pub fn calibrate(state: State<'_, AppState>, gauge_id: String, percent: f64) -> Value {
+    match state.calibrate(&gauge_id, percent) {
+        Ok(()) => to_value(&state.snapshot(&SnapshotOptions::default())),
+        Err(e) => json!({ "error": e }),
+    }
 }
 
 #[tauri::command]
@@ -138,14 +124,17 @@ pub fn export_csv(_options: Option<Value>) -> Option<String> {
 }
 
 #[tauri::command]
-pub fn shortcut_status() -> Value {
-    json!({ "registered": true, "accelerator": "CommandOrControl+Alt+T" })
+pub fn shortcut_status(state: State<'_, AppState>) -> Value {
+    json!({
+        "registered": state.shortcut_registered(),
+        "accelerator": state.config().shortcut,
+    })
 }
 
 #[tauri::command]
 pub fn open_external(app: AppHandle, url: String) {
-    // Seuls http(s) sortent. Une chaîne venue d'un journal ne doit pas pouvoir
-    // faire ouvrir `file://` ou pire au système.
+    // Seuls http(s) sortent. Une chaîne venue d'un journal — nom de projet ou
+    // de modèle — ne doit pas pouvoir faire ouvrir `file://` ou pire.
     if !url.starts_with("https://") && !url.starts_with("http://") {
         eprintln!("ouverture refusée, schéma non autorisé : {url}");
         return;
@@ -158,5 +147,6 @@ pub fn open_external(app: AppHandle, url: String) {
 
 #[tauri::command]
 pub fn quit(app: AppHandle) {
+    trace_core::store::release_ownership();
     app.exit(0);
 }

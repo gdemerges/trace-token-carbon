@@ -5,6 +5,7 @@
 //! ne demande de mot de passe, aucun n'envoie quoi que ce soit ailleurs.
 
 pub mod claude_code;
+pub mod codex_cli;
 
 use crate::util::Tokens;
 use serde::{Deserialize, Serialize};
@@ -96,6 +97,16 @@ pub struct FileCursor {
     /// des identifiants ne servirait à rien.
     #[serde(default)]
     pub seen: Vec<String>,
+    // Le modèle, le projet et la session n'apparaissent qu'en tête de fichier
+    // Codex. En lecture incrémentale on ne les reverra jamais : ils voyagent
+    // donc avec l'offset, sans quoi tout ce qui suit une reprise serait
+    // attribué à « codex » sans projet.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -133,4 +144,127 @@ pub fn parse_ts(raw: Option<&str>) -> Option<i64> {
     chrono::DateTime::parse_from_rfc3339(raw)
         .ok()
         .map(|d| d.timestamp_millis())
+}
+
+/// Ce qu'une source rapporte d'elle-même à l'interface.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SourceStatus {
+    pub id: String,
+    pub label: String,
+    pub provides_tokens: bool,
+    pub enabled: bool,
+    pub available: bool,
+    /// Nombre d'événements que CE passage a remontés. `snapshot` le remplace
+    /// par le total indexé : un collecteur reprend à un offset, et afficher
+    /// son delta donnerait « Claude Code — 4 » sur une base de 6 000.
+    pub events: usize,
+    pub quota: usize,
+    pub error: Option<String>,
+    pub note: Option<String>,
+    pub stats: Stats,
+}
+
+/// Résultat d'un passage sur toutes les sources.
+#[derive(Debug, Default)]
+pub struct CollectedAll {
+    pub events: Vec<Event>,
+    pub quota: Vec<Quota>,
+    pub sources: Vec<SourceStatus>,
+    pub state: HashMap<String, CollectorState>,
+}
+
+/// Les collecteurs déjà portés, dans l'ordre d'affichage.
+const PORTED: &[(&str, &str)] = &[
+    (claude_code::SOURCE, "source.claude-code"),
+    (codex_cli::SOURCE, "source.codex-cli"),
+];
+
+/// Les collecteurs qui restent à porter : ils demandent HTTP et l'accès au
+/// trousseau. On les DÉCLARE plutôt que de les faire disparaître — une source
+/// absente de la liste se lirait comme une source qui n'existe pas, alors
+/// qu'elle existe et ne fonctionne simplement pas encore.
+const PENDING: &[(&str, &str, bool)] = &[
+    ("anthropic-oauth", "source.anthropic-oauth", false),
+    ("anthropic-api", "source.anthropic-api", true),
+    ("openai-api", "source.openai-api", true),
+];
+
+/// Exécute tous les collecteurs activés et fusionne leurs résultats.
+///
+/// Chaque collecteur est isolé : celui qui échoue est signalé dans `sources`
+/// mais n'empêche jamais les autres de remonter leurs données. Un dossier de
+/// journaux corrompu ne doit pas vider tout le tableau de bord.
+pub fn collect_all(
+    config: &crate::store::Config,
+    state: &HashMap<String, CollectorState>,
+) -> CollectedAll {
+    use crate::i18n::t;
+
+    let disabled: std::collections::HashSet<&str> =
+        config.disabled_sources.iter().map(String::as_str).collect();
+    let mut out = CollectedAll::default();
+
+    for (id, label_key) in PORTED {
+        let mut entry = SourceStatus {
+            id: (*id).to_string(),
+            label: t(label_key),
+            provides_tokens: true,
+            enabled: !disabled.contains(id),
+            available: false,
+            events: 0,
+            quota: 0,
+            error: None,
+            note: None,
+            stats: Stats::default(),
+        };
+
+        if !entry.enabled {
+            entry.note = Some(t("source.disabled"));
+            out.sources.push(entry);
+            continue;
+        }
+
+        let previous = state.get(*id).cloned().unwrap_or_default();
+        let collected = if *id == claude_code::SOURCE {
+            entry.available = claude_code::is_available(None);
+            entry.available.then(|| claude_code::collect(None, &previous))
+        } else {
+            entry.available = codex_cli::is_available(None);
+            entry.available.then(|| codex_cli::collect(None, &previous))
+        };
+
+        match collected {
+            None => entry.note = Some(t("source.notFound")),
+            Some(mut res) => {
+                entry.events = res.events.len();
+                entry.quota = res.quota.len();
+                entry.stats = res.stats;
+                out.events.append(&mut res.events);
+                out.quota.append(&mut res.quota);
+                out.state.insert((*id).to_string(), res.state);
+            }
+        }
+        out.sources.push(entry);
+    }
+
+    for (id, label_key, provides_tokens) in PENDING {
+        out.sources.push(SourceStatus {
+            id: (*id).to_string(),
+            label: t(label_key),
+            provides_tokens: *provides_tokens,
+            enabled: !disabled.contains(id),
+            available: false,
+            events: 0,
+            quota: 0,
+            error: None,
+            note: Some("Pas encore porté vers Rust".to_string()),
+            stats: Stats::default(),
+        });
+    }
+
+    // Les journaux ne sont pas parcourus dans l'ordre chronologique : la série
+    // journalière et les fenêtres glissantes attendent un flux trié.
+    out.events.sort_by_key(|e| e.ts);
+    out
 }

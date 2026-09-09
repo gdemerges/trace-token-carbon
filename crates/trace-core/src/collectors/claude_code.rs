@@ -185,7 +185,13 @@ pub fn collect(configured_dir: Option<&str>, state: &CollectorState) -> Collecte
         let keep = order.len().saturating_sub(DEDUP_WINDOW);
         out.state.files.insert(
             key,
-            FileCursor { offset: res.offset, seen: order.into_iter().skip(keep).collect() },
+            FileCursor {
+                offset: res.offset,
+                seen: order.into_iter().skip(keep).collect(),
+                // Claude Code porte le projet sur chaque ligne : rien à
+                // mémoriser d'une reprise à l'autre, contrairement à Codex.
+                ..FileCursor::default()
+            },
         );
         out.stats.skipped_duplicates += skipped;
         out.events.append(&mut events);
