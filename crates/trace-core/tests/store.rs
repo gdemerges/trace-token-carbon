@@ -320,8 +320,8 @@ fn un_quota_trop_ancien_est_elague_comme_les_evenements() {
     let config = Config { retention_days: 30, compact_after_days: 0, ..Config::default() };
     let mut idx = index_with(vec![event(now, 5)]);
     idx.quota = vec![
-        Quota { source: "claude-code".into(), ts: now - 400 * DAY_MS, kind: "five_hour".into(), status: None, resets_at: 0, using_overage: false, cause: trace_core::collectors::Cause::Unknown },
-        Quota { source: "claude-code".into(), ts: now, kind: "five_hour".into(), status: None, resets_at: 0, using_overage: false, cause: trace_core::collectors::Cause::Unknown },
+        Quota { source: "claude-code".into(), ts: now - 400 * DAY_MS, kind: "five_hour".into(), status: None, resets_at: 0, using_overage: false, cause: trace_core::collectors::Cause::Unknown, used_percent: None, window_minutes: None, plan: None },
+        Quota { source: "claude-code".into(), ts: now, kind: "five_hour".into(), status: None, resets_at: 0, using_overage: false, cause: trace_core::collectors::Cause::Unknown, used_percent: None, window_minutes: None, plan: None },
     ];
     let saved = store::save_index(idx, &config);
     assert_eq!(saved.quota.len(), 1);

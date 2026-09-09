@@ -136,6 +136,11 @@ pub fn collect(configured_dir: Option<&str>, state: &CollectorState) -> Collecte
                     resets_at: (resets_at * 1000.0) as i64,
                     using_overage: limits["isUsingOverage"].as_bool().unwrap_or(false),
                     cause: rejection_cause(rec),
+                    // Les journaux locaux ne portent pas de taux d'occupation :
+                    // il ne vient que du relevé direct.
+                    used_percent: None,
+                    window_minutes: None,
+                    plan: None,
                 });
             }
 

@@ -13,7 +13,6 @@ use crate::collectors::{CollectorState, Event, Quota};
 use crate::util::{now_ms, Tokens};
 use chrono::{Local, TimeZone, Timelike};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
@@ -104,6 +103,16 @@ pub struct CarbonConfig {
     pub pue: Option<f64>,
 }
 
+/// Provenance d'une limite calibrée à la main.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[serde(rename_all = "camelCase", default)]
+pub struct LimitMeta {
+    /// `user` quand l'utilisateur a saisi un pourcentage relevé par `/usage`.
+    pub source: Option<String>,
+    pub at: Option<i64>,
+    pub from_percent: Option<f64>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct AlertsConfig {
@@ -125,7 +134,11 @@ pub struct Config {
     pub carbon: CarbonConfig,
     /// Limites connues de l'utilisateur, en tokens pondérés. Absent = calibrage
     /// automatique.
-    pub limits: HashMap<String, Value>,
+    pub limits: HashMap<String, f64>,
+    /// D'où vient chaque limite, et quand elle a été posée. Séparé de
+    /// `limits` pour que celui-ci reste une table de nombres, lisible et
+    /// modifiable à la main.
+    pub limit_meta: HashMap<String, LimitMeta>,
     pub alerts: AlertsConfig,
     // --- Interface ---
     /// `auto` suit la langue du système ; `fr` ou `en` la forcent.
@@ -168,6 +181,7 @@ impl Default for Config {
                 pue: None,
             },
             limits: HashMap::new(),
+            limit_meta: HashMap::new(),
             alerts: AlertsConfig { enabled: true, thresholds: vec![80.0, 95.0], projection: true },
             locale: "auto".into(),
             shortcut: "CommandOrControl+Alt+T".into(),

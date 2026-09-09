@@ -13,6 +13,7 @@ pub mod i18n;
 pub mod models;
 pub mod pricing;
 pub mod provenance;
+pub mod ratelimits;
 pub mod store;
 pub mod util;
 

@@ -41,6 +41,35 @@ pub struct Quota {
     pub using_overage: bool,
     /// La CAUSE réelle du refus, qui n'est pas toujours la fenêtre citée.
     pub cause: Cause,
+    /// Taux d'occupation communiqué par le fournisseur. Quand il est là, il
+    /// tranche : aucune reconstruction locale ne fait mieux que le serveur.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub used_percent: Option<f64>,
+    /// Durée de la fenêtre, telle que le fournisseur la déclare. Codex la
+    /// donne, et elle a déjà changé — d'où le libellé dérivé de la durée
+    /// plutôt que d'une liste figée.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub window_minutes: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plan: Option<String>,
+}
+
+impl Quota {
+    /// Un relevé de refus, tel que le produit un collecteur de journaux.
+    pub fn rejection(source: &str, ts: i64, kind: &str, resets_at: i64, cause: Cause) -> Self {
+        Self {
+            source: source.to_string(),
+            ts,
+            kind: kind.to_string(),
+            status: None,
+            resets_at,
+            using_overage: false,
+            cause,
+            used_percent: None,
+            window_minutes: None,
+            plan: None,
+        }
+    }
 }
 
 /// Ce qui a réellement bloqué une requête.
