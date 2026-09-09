@@ -6,11 +6,13 @@
 //! qui permet de l'éprouver sur les trois systèmes sans interface, et au CLI
 //! d'exister sans rien dupliquer.
 
+pub mod aggregate;
 pub mod carbon;
 pub mod collectors;
 pub mod i18n;
 pub mod models;
 pub mod pricing;
+pub mod provenance;
 pub mod util;
 
 pub use models::{resolve_model, Model, CACHE_MULTIPLIERS};
