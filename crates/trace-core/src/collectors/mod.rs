@@ -166,10 +166,15 @@ pub struct SourceStatus {
     pub provides_tokens: bool,
     pub enabled: bool,
     pub available: bool,
-    /// Nombre d'événements que CE passage a remontés. `snapshot` le remplace
-    /// par le total indexé : un collecteur reprend à un offset, et afficher
-    /// son delta donnerait « Claude Code — 4 » sur une base de 6 000.
+    /// Total indexé pour cette source, toutes périodes confondues. Posé par
+    /// `snapshot` : un collecteur reprend à un offset, et afficher son delta
+    /// donnerait « Claude Code — 4 » sur une base de 6 000.
     pub events: usize,
+    /// Ce que CE passage a remonté. C'est un delta, et il se lit comme tel.
+    pub new_events: usize,
+    /// Ce qui tombe dans la période affichée. C'est ce chiffre-là qui répond à
+    /// « qu'est-ce que je regarde », et non le total indexé.
+    pub events_in_range: usize,
     pub quota: usize,
     pub error: Option<String>,
     pub note: Option<String>,
@@ -234,6 +239,8 @@ pub fn collect_all(
             enabled: !disabled.contains(id),
             available: false,
             events: 0,
+            new_events: 0,
+            events_in_range: 0,
             quota: 0,
             error: None,
             note: None,
@@ -258,7 +265,7 @@ pub fn collect_all(
         match collected {
             None => entry.note = Some(t("source.notFound")),
             Some(mut res) => {
-                entry.events = res.events.len();
+                entry.new_events = res.events.len();
                 entry.quota = res.quota.len();
                 entry.stats = res.stats;
                 out.events.append(&mut res.events);
@@ -282,6 +289,8 @@ pub fn collect_all(
             enabled: !disabled.contains(id),
             available: false,
             events: 0,
+            new_events: 0,
+            events_in_range: 0,
             quota: 0,
             error: None,
             note: None,
@@ -321,6 +330,8 @@ pub fn collect_all(
             enabled: !disabled.contains(id),
             available: false,
             events: 0,
+            new_events: 0,
+            events_in_range: 0,
             quota: 0,
             error: None,
             note: None,
@@ -338,7 +349,7 @@ pub fn collect_all(
             } else {
                 billing::collect_openai(key, config.api_lookback_days)
             };
-            entry.events = res.events.len();
+            entry.new_events = res.events.len();
             entry.stats = res.stats;
             if !res.errors.is_empty() {
                 entry.error = Some(res.errors.join(" ; "));
@@ -354,5 +365,22 @@ pub fn collect_all(
     // Les journaux ne sont pas parcourus dans l'ordre chronologique : la série
     // journalière et les fenêtres glissantes attendent un flux trié.
     out.events.sort_by_key(|e| e.ts);
+
+    // Ordre d'affichage canonique : les sources sont collectées dans l'ordre
+    // qui arrange le code, elles se présentent dans celui qui arrange le
+    // lecteur — les deux sources Claude côte à côte, puis Codex, puis les
+    // rapports d'organisation.
+    out.sources.sort_by_key(|s| {
+        DISPLAY_ORDER.iter().position(|id| *id == s.id).unwrap_or(usize::MAX)
+    });
     out
 }
+
+/// L'ordre dans lequel l'interface et la CLI listent les sources.
+const DISPLAY_ORDER: &[&str] = &[
+    claude_code::SOURCE,
+    anthropic_oauth::SOURCE,
+    codex_cli::SOURCE,
+    billing::ANTHROPIC,
+    billing::OPENAI,
+];

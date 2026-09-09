@@ -7,11 +7,16 @@
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
+use trace_core::alerts::{self, Fired, Notification};
 use trace_core::core::{self, Snapshot, SnapshotOptions, State as CoreState};
 use trace_core::store::{self, Config};
 
 pub struct AppState {
     inner: Mutex<CoreState>,
+    /// Ce qui a déjà été notifié, par fenêtre. Le franchissement d'un seuil
+    /// est un événement, pas un état : sans cette mémoire, la notification se
+    /// répéterait à chaque cycle.
+    fired: Mutex<Fired>,
     shortcut_registered: AtomicBool,
 }
 
@@ -23,6 +28,7 @@ impl AppState {
         store::claim_ownership(trace_core::util::now_ms());
         AppState {
             inner: Mutex::new(core::refresh(config, true)),
+            fired: Mutex::new(Fired::new()),
             shortcut_registered: AtomicBool::new(false),
         }
     }
@@ -39,6 +45,18 @@ impl AppState {
         if let Ok(mut s) = self.inner.lock() {
             *s = next;
         }
+    }
+
+    /// Les notifications à émettre, l'état des seuils étant mis à jour au
+    /// passage. Appelée après chaque rafraîchissement, jamais depuis
+    /// l'interface : une alerte se décide sur l'état du cœur.
+    pub fn pending_alerts(&self) -> Vec<Notification> {
+        let s = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        let snap = core::snapshot(&s, &SnapshotOptions::default());
+        let mut fired = self.fired.lock().unwrap_or_else(|e| e.into_inner());
+        let out = alerts::evaluate(&snap.gauges, &s.config, &fired, trace_core::util::now_ms());
+        *fired = out.state;
+        out.notifications
     }
 
     pub fn snapshot(&self, opts: &SnapshotOptions) -> Snapshot {

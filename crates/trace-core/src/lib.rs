@@ -7,6 +7,7 @@
 //! d'exister sans rien dupliquer.
 
 pub mod aggregate;
+pub mod alerts;
 pub mod carbon;
 pub mod collectors;
 pub mod core;

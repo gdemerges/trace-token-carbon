@@ -50,6 +50,7 @@ fn tray_menu(app: &tauri::AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_notification::init())
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(|app, _shortcut, event| {
@@ -188,6 +189,10 @@ fn start_refresh_loop(app: tauri::AppHandle) {
 
         let state = app.state::<state::AppState>();
         state.refresh();
+
+        // Les alertes partent même fenêtres fermées : c'est précisément quand
+        // on ne regarde pas l'écran qu'un avertissement a de la valeur.
+        notify(&app, state.pending_alerts());
         // On ne peint que si quelqu'un regarde : recalculer un instantané
         // complet pour l'envoyer à des fenêtres fermées était précisément ce
         // que le dernier commit de la version Electron avait supprimé.
@@ -201,6 +206,16 @@ fn start_refresh_loop(app: tauri::AppHandle) {
         let snap = state.snapshot(&trace_core::core::SnapshotOptions::default());
         broadcast(&app, &snap);
     });
+}
+
+/// Émet les notifications système décidées par le cœur.
+fn notify(app: &tauri::AppHandle, notifications: Vec<trace_core::alerts::Notification>) {
+    use tauri_plugin_notification::NotificationExt;
+    for n in notifications {
+        if let Err(e) = app.notification().builder().title(&n.title).body(&n.body).show() {
+            eprintln!("notification refusée : {e}");
+        }
+    }
 }
 
 /// Diffuse un nouvel instantané aux fenêtres ouvertes.

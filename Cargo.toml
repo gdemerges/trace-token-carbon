@@ -9,7 +9,7 @@
 #   trace-app   — la barre d'état, le popover, le tableau de bord.
 [workspace]
 resolver = "2"
-members = ["crates/trace-core", "src-tauri"]
+members = ["crates/trace-core", "crates/trace-cli", "src-tauri"]
 
 [workspace.package]
 version = "0.1.0"
@@ -21,7 +21,10 @@ authors = ["Guillaume Demergès"]
 [workspace.dependencies]
 trace-core = { path = "crates/trace-core" }
 serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+# `preserve_order` : les objets JSON gardent leur ordre d'insertion plutôt que
+# d'être triés alphabétiquement. La sortie `--json` se lit au terminal, et
+# « generatedAt, days, from… » est un ordre de lecture, pas un hasard.
+serde_json = { version = "1", features = ["preserve_order"] }
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 regex = "1"
 dirs = "5"

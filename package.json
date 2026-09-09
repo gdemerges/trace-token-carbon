@@ -20,7 +20,8 @@
     "logos": "node scripts/make-logos.js",
     "tauri:dev": "cargo run -p trace-app",
     "tauri:build": "cargo build --release -p trace-app",
-    "test:rust": "cargo test"
+    "test:rust": "cargo test",
+    "cli:rust": "cargo run -q --release -p trace-cli --"
   },
   "devDependencies": {
     "electron": "^44.1.0",

@@ -271,6 +271,7 @@ pub fn snapshot(state: &State, opts: &SnapshotOptions) -> Snapshot {
         .map(|s| {
             let mut s = s.clone();
             s.events = indexed.get(s.id.as_str()).copied().unwrap_or(0);
+            s.events_in_range = in_range.get(s.id.as_str()).copied().unwrap_or(0);
             s
         })
         .collect();

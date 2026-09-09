@@ -1,0 +1,16 @@
+[package]
+name = "trace-cli"
+description = "TRACE en ligne de commande : les mêmes chiffres, dans le terminal."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "trace"
+path = "src/main.rs"
+
+[dependencies]
+trace-core.workspace = true
+serde_json.workspace = true
