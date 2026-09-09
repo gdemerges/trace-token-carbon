@@ -326,9 +326,19 @@ pub fn snapshot(state: &State, opts: &SnapshotOptions) -> Snapshot {
         sources,
         config: safe_config,
         has_keys,
+        // La méthodologie voyage AVEC le chiffre. La construire et ne jamais
+        // la montrer reviendrait à demander de croire un total dont aucun
+        // terme n'est vérifiable.
         methodology: serde_json::json!({
             "factors": crate::carbon::factors::factor_table(Some(&config.carbon.grid_key)),
-            "unpinned": crate::carbon::sources::unpinned_sources(),
+            "unpinned": crate::carbon::sources::unpinned_sources()
+                .iter()
+                .map(|s| serde_json::json!({
+                    "id": s.id, "label": s.label, "publisher": s.publisher, "url": s.url,
+                }))
+                .collect::<Vec<_>>(),
+            "grids": crate::carbon::factors::grid_table(),
+            "providers": crate::carbon::factors::provider_table(),
         }),
         stale_error: None,
         extra: match &state.cost {

@@ -556,3 +556,48 @@ pub fn factor_table(grid_key: Option<&str>) -> Vec<FactorRow> {
 
     rows
 }
+
+/// La table des mix électriques, telle que l'annexe méthodologique l'affiche.
+///
+/// Sérialisée comme un objet indexé par clé de zone, et non comme une liste :
+/// c'est la forme que l'interface lit, et la clé y est aussi l'identifiant.
+pub fn grid_table() -> serde_json::Map<String, serde_json::Value> {
+    let mut out = serde_json::Map::new();
+    for key in grid_keys() {
+        let Some(g) = grid(key) else { continue };
+        out.insert(
+            key.to_string(),
+            serde_json::json!({
+                "label": g.label,
+                "value": g.value,
+                "source": g.source,
+                "basis": g.basis,
+            }),
+        );
+    }
+    out
+}
+
+/// La table des infrastructures par fournisseur, même forme et même raison.
+pub fn provider_table() -> serde_json::Map<String, serde_json::Value> {
+    let mut out = serde_json::Map::new();
+    for key in ["anthropic", "openai", "local", "unknown"] {
+        let i = provider_infra(key);
+        let mut entry = serde_json::json!({
+            "label": i.label,
+            "hosts": i.hosts,
+            "pue": { "min": i.pue.min, "max": i.pue.max },
+            "wueL": { "min": i.wue_l.min, "max": i.wue_l.max },
+            "gridKey": i.grid_key,
+        });
+        // Seule la machine locale porte une mémoire GPU propre : l'omettre
+        // ailleurs plutôt que d'écrire un nul que rien ne lirait.
+        if let Some(gb) = i.gpu_memory_gb {
+            entry["gpuMemoryGb"] = serde_json::json!(gb);
+        }
+        entry["source"] = serde_json::json!(i.source);
+        entry["basis"] = serde_json::json!(i.basis);
+        out.insert(key.to_string(), entry);
+    }
+    out
+}

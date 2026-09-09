@@ -43,6 +43,7 @@ pub struct ModelSlice {
     pub provider: String,
     pub tokens: Tokens,
     pub requests: i64,
+    #[serde(rename = "costUSD")]
     pub cost_usd: f64,
     pub cost_unknown: bool,
 }
@@ -53,8 +54,10 @@ pub struct Group {
     pub key: String,
     pub tokens: Tokens,
     pub requests: i64,
+    #[serde(rename = "costUSD")]
     pub cost_usd: f64,
     pub cost_unknown: bool,
+    #[serde(rename = "costWithoutCacheUSD")]
     pub cost_without_cache_usd: f64,
     pub carbon: carbon::Total,
     pub models: Vec<ModelSlice>,
@@ -161,7 +164,9 @@ pub struct DayPoint {
     pub ts: i64,
     pub tokens: Tokens,
     pub requests: i64,
+    #[serde(rename = "costUSD")]
     pub cost_usd: f64,
+    #[serde(rename = "gramsCO2e")]
     pub grams_co2e: f64,
     pub models: Vec<DayModel>,
 }
@@ -246,7 +251,9 @@ pub struct HourPoint {
     pub hour: u32,
     pub tokens: i64,
     pub requests: i64,
+    #[serde(rename = "costUSD")]
     pub cost_usd: f64,
+    #[serde(rename = "gramsCO2e")]
     pub grams_co2e: f64,
 }
 
@@ -289,8 +296,10 @@ fn hour_histogram(events: &[Event], opts: &Options) -> Vec<HourPoint> {
 pub struct Totals {
     pub tokens: Tokens,
     pub requests: i64,
+    #[serde(rename = "costUSD")]
     pub cost_usd: f64,
     pub cost_unknown: bool,
+    #[serde(rename = "costWithoutCacheUSD")]
     pub cost_without_cache_usd: f64,
     pub carbon: carbon::Total,
     pub equivalents: Vec<carbon::EquivalentAmount>,
@@ -299,6 +308,7 @@ pub struct Totals {
     /// On livre donc avec le total ce qui permet de le contester.
     pub carbon_sensitivity: Vec<carbon::GridRow>,
     pub carbon_uncertainty: Vec<carbon::Lever>,
+    #[serde(rename = "cacheSavingsUSD")]
     pub cache_savings_usd: f64,
     pub cache_hit_ratio: f64,
 }
@@ -307,6 +317,7 @@ pub struct Totals {
 #[serde(rename_all = "camelCase")]
 pub struct Previous {
     pub tokens: Tokens,
+    #[serde(rename = "costUSD")]
     pub cost_usd: f64,
     pub carbon: carbon::Total,
 }

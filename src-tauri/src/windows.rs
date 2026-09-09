@@ -8,6 +8,12 @@ pub const DASHBOARD: &str = "dashboard";
 const POPOVER_W: f64 = 380.0;
 const POPOVER_H: f64 = 560.0;
 
+pub const DASHBOARD_W: f64 = 1080.0;
+pub const DASHBOARD_H: f64 = 760.0;
+
+/// Coin haut-gauche de la fenêtre en mode développement, en points logiques.
+pub const DEV_ORIGIN: f64 = 60.0;
+
 /// Le pont `window.trace`, injecté avant tout script de la page.
 const BRIDGE: &str = include_str!("bridge.js");
 
@@ -35,17 +41,23 @@ pub fn show_dashboard(app: &AppHandle) -> tauri::Result<WebviewWindow> {
         let _ = win.set_focus();
         return Ok(win);
     }
-    let win = WebviewWindowBuilder::new(
+    let mut builder = WebviewWindowBuilder::new(
         app,
         DASHBOARD,
         WebviewUrl::App("dashboard/index.html".into()),
     )
     .title("TRACE — tableau de bord")
-    .inner_size(1080.0, 760.0)
+    .inner_size(DASHBOARD_W, DASHBOARD_H)
     .min_inner_size(720.0, 520.0)
-    .initialization_script(BRIDGE)
-    .build()?;
-    Ok(win)
+    .initialization_script(BRIDGE);
+
+    // En développement, la fenêtre s'ouvre à une position connue. C'est ce qui
+    // permet de la photographier seule, sans capturer l'écran entier — donc
+    // sans ramener à l'image ce qui n'a rien à y faire.
+    if std::env::var_os("TRACE_DEV_SHOW").is_some() {
+        builder = builder.position(DEV_ORIGIN, DEV_ORIGIN);
+    }
+    builder.build()
 }
 
 /// Place le popover sous la barre d'état, aligné à droite.

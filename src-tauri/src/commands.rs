@@ -180,6 +180,20 @@ pub fn open_external(app: AppHandle, url: String) {
     }
 }
 
+/// Remonte une erreur du renderer au journal du processus principal.
+///
+/// Sans cela, une exception dans une vue reste invisible : elle vide un écran
+/// et personne ne sait pourquoi.
+#[tauri::command]
+pub fn renderer_log(kind: String, message: String, source: String, line: u32) {
+    let origin = if source.is_empty() {
+        String::new()
+    } else {
+        format!(" [{source}:{line}]")
+    };
+    eprintln!("renderer/{kind}{origin} : {message}");
+}
+
 #[tauri::command]
 pub fn quit(app: AppHandle) {
     trace_core::store::release_ownership();

@@ -115,6 +115,7 @@ pub struct Infra {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Estimate {
+    #[serde(rename = "gramsCO2e")]
     pub grams_co2e: Range,
     pub energy_wh: Range,
     pub water_l: Range,
@@ -225,6 +226,7 @@ pub fn estimate(tokens: &Tokens, model: &Model, opts: &Options) -> Estimate {
 #[derive(Debug, Clone, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Total {
+    #[serde(rename = "gramsCO2e")]
     pub grams_co2e: Range,
     pub energy_wh: Range,
     pub water_l: Range,
@@ -280,6 +282,7 @@ pub struct GridRow {
     pub key: String,
     pub label: String,
     pub intensity: f64,
+    #[serde(rename = "gramsCO2e")]
     pub grams_co2e: Range,
     pub ratio: Option<f64>,
 }

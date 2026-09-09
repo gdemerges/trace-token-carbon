@@ -81,6 +81,7 @@ pub fn run() {
             commands::export_csv,
             commands::shortcut_status,
             commands::open_external,
+            commands::renderer_log,
             commands::quit,
         ])
         .manage(state::AppState::boot())

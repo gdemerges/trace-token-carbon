@@ -125,6 +125,7 @@ fn anthropic_pages(url: &str, params: &[(&str, String)], key: &str) -> Result<Ve
 #[derive(Debug, Clone, Default, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CostReport {
+    #[serde(rename = "totalUSD")]
     pub total_usd: f64,
     pub by_day: std::collections::BTreeMap<String, f64>,
 }

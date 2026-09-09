@@ -10,6 +10,17 @@
 // s'appliquer à tout ce que la page charge elle-même.
 (() => {
   const { invoke } = window.__TAURI__.core;
+
+  // Une erreur de rendu ne se voit pas : le processus principal ne la reçoit
+  // pas, et personne ne garde les outils de développement ouverts en
+  // permanence. Le renderer la remonte donc lui-même, ce qui permet de
+  // vérifier qu'un écran s'est peint sans faute — sans avoir à le photographier.
+  const report = (kind, message, source, line) =>
+    invoke('renderer_log', { kind, message: String(message), source: String(source || ''), line: line || 0 });
+  window.addEventListener('error', (e) =>
+    report('error', e.message, e.filename, e.lineno));
+  window.addEventListener('unhandledrejection', (e) =>
+    report('rejet', (e.reason && e.reason.message) || e.reason, '', 0));
   const { listen } = window.__TAURI__.event;
 
   window.trace = {
