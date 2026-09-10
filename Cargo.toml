@@ -41,3 +41,9 @@ lto = true
 codegen-units = 1
 panic = "abort"
 strip = true
+
+# En dev, les symboles DWARF complets font l'essentiel du poids de target/
+# sans qu'on les inspecte jamais : les lignes seules suffisent pour un
+# backtrace, et rustc les émet plus vite à compiler.
+[profile.dev]
+debug = "line-tables-only"
