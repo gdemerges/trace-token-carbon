@@ -14,7 +14,7 @@
 
 use super::{Collected, Event};
 use crate::i18n::t;
-use crate::util::{now_ms, Tokens};
+use crate::util::{now_ms, parse_flexible_ts, ureq_agent, Tokens};
 use serde_json::Value;
 use std::time::Duration;
 
@@ -36,7 +36,7 @@ pub fn has_key(key: Option<&str>) -> bool {
 }
 
 fn agent() -> ureq::Agent {
-    ureq::AgentBuilder::new().timeout(TIMEOUT).build()
+    ureq_agent(TIMEOUT)
 }
 
 /// Exécute une requête et rend le corps JSON, ou un message exploitable.
@@ -65,26 +65,10 @@ fn n(v: &Value) -> i64 {
 
 /// Horodatage d'un seau, quel que soit le nom que l'API lui donne.
 fn bucket_ts(b: &Value) -> i64 {
-    for k in ["starting_at", "start_time"] {
-        match &b[k] {
-            Value::String(s) => {
-                if let Ok(d) = chrono::DateTime::parse_from_rfc3339(s) {
-                    return d.timestamp_millis();
-                }
-            }
-            Value::Number(num) => {
-                if let Some(v) = num.as_f64() {
-                    return if v > 1e11 {
-                        v as i64
-                    } else {
-                        (v * 1000.0) as i64
-                    };
-                }
-            }
-            _ => {}
-        }
-    }
-    now_ms()
+    ["starting_at", "start_time"]
+        .into_iter()
+        .find_map(|k| parse_flexible_ts(&b[k]))
+        .unwrap_or_else(now_ms)
 }
 
 // ---------------------------------------------------------------------------

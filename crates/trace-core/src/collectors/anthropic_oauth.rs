@@ -17,7 +17,7 @@
 
 use super::{Cause, Collected, Quota};
 use crate::i18n::t;
-use crate::util::{home_dir, now_ms};
+use crate::util::{home_dir, now_ms, parse_flexible_ts, ureq_agent};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::Mutex;
@@ -205,26 +205,9 @@ fn percent_of(o: &serde_json::Map<String, Value>) -> Option<f64> {
 }
 
 fn reset_of(o: &serde_json::Map<String, Value>) -> Option<i64> {
-    for k in ["resets_at", "resetsAt", "reset_at", "resetAt", "expires_at"] {
-        match o.get(k) {
-            Some(Value::Number(n)) => {
-                let v = n.as_f64()?;
-                // Secondes ou millisecondes : au-delà de 1e11, c'est déjà des ms.
-                return Some(if v > 1e11 {
-                    v as i64
-                } else {
-                    (v * 1000.0) as i64
-                });
-            }
-            Some(Value::String(s)) => {
-                if let Ok(d) = chrono::DateTime::parse_from_rfc3339(s) {
-                    return Some(d.timestamp_millis());
-                }
-            }
-            _ => {}
-        }
-    }
-    None
+    ["resets_at", "resetsAt", "reset_at", "resetAt", "expires_at"]
+        .into_iter()
+        .find_map(|k| o.get(k).and_then(parse_flexible_ts))
 }
 
 /// Extrait les fenêtres d'une réponse dont on ne veut pas présumer la forme.
@@ -273,23 +256,32 @@ pub fn extract_windows(payload: &Value) -> Vec<FoundWindow> {
 }
 
 /// Fait correspondre une clé de l'API à une fenêtre connue de TRACE.
+///
+/// Le résultat est toujours un `id` tel qu'il existe dans
+/// [`crate::ratelimits::WINDOWS`], jamais un littéral recopié à la main : si
+/// une fenêtre y est un jour renommée, cette fonction cesse silencieusement
+/// de la reconnaître plutôt que de renvoyer un id qui ne correspond plus à
+/// rien.
 pub fn normalize_window(key: &str) -> Option<&'static str> {
     let k = key.to_lowercase();
     let has = |pats: &[&str]| pats.iter().any(|p| k.contains(p));
-    if has(&["five_hour", "5h", "session", "fivehour"]) {
-        return Some("five_hour");
-    }
-    if has(&["seven_day", "weekly", "week", "7d"]) {
-        return Some(if k.contains("opus") {
+    let candidate = if has(&["five_hour", "5h", "session", "fivehour"]) {
+        "five_hour"
+    } else if has(&["seven_day", "weekly", "week", "7d"]) {
+        if k.contains("opus") {
             "weekly_opus"
         } else {
             "weekly"
-        });
-    }
-    if k.contains("opus") {
-        return Some("weekly_opus");
-    }
-    None
+        }
+    } else if k.contains("opus") {
+        "weekly_opus"
+    } else {
+        return None;
+    };
+    crate::ratelimits::WINDOWS
+        .iter()
+        .find(|w| w.id == candidate)
+        .map(|w| w.id)
 }
 
 pub fn is_available() -> bool {
@@ -437,7 +429,7 @@ pub fn collect(min_interval: i64, persisted: Option<&LiveState>) -> Collected {
         }
     };
 
-    let agent = ureq::AgentBuilder::new().timeout(TIMEOUT).build();
+    let agent = ureq_agent(TIMEOUT);
     let response = agent
         .get(ENDPOINT)
         .set("Authorization", &format!("Bearer {}", token.value))

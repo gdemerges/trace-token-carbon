@@ -251,3 +251,29 @@ where
         unchanged: false,
     }
 }
+
+/// Agent HTTP avec le seul réglage qui compte pour un collecteur : une
+/// requête qui ne répond jamais ne doit pas bloquer un cycle indéfiniment.
+pub fn ureq_agent(timeout: std::time::Duration) -> ureq::Agent {
+    ureq::AgentBuilder::new().timeout(timeout).build()
+}
+
+/// Horodatage tel qu'une API JSON le rend, sous n'importe laquelle des deux
+/// formes usuelles : un nombre en secondes ou en millisecondes (au-delà de
+/// 1e11, c'est déjà des millisecondes), ou une chaîne RFC 3339.
+pub fn parse_flexible_ts(v: &serde_json::Value) -> Option<i64> {
+    match v {
+        serde_json::Value::Number(n) => {
+            let f = n.as_f64()?;
+            Some(if f > 1e11 {
+                f as i64
+            } else {
+                (f * 1000.0) as i64
+            })
+        }
+        serde_json::Value::String(s) => chrono::DateTime::parse_from_rfc3339(s)
+            .ok()
+            .map(|d| d.timestamp_millis()),
+        _ => None,
+    }
+}
