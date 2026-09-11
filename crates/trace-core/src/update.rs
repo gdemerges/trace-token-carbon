@@ -133,7 +133,7 @@ pub fn pick_release(release: &Value, current: &str) -> Option<Update> {
 /// Interroge GitHub. Rend `None` sur toute anomalie : ce n'est pas critique,
 /// et une panne de réseau ne doit surtout pas remonter à l'utilisateur.
 pub fn fetch_latest() -> Option<Value> {
-    let agent = ureq::AgentBuilder::new().timeout(TIMEOUT).build();
+    let agent = crate::util::ureq_agent(TIMEOUT);
     agent
         .get(ENDPOINT)
         .set("accept", "application/vnd.github+json")

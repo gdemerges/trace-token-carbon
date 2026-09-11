@@ -181,6 +181,28 @@ pub struct SourceStatus {
     pub stats: Stats,
 }
 
+impl SourceStatus {
+    /// Statut initial d'une source, avant collecte : les compteurs partent à
+    /// zéro et seuls `id`/`label`/`provides_tokens`/`enabled` varient d'une
+    /// source à l'autre.
+    fn new(id: &str, label: String, provides_tokens: bool, enabled: bool) -> Self {
+        Self {
+            id: id.to_string(),
+            label,
+            provides_tokens,
+            enabled,
+            available: false,
+            events: 0,
+            new_events: 0,
+            events_in_range: 0,
+            quota: 0,
+            error: None,
+            note: None,
+            stats: Stats::default(),
+        }
+    }
+}
+
 /// Résultat d'un passage sur toutes les sources.
 #[derive(Debug, Default)]
 pub struct CollectedAll {
@@ -236,20 +258,7 @@ pub fn collect_all(
     let mut out = CollectedAll::default();
 
     for (id, label_key) in PORTED {
-        let mut entry = SourceStatus {
-            id: (*id).to_string(),
-            label: t(label_key),
-            provides_tokens: true,
-            enabled: !disabled.contains(id),
-            available: false,
-            events: 0,
-            new_events: 0,
-            events_in_range: 0,
-            quota: 0,
-            error: None,
-            note: None,
-            stats: Stats::default(),
-        };
+        let mut entry = SourceStatus::new(id, t(label_key), true, !disabled.contains(id));
 
         if !entry.enabled {
             entry.note = Some(t("source.disabled"));
@@ -288,20 +297,12 @@ pub fn collect_all(
     // fenêtres : aucune reconstruction locale ne fait mieux.
     {
         let id = anthropic_oauth::SOURCE;
-        let mut entry = SourceStatus {
-            id: id.to_string(),
-            label: t("source.anthropic-oauth"),
-            provides_tokens: false,
-            enabled: !disabled.contains(id),
-            available: false,
-            events: 0,
-            new_events: 0,
-            events_in_range: 0,
-            quota: 0,
-            error: None,
-            note: None,
-            stats: Stats::default(),
-        };
+        let mut entry = SourceStatus::new(
+            id,
+            t("source.anthropic-oauth"),
+            false,
+            !disabled.contains(id),
+        );
         if !entry.enabled {
             entry.note = Some(t("source.disabled"));
         } else if !anthropic_oauth::is_available() {
@@ -329,20 +330,7 @@ pub fn collect_all(
         } else {
             config.openai_admin_key.as_deref()
         };
-        let mut entry = SourceStatus {
-            id: (*id).to_string(),
-            label: t(label_key),
-            provides_tokens: true,
-            enabled: !disabled.contains(id),
-            available: false,
-            events: 0,
-            new_events: 0,
-            events_in_range: 0,
-            quota: 0,
-            error: None,
-            note: None,
-            stats: Stats::default(),
-        };
+        let mut entry = SourceStatus::new(id, t(label_key), true, !disabled.contains(id));
 
         if !entry.enabled {
             entry.note = Some(t("source.disabled"));

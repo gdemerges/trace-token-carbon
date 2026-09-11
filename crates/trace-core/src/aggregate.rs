@@ -416,25 +416,9 @@ pub fn report(events: &[Event], opts: &Options) -> Report {
         cost_unknown = cost_unknown || g.cost_unknown;
     }
 
-    let carbon_total = {
-        // Les groupes portent déjà leur total : on les additionne bornes à
-        // bornes plutôt que de tout réestimer.
-        let mut acc = carbon::Total::default();
-        for g in &by_model {
-            acc.grams_co2e.min += g.carbon.grams_co2e.min;
-            acc.grams_co2e.max += g.carbon.grams_co2e.max;
-            acc.grams_co2e.mid += g.carbon.grams_co2e.mid;
-            acc.energy_wh.min += g.carbon.energy_wh.min;
-            acc.energy_wh.max += g.carbon.energy_wh.max;
-            acc.energy_wh.mid += g.carbon.energy_wh.mid;
-            acc.water_l.min += g.carbon.water_l.min;
-            acc.water_l.max += g.carbon.water_l.max;
-            acc.water_l.mid += g.carbon.water_l.mid;
-            acc.usage_g += g.carbon.usage_g;
-            acc.embodied_g += g.carbon.embodied_g;
-        }
-        acc
-    };
+    // Les groupes portent déjà leur total : on les additionne bornes à
+    // bornes plutôt que de tout réestimer.
+    let carbon_total = carbon::sum_totals(by_model.iter().map(|g| &g.carbon));
 
     // La clé d'un groupe `by_model` EST l'identifiant du modèle : on le résout
     // ici plutôt que de faire voyager la fiche dans chaque bucket.
@@ -497,16 +481,7 @@ pub fn report(events: &[Event], opts: &Options) -> Report {
         prev_tokens.add(&g.tokens);
         prev_cost += g.cost_usd;
     }
-    let prev_carbon = {
-        let mut acc = carbon::Total::default();
-        for g in &prev_by_model {
-            acc.grams_co2e.min += g.carbon.grams_co2e.min;
-            acc.grams_co2e.max += g.carbon.grams_co2e.max;
-            acc.grams_co2e.mid += g.carbon.grams_co2e.mid;
-            acc.energy_wh.mid += g.carbon.energy_wh.mid;
-        }
-        acc
-    };
+    let prev_carbon = carbon::sum_totals(prev_by_model.iter().map(|g| &g.carbon));
 
     by_project.truncate(PROJECT_ROWS);
 

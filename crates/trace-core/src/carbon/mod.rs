@@ -262,6 +262,26 @@ pub fn sum<'a, I: IntoIterator<Item = &'a Estimate>>(estimates: I) -> Total {
     acc
 }
 
+/// Somme de totaux déjà agrégés — pour recombiner des groupes sans tout
+/// réestimer depuis les événements.
+pub fn sum_totals<'a, I: IntoIterator<Item = &'a Total>>(totals: I) -> Total {
+    let mut acc = Total::default();
+    for t in totals {
+        acc.grams_co2e.min += t.grams_co2e.min;
+        acc.grams_co2e.max += t.grams_co2e.max;
+        acc.grams_co2e.mid += t.grams_co2e.mid;
+        acc.energy_wh.min += t.energy_wh.min;
+        acc.energy_wh.max += t.energy_wh.max;
+        acc.energy_wh.mid += t.energy_wh.mid;
+        acc.water_l.min += t.water_l.min;
+        acc.water_l.max += t.water_l.max;
+        acc.water_l.mid += t.water_l.mid;
+        acc.usage_g += t.usage_g;
+        acc.embodied_g += t.embodied_g;
+    }
+    acc
+}
+
 /// Un couple volume/modèle, l'unité d'entrée des analyses agrégées.
 pub struct Pair<'a> {
     pub tokens: Tokens,

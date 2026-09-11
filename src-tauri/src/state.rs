@@ -47,14 +47,15 @@ impl AppState {
         }
     }
 
-    /// Les notifications à émettre, l'état des seuils étant mis à jour au
-    /// passage. Appelée après chaque rafraîchissement, jamais depuis
-    /// l'interface : une alerte se décide sur l'état du cœur.
-    pub fn pending_alerts(&self) -> Vec<Notification> {
-        let s = self.inner.lock().unwrap_or_else(|e| e.into_inner());
-        let snap = core::snapshot(&s, &SnapshotOptions::default());
+    /// Les notifications à émettre pour l'instantané donné, l'état des seuils
+    /// étant mis à jour au passage. Appelée après chaque rafraîchissement,
+    /// jamais depuis l'interface : une alerte se décide sur l'état du cœur.
+    /// Prend l'instantané déjà calculé par l'appelant plutôt que d'en
+    /// recalculer un second : les deux se font dans le même cycle.
+    pub fn pending_alerts(&self, snap: &Snapshot) -> Vec<Notification> {
+        let config = self.config();
         let mut fired = self.fired.lock().unwrap_or_else(|e| e.into_inner());
-        let out = alerts::evaluate(&snap.gauges, &s.config, &fired, trace_core::util::now_ms());
+        let out = alerts::evaluate(&snap.gauges, &config, &fired, trace_core::util::now_ms());
         *fired = out.state;
         out.notifications
     }

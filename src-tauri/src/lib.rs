@@ -251,13 +251,14 @@ fn start_refresh_loop(app: tauri::AppHandle) {
         let state = app.state::<state::AppState>();
         state.refresh();
 
+        let snap = state.snapshot(&trace_core::core::SnapshotOptions::default());
+
         // Les alertes partent même fenêtres fermées : c'est précisément quand
         // on ne regarde pas l'écran qu'un avertissement a de la valeur.
-        notify(&app, state.pending_alerts());
+        notify(&app, state.pending_alerts(&snap));
 
         // La barre d'état, elle, se met à jour dans tous les cas : c'est la
         // seule chose visible quand aucune fenêtre ne l'est.
-        let snap = state.snapshot(&trace_core::core::SnapshotOptions::default());
         update_tray(&app, &snap);
         // On ne peint que si quelqu'un regarde : recalculer un instantané
         // complet pour l'envoyer à des fenêtres fermées était précisément ce
