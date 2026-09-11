@@ -219,11 +219,30 @@ pub struct CollectedAll {
     pub cost: Option<billing::CostReport>,
 }
 
-/// Les collecteurs déjà portés, dans l'ordre d'affichage.
-const PORTED: &[(&str, &str)] = &[
-    (claude_code::SOURCE, "source.claude-code"),
-    (codex_cli::SOURCE, "source.codex-cli"),
+type IsAvailableFn = fn(Option<&str>) -> bool;
+type CollectFn = fn(Option<&str>, &CollectorState) -> Collected;
+
+/// Les collecteurs déjà portés, dans l'ordre d'affichage. `is_available` et
+/// `collect` voyagent avec chaque entrée plutôt que d'être choisis par un
+/// `if id == ...` : ajouter une troisième source locale n'est alors qu'une
+/// ligne ici, pas une branche de plus dans `collect_ported`.
+const PORTED: &[(&str, &str, IsAvailableFn, CollectFn)] = &[
+    (
+        claude_code::SOURCE,
+        "source.claude-code",
+        claude_code::is_available,
+        claude_code::collect,
+    ),
+    (
+        codex_cli::SOURCE,
+        "source.codex-cli",
+        codex_cli::is_available,
+        codex_cli::collect,
+    ),
 ];
+
+type KeyFn = fn(&crate::store::Config) -> Option<&str>;
+type BillingCollectFn = fn(Option<&str>, i64) -> Collected;
 
 /// Les collecteurs qui restent à porter : ils demandent HTTP et l'accès au
 /// trousseau. On les DÉCLARE plutôt que de les faire disparaître — une source
@@ -231,33 +250,51 @@ const PORTED: &[(&str, &str)] = &[
 /// qu'elle existe et ne fonctionne simplement pas encore.
 /// Les deux rapports de facturation. Ils ne se lisent qu'avec une clé Admin,
 /// et leur motif d'indisponibilité doit le dire — c'est la première question
-/// que se pose l'utilisateur devant une source vide.
-const BILLING: &[(&str, &str, &str)] = &[
+/// que se pose l'utilisateur devant une source vide. `key` et `collect`
+/// voyagent avec chaque entrée pour la même raison que dans `PORTED`.
+const BILLING: &[(&str, &str, &str, KeyFn, BillingCollectFn)] = &[
     (
         billing::ANTHROPIC,
         "source.anthropic-api",
         "source.needAnthropicKey",
+        |c| c.anthropic_admin_key.as_deref(),
+        billing::collect_anthropic,
     ),
-    (billing::OPENAI, "source.openai-api", "source.needOpenaiKey"),
+    (
+        billing::OPENAI,
+        "source.openai-api",
+        "source.needOpenaiKey",
+        |c| c.openai_admin_key.as_deref(),
+        billing::collect_openai,
+    ),
 ];
 
-/// Exécute tous les collecteurs activés et fusionne leurs résultats.
-///
-/// Chaque collecteur est isolé : celui qui échoue est signalé dans `sources`
-/// mais n'empêche jamais les autres de remonter leurs données. Un dossier de
-/// journaux corrompu ne doit pas vider tout le tableau de bord.
-pub fn collect_all(
+/// Ce qu'un groupe de collecteurs indépendant verse dans le résultat final.
+/// Chaque champ reprend le défaut de `CollectedAll` : un groupe qui ne
+/// produit rien de particulier (par ex. la facturation OpenAI sur `live`)
+/// n'écrase rien chez les autres à la fusion.
+#[derive(Default)]
+struct Partial {
+    sources: Vec<SourceStatus>,
+    events: Vec<Event>,
+    quota: Vec<Quota>,
+    state: HashMap<String, CollectorState>,
+    live: Option<anthropic_oauth::LiveState>,
+    live_stats: Option<anthropic_oauth::LiveStats>,
+    cost: Option<billing::CostReport>,
+}
+
+/// Les collecteurs locaux (`PORTED`), qui ne font que lire des fichiers.
+fn collect_ported(
     config: &crate::store::Config,
     state: &HashMap<String, CollectorState>,
-    live: &anthropic_oauth::LiveState,
-) -> CollectedAll {
+) -> Partial {
     use crate::i18n::t;
-
     let disabled: std::collections::HashSet<&str> =
         config.disabled_sources.iter().map(String::as_str).collect();
-    let mut out = CollectedAll::default();
+    let mut out = Partial::default();
 
-    for (id, label_key) in PORTED {
+    for (id, label_key, is_available, collect) in PORTED {
         let mut entry = SourceStatus::new(id, t(label_key), true, !disabled.contains(id));
 
         if !entry.enabled {
@@ -267,15 +304,8 @@ pub fn collect_all(
         }
 
         let previous = state.get(*id).cloned().unwrap_or_default();
-        let collected = if *id == claude_code::SOURCE {
-            entry.available = claude_code::is_available(None);
-            entry
-                .available
-                .then(|| claude_code::collect(None, &previous))
-        } else {
-            entry.available = codex_cli::is_available(None);
-            entry.available.then(|| codex_cli::collect(None, &previous))
-        };
+        entry.available = is_available(None);
+        let collected = entry.available.then(|| collect(None, &previous));
 
         match collected {
             None => entry.note = Some(t("source.notFound")),
@@ -290,70 +320,128 @@ pub fn collect_all(
         }
         out.sources.push(entry);
     }
+    out
+}
 
-    // --- relevé direct ------------------------------------------------------
-    // Le seul collecteur qui interroge le réseau. Il ne remonte pas de tokens
-    // mais des taux d'occupation, et il est le seul chiffre juste sur les
-    // fenêtres : aucune reconstruction locale ne fait mieux.
-    {
-        let id = anthropic_oauth::SOURCE;
-        let mut entry = SourceStatus::new(
-            id,
-            t("source.anthropic-oauth"),
-            false,
-            !disabled.contains(id),
-        );
-        if !entry.enabled {
-            entry.note = Some(t("source.disabled"));
-        } else if !anthropic_oauth::is_available() {
-            entry.note = Some(t("source.needClaudeLogin"));
-        } else {
-            entry.available = true;
-            let mut res = anthropic_oauth::collect(anthropic_oauth::MIN_INTERVAL_MS, Some(live));
-            entry.quota = res.quota.len();
-            if let Some(l) = res.live.take() {
-                if !l.errors.is_empty() {
-                    entry.error = Some(l.errors.join(" ; "));
-                }
-                out.live = l.state.clone();
-                out.live_stats = Some(l);
+/// Le seul collecteur qui interroge le réseau pour les taux d'occupation. Il
+/// ne remonte pas de tokens, et il est le seul chiffre juste sur les
+/// fenêtres : aucune reconstruction locale ne fait mieux.
+fn collect_oauth(config: &crate::store::Config, live: &anthropic_oauth::LiveState) -> Partial {
+    use crate::i18n::t;
+    let id = anthropic_oauth::SOURCE;
+    let mut out = Partial::default();
+    let mut entry = SourceStatus::new(
+        id,
+        t("source.anthropic-oauth"),
+        false,
+        !config.disabled_sources.iter().any(|d| d == id),
+    );
+    if !entry.enabled {
+        entry.note = Some(t("source.disabled"));
+    } else if !anthropic_oauth::is_available() {
+        entry.note = Some(t("source.needClaudeLogin"));
+    } else {
+        entry.available = true;
+        let mut res = anthropic_oauth::collect(anthropic_oauth::MIN_INTERVAL_MS, Some(live));
+        entry.quota = res.quota.len();
+        if let Some(l) = res.live.take() {
+            if !l.errors.is_empty() {
+                entry.error = Some(l.errors.join(" ; "));
             }
-            out.quota.append(&mut res.quota);
+            out.live = Some(l.state.clone());
+            out.live_stats = Some(l);
         }
-        out.sources.push(entry);
+        out.quota.append(&mut res.quota);
     }
+    out.sources.push(entry);
+    out
+}
 
-    // --- rapports de facturation ---------------------------------------------
-    for (id, label_key, need_key) in BILLING {
-        let key = if *id == billing::ANTHROPIC {
-            config.anthropic_admin_key.as_deref()
-        } else {
-            config.openai_admin_key.as_deref()
-        };
-        let mut entry = SourceStatus::new(id, t(label_key), true, !disabled.contains(id));
+/// Un rapport de facturation d'organisation (Anthropic ou OpenAI).
+fn collect_billing(
+    config: &crate::store::Config,
+    id: &'static str,
+    label_key: &'static str,
+    need_key: &'static str,
+    key_fn: KeyFn,
+    collect: BillingCollectFn,
+) -> Partial {
+    use crate::i18n::t;
+    let key = key_fn(config);
+    let mut out = Partial::default();
+    let mut entry = SourceStatus::new(
+        id,
+        t(label_key),
+        true,
+        !config.disabled_sources.iter().any(|d| d == id),
+    );
 
-        if !entry.enabled {
-            entry.note = Some(t("source.disabled"));
-        } else if !billing::has_key(key) {
-            entry.note = Some(t(need_key));
-        } else {
-            entry.available = true;
-            let mut res = if *id == billing::ANTHROPIC {
-                billing::collect_anthropic(key, config.api_lookback_days)
-            } else {
-                billing::collect_openai(key, config.api_lookback_days)
-            };
-            entry.new_events = res.events.len();
-            entry.stats = res.stats;
-            if !res.errors.is_empty() {
-                entry.error = Some(res.errors.join(" ; "));
-            }
-            if res.cost.is_some() {
-                out.cost = res.cost.take();
-            }
-            out.events.append(&mut res.events);
+    if !entry.enabled {
+        entry.note = Some(t("source.disabled"));
+    } else if !billing::has_key(key) {
+        entry.note = Some(t(need_key));
+    } else {
+        entry.available = true;
+        let mut res = collect(key, config.api_lookback_days);
+        entry.new_events = res.events.len();
+        entry.stats = res.stats;
+        if !res.errors.is_empty() {
+            entry.error = Some(res.errors.join(" ; "));
         }
-        out.sources.push(entry);
+        out.cost = res.cost.take();
+        out.events.append(&mut res.events);
+    }
+    out.sources.push(entry);
+    out
+}
+
+/// Exécute tous les collecteurs activés et fusionne leurs résultats.
+///
+/// Chaque collecteur est isolé : celui qui échoue est signalé dans `sources`
+/// mais n'empêche jamais les autres de remonter leurs données. Un dossier de
+/// journaux corrompu ne doit pas vider tout le tableau de bord.
+///
+/// Les groupes ci-dessous sont indépendants et, pour la plupart, réseau :
+/// les exécuter en séquence ferait attendre un cycle entier la somme de
+/// leurs délais d'expiration (jusqu'à 10 s + 2 × 40 s) au lieu du plus lent
+/// d'entre eux. `thread::scope` les exécute de front sans qu'aucune donnée
+/// n'ait besoin de traverser un canal — chaque groupe rend sa part, et la
+/// fusion qui suit la jonction est la seule section séquentielle.
+pub fn collect_all(
+    config: &crate::store::Config,
+    state: &HashMap<String, CollectorState>,
+    live: &anthropic_oauth::LiveState,
+) -> CollectedAll {
+    let parts: Vec<Partial> = std::thread::scope(|scope| {
+        let mut handles = Vec::with_capacity(2 + BILLING.len());
+        handles.push(scope.spawn(|| collect_ported(config, state)));
+        handles.push(scope.spawn(|| collect_oauth(config, live)));
+        for (id, label_key, need_key, key_fn, collect) in BILLING {
+            handles.push(scope.spawn(move || {
+                collect_billing(config, id, label_key, need_key, *key_fn, *collect)
+            }));
+        }
+        handles
+            .into_iter()
+            .map(|h| h.join().expect("un collecteur ne panique pas"))
+            .collect()
+    });
+
+    let mut out = CollectedAll::default();
+    for mut part in parts {
+        out.sources.append(&mut part.sources);
+        out.events.append(&mut part.events);
+        out.quota.append(&mut part.quota);
+        out.state.extend(part.state);
+        if let Some(l) = part.live {
+            out.live = l;
+        }
+        if part.live_stats.is_some() {
+            out.live_stats = part.live_stats;
+        }
+        if part.cost.is_some() {
+            out.cost = part.cost;
+        }
     }
 
     // Les journaux ne sont pas parcourus dans l'ordre chronologique : la série
