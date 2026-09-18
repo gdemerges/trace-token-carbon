@@ -2,7 +2,7 @@
   "name": "trace",
   "productName": "TRACE",
   "version": "0.1.0",
-  "description": "TRACE — Token Rate And Carbon Estimator. Consommation de tokens par modèle IA, rate limits et empreinte carbone.",
+  "description": "TRACE — Token Rate And Carbon Estimator. Per-model AI token consumption, rate limits, and carbon footprint.",
   "author": "Guillaume Demerges",
   "license": "MIT",
   "private": true,

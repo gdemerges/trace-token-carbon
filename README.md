@@ -1,406 +1,385 @@
 # TRACE — Token Rate And Carbon Estimator
 
-Ce que vos outils IA consomment vraiment : tokens par modèle, position dans les
-limites de débit, et empreinte carbone. Une icône dans la barre d'état, un
-raccourci global pour les jauges, un tableau de bord pour le détail.
+What your AI tools actually consume: tokens per model, position within rate
+limits, and carbon footprint. A menu-bar icon, a global shortcut for the
+gauges, a dashboard for the detail.
 
-macOS · Windows · Linux — Rust et Tauri. **4,4 Mo empaqueté**, contre 287 Mo
-pour le runtime Electron qu'employait la version précédente.
+macOS · Windows · Linux — Rust and Tauri, packaged at **4.4 MB**.
 
 ---
 
-## Démarrer
+## Getting started
 
 ```bash
-cargo run -p trace-app     # lance l'application
-cargo run -p trace-cli     # les mêmes chiffres, dans le terminal
-cargo test                 # 135 tests sur le cœur, la présentation et les catalogues
-cargo tauri build          # empaquette pour le système courant
+cargo run -p trace-app     # launch the app
+cargo run -p trace-cli     # the same numbers, in the terminal
+cargo test                 # 135 tests across the core, presentation, and catalogs
+cargo tauri build          # package for the current system
 ```
 
-Rust 1.82 ou plus récent. Sous Linux, la webview du système demande
-`libwebkit2gtk-4.1-dev`, `libappindicator3-dev` et `librsvg2-dev`.
+Rust 1.82 or newer. On Linux, the system webview requires
+`libwebkit2gtk-4.1-dev`, `libappindicator3-dev`, and `librsvg2-dev`.
 
-Les tests tournent en intégration continue sur les trois systèmes
-(`.github/workflows/rust.yml`), avec `clippy` et `rustfmt` en erreur bloquante.
-Ce n'est pas une précaution de principe : les chemins de fichiers, les
-permissions POSIX, la construction du dossier de configuration et surtout la
-détection de processus vivant diffèrent d'un système à l'autre, et la CI a
-attrapé sur Windows deux fautes qu'aucune machine macOS ne pouvait montrer.
+Tests run in continuous integration on all three systems
+(`.github/workflows/rust.yml`), with `clippy` and `rustfmt` as blocking
+errors. This isn't precautionary boilerplate: file paths, POSIX permissions,
+config-directory construction, and especially live-process detection differ
+across systems, and CI has caught faults on Windows that no macOS machine
+could surface.
 
 ### Architecture
 
-Trois membres, et la frontière entre eux est ce qui fait tenir le reste :
+Three crates, and the boundary between them is what holds the rest together:
 
 ```
-crates/trace-core/   lecture des journaux, tarification, carbone, agrégation,
-                     limites de débit, alertes. Ne connaît NI Tauri NI aucune
-                     interface : c'est ce qui permet de l'éprouver sur les
-                     trois systèmes sans rien lancer.
-crates/trace-cli/    le binaire `trace`.
-src-tauri/           barre d'état, popover, tableau de bord.
-src/renderer/        l'interface, en JavaScript sans bundler ni framework.
+crates/trace-core/   log reading, pricing, carbon, aggregation, rate limits,
+                     alerts. Knows NOTHING about Tauri or any UI: that's what
+                     lets it be tested on all three systems without launching
+                     anything.
+crates/trace-cli/    the `trace` binary.
+src-tauri/           menu-bar icon, popover, dashboard.
+src/renderer/        the interface, in framework-free, bundler-free JavaScript.
 ```
 
-Le renderer n'a pas été réécrit lors du passage d'Electron à Tauri : le même
-DOM, le même SVG écrit à la main, la même feuille de style. Seul le pont IPC
-change, et il expose exactement la même surface.
+The renderer is the same DOM, the same hand-written SVG, the same
+stylesheet across every platform target. Only the IPC bridge changes, and it
+exposes exactly the same surface.
 
-## Utiliser
+## Using it
 
-| Geste | Effet |
+| Action | Effect |
 |---|---|
-| `⌘⌥T` (`Ctrl+Alt+T`) | Ouvre les jauges par-dessus n'importe quelle application |
-| Clic sur l'icône | Idem |
-| `Échap` | Referme le popover |
-| `⌘Tab` | Atteint le tableau de bord quand il est ouvert |
-| `⌘↩` | Ouvre le tableau de bord |
-| `trace --json` | Sortie machine, pour une barre de statut ou un script |
-| `trace --carbone` | Eau, sensibilité au mix électrique, décomposition de l'incertitude |
-| `trace --lang=en` | Force la langue (`fr`, `en`) |
+| `⌘⌥T` (`Ctrl+Alt+T`) | Opens the gauges over any application |
+| Click the icon | Same |
+| `Esc` | Closes the popover |
+| `⌘Tab` | Reaches the dashboard when it's open |
+| `⌘↩` | Opens the dashboard |
+| `trace --json` | Machine output, for a status bar or a script |
+| `trace --carbon` | Water, grid-mix sensitivity, uncertainty breakdown |
+| `trace --lang=en` | Forces the language (`fr`, `en`) |
 
-Le raccourci, la langue, le mix électrique, l'intervalle de rafraîchissement, la
-métrique affichée dans la barre d'état, la profondeur de détail conservée et la
-vérification de version se règlent depuis l'engrenage du tableau de bord.
+The shortcut, language, grid mix, refresh interval, menu-bar metric,
+retained level of detail, and version check are all configured from the
+dashboard's settings gear.
 
-### Langue
+### Language
 
-Français et anglais. Par défaut TRACE suit la langue du système ; le réglage la
-force. Le changement s'applique sans redémarrage — y compris aux libellés
-calculés par le cœur (fenêtres, sources, équivalents carbone) et au format des
-nombres et des dates.
+French and English. By default TRACE follows the system language; the
+setting overrides it. The change applies without a restart — including
+labels computed by the core (windows, sources, carbon equivalents) and the
+formatting of numbers and dates.
 
-Les catalogues sont deux fichiers JSON (`src/i18n/`), embarqués dans le binaire
-et transmis à l'interface par IPC : le renderer n'a aucun accès au système de
-fichiers, et c'est délibéré. Un test vérifie que les deux langues
-portent exactement les mêmes clés, avec les mêmes paramètres, et que toute clé
-employée dans le code existe — une clé mal orthographiée s'afficherait telle
-quelle à l'écran sans que rien d'autre ne le signale.
+The catalogs are two JSON files (`src/i18n/`), embedded in the binary and
+passed to the interface over IPC: the renderer has no filesystem access, by
+design. A test verifies that both languages carry exactly the same keys with
+the same parameters, and that every key used in the code exists — a
+misspelled key would otherwise render literally on screen with nothing else
+to flag it.
 
-**Ce qui reste en français :** les notes et citations de l'annexe
-méthodologique carbone (`carbon/factors.rs`, `carbon/sources.rs`). Ce sont des
-textes destinés à un livrable auditable, encore en cours de figeage ; les
-traduire vite en ferait deux versions à maintenir dont une non relue.
+**What stays in French:** the notes and citations in the carbon methodology
+appendix (`carbon/factors.rs`, `carbon/sources.rs`). These are texts meant
+for an auditable deliverable, still being pinned down; translating them
+early would produce two versions to maintain, one of them unreviewed.
 
 ---
 
-## Ce que chaque source fournit réellement
+## What each source actually provides
 
-TRACE agrège cinq sources. Elles ne sont pas équivalentes, et l'application le
-dit au lieu de le masquer :
+TRACE aggregates five sources. They are not equivalent, and the app says so
+instead of hiding it:
 
-| Source | Tokens | Limites de débit | Comment |
+| Source | Tokens | Rate limits | How |
 |---|:--:|:--:|---|
-| **Claude Code** | ✅ | ~ | Journaux locaux `~/.claude/projects`. Ventilation du cache par TTL, donc tarification exacte. |
-| **Claude — usage en direct** | — | ✅ | Interroge `/api/oauth/usage`, l'endpoint que Claude Code utilise pour sa commande `/usage`, avec les identifiants OAuth déjà présents sur la machine. **Seule source juste** pour l'occupation des fenêtres. |
-| **Codex CLI / Desktop** | ✅ | ✅ | Rollouts `~/.codex/sessions`. Le serveur y écrit déjà un pourcentage d'utilisation par fenêtre. |
-| **API Anthropic** | ✅ | — | Rapports d'usage et de coût de l'organisation. Chiffres **facturés**, toutes machines confondues. Clé Admin requise. |
-| **API OpenAI** | ✅ | — | Rapport d'usage de l'organisation. Clé Admin requise. |
+| **Claude Code** | ✅ | ~ | Local logs at `~/.claude/projects`. Cache broken down by TTL, so pricing is exact. |
+| **Claude — live usage** | — | ✅ | Queries `/api/oauth/usage`, the endpoint Claude Code's own `/usage` command uses, with the OAuth credentials already present on the machine. **The only accurate source** for window occupancy. |
+| **Codex CLI / Desktop** | ✅ | ✅ | Rollouts at `~/.codex/sessions`. The server already writes a per-window usage percentage there. |
+| **Anthropic API** | ✅ | — | Organization usage and cost reports. **Billed** figures, across every machine. Requires an Admin key. |
+| **OpenAI API** | ✅ | — | Organization usage report. Requires an Admin key. |
 
-**Gemini, Grok et Ollama ont été retirés.** Ils avaient été ajoutés puis
-inspectés en profondeur : aucun des trois n'écrit de compteur de tokens
-exploitable en local. Gemini CLI le permettait via sa télémétrie
-OpenTelemetry, mais ce client n'est plus supporté, et Antigravity qui le
-remplace ne persiste ni compteurs ni quota — son gestionnaire de quota
-recharge depuis le serveur sans rien écrire. Grok CLI ne journalise que des
-diagnostics d'authentification. Ollama ne conserve pas les compteurs que son
-API renvoie pourtant à chaque appel.
-
-Plutôt que de conserver trois sources incapables de produire un chiffre, elles
-ont été supprimées. Le principe reste : jamais d'extrapolation depuis le
-nombre de caractères, qui produirait une valeur fausse présentée comme une
-mesure.
+Gemini, Grok, and Ollama are not covered: none of the three write a usable
+local token counter. Rather than keep a source that cannot produce a number,
+it's left out. The underlying rule: never extrapolate from a character
+count, which would produce a false value presented as a measurement.
 
 ---
 
-## Méthodologie
+## Methodology
 
-### Empreinte carbone
+### Carbon footprint
 
-Méthode **EcoLogits / Boavizta**, appliquée telle quelle :
+**EcoLogits / Boavizta** method, applied as-is:
 
-1. L'énergie GPU par token généré est linéaire en nombre de paramètres
-   **actifs** — ce qui vaut aussi bien pour un modèle dense que pour un
-   mixture-of-experts.
-2. Le reste du serveur est imputé au prorata des GPU mobilisés, via la latence.
-3. Le PUE du centre de données couvre refroidissement et pertes de distribution.
-   TRACE ne prend pas le PUE générique de 1,2 : chaque fournisseur porte la
-   fourchette annoncée par les exploitants qui l'hébergent (Anthropic sur AWS
-   et Google Cloud, OpenAI sur Azure), et un fournisseur inconnu s'ouvre
-   jusqu'au centre de données de colocation ordinaire.
-4. La fabrication du matériel est amortie sur cinq ans, au prorata du temps
-   d'occupation.
-5. L'**empreinte eau** suit la même énergie : le refroidissement sur site (WUE
-   du fournisseur, rapporté à l'énergie informatique) plus l'eau consommée hors
-   site pour produire l'électricité, qui domine généralement la première.
+1. GPU energy per generated token is linear in the number of **active**
+   parameters — true for a dense model as much as for a mixture-of-experts.
+2. The rest of the server is allocated pro rata to the GPUs mobilized, via
+   latency.
+3. The data center's PUE covers cooling and distribution losses. TRACE does
+   not use a generic 1.2 PUE: each provider carries the range announced by
+   the operators that host it (Anthropic on AWS and Google Cloud, OpenAI on
+   Azure), and an unknown provider opens up to an ordinary colocation data
+   center's range.
+4. Hardware manufacturing is amortized over five years, pro rata to
+   occupancy time.
+5. The **water footprint** follows the same energy: on-site cooling
+   (provider's WUE, applied to IT energy) plus the water consumed off-site to
+   produce the electricity, which generally dominates the first term.
 
-**Extension propre à TRACE, assumée comme telle.** EcoLogits ne compte que les
-tokens de *sortie*. Pour un usage agentique c'est intenable : on observe ici
-1,30 Md de tokens lus en cache pour 4,4 M générés. Les ignorer sous-estimerait
-l'empreinte de deux ordres de grandeur. Chaque classe de token est donc
-pondérée par son coût énergétique relatif à un token décodé, calé sur un bilan
-de FLOPs plutôt qu'à l'intuition — un prefill de 37 k tokens sur un modèle à
-100 Md de paramètres actifs représente 7,4·10¹⁵ FLOPs, soit ~6,6 Wh sur huit
-A100 à 40 % de MFU, d'où un rapport d'environ 0,017 par rapport au décodage.
+**A TRACE-specific extension, presented as such.** EcoLogits only counts
+*output* tokens. That's untenable for agentic usage: this machine observes
+1.30B cached-read tokens against 4.4M generated. Ignoring them would
+underestimate the footprint by two orders of magnitude. Each token class is
+therefore weighted by its energy cost relative to a decoded token, based on a
+FLOPs accounting rather than intuition — a 37k-token prefill on a
+100B-active-parameter model represents 7.4·10¹⁵ FLOPs, roughly 6.6 Wh on
+eight A100s at 40% MFU, giving a ratio of about 0.017 relative to decoding.
 
-**Le résultat est une fourchette, jamais un point.** Les fournisseurs ne
-publient pas la taille de leurs modèles : les paramètres sont des estimations à
-bornes larges, qui se propagent jusqu'à l'affichage. Un chiffre unique
-laisserait croire à une mesure.
+**The result is a range, never a point value.** Providers don't publish
+their model sizes: parameters are wide-bound estimates, which propagate to
+the display. A single figure would suggest a measurement that doesn't exist.
 
-À noter : EcoLogits produit des valeurs supérieures aux auto-déclarations des
-fournisseurs (≈ 2 Wh contre ≈ 0,3 Wh pour une requête courte). C'est une
-divergence méthodologique connue, pas une erreur de calcul.
+Note: EcoLogits produces higher values than provider self-reports (≈2 Wh
+versus ≈0.3 Wh for a short request). That's a known methodological
+divergence, not a calculation error.
 
-Le mix électrique est réglable (France 56 g/kWh … monde 480 g/kWh). Par défaut
-la moyenne états-unienne pour les modèles fermés, puisque l'essentiel de la
-capacité d'inférence s'y trouve ; le mix local pour un modèle exécuté chez vous.
+The grid mix is adjustable (France 56 g/kWh … world 480 g/kWh). The default
+is the US average for closed models, since most inference capacity sits
+there; the local mix applies to a model run on your own machine.
 
-### Analyse de sensibilité
+### Sensitivity analysis
 
-Un total unique n'est pas défendable : il repose sur une hypothèse de
-localisation et sur des tailles de modèles non publiées. Le total est donc
-livré avec de quoi le contester, à l'écran comme en ligne de commande
-(`trace --carbone`) et dans la sortie `--json` :
+A single total isn't defensible: it rests on a location assumption and on
+unpublished model sizes. The total therefore ships with the means to
+contest it, on screen as well as on the command line (`trace --carbon`) and
+in the `--json` output:
 
-- **le même total sous quatre mix électriques** (France, UE, États-Unis,
-  monde), avec le rapport au mix retenu ;
-- **la décomposition de l'incertitude**, levier par levier. Chaque levier est
-  rejoué seul, les autres figés sur leur milieu, et le rapport borne haute /
-  borne basse obtenu mesure ce qu'il apporte à lui seul. En pratique la taille
-  des modèles et le mix électrique dominent (× 5 chacun), la pondération des
-  tokens suit (× 2,4), et le PUE ne pèse presque rien (× 1,1) — c'est la seule
-  hypothèse pour laquelle les exploitants publient quelque chose.
+- **the same total under four grid mixes** (France, EU, United States,
+  world), with the ratio to the selected mix;
+- **the uncertainty breakdown**, lever by lever. Each lever is replayed
+  alone, the others held at their midpoint, and the high/low bound ratio
+  obtained measures what it contributes on its own. In practice model size
+  and grid mix dominate (×5 each), token weighting follows (×2.4), and PUE
+  barely matters (×1.1) — the only assumption for which operators publish
+  anything.
 
-Ce n'est pas une propagation d'incertitude au sens statistique : les bornes ne
-sont pas des intervalles de confiance et les leviers ne se composent pas
-linéairement. C'est une analyse de sensibilité, et l'interface le dit.
+This is not statistical uncertainty propagation: the bounds are not
+confidence intervals and the levers don't combine linearly. It's a
+sensitivity analysis, and the interface says so.
 
-### Traçabilité des facteurs
+### Factor traceability
 
-Chaque constante du calcul est rattachée à une source dans
-`crates/trace-core/src/carbon/sources.rs`, et `factor_table()` produit le tableau
-annexable à un rapport : valeur, unité, citation, réserve d'usage.
+Every constant in the calculation is tied to a source in
+`crates/trace-core/src/carbon/sources.rs`, and `factor_table()` produces the
+table that can be appended to a report: value, unit, citation, usage
+caveat.
 
-Un champ `pinned` distingue les sources dont la version exacte et la date de
-consultation ont été relevées **sur la publication** de celles qui ne le sont
-pas encore. Une source non figée reste utilisable dans l'application — l'ordre
-de grandeur est bon — mais pas dans un livrable audité, et sa citation le dit
-en toutes lettres plutôt que de faire semblant. Inventer un numéro de version
-pour faire propre serait pire qu'une citation absente : ça passerait la
-relecture.
+A `pinned` field distinguishes sources whose exact version and access date
+have been recorded **against the publication itself** from those that
+haven't been yet. An unpinned source remains usable inside the app — the
+order of magnitude holds — but not in an audited deliverable, and its
+citation says so explicitly rather than pretending otherwise. Making up a
+version number to look tidy would be worse than an absent citation — it
+would pass review.
 
-Deux tests tiennent la discipline : l'un refuse toute constante sans source,
-l'autre fige la liste de ce qui reste à relever, pour qu'en figer une soit un
-geste délibéré et qu'en ajouter une non figée ne passe pas inaperçu.
+Two tests enforce the discipline: one refuses any constant without a
+source, the other freezes the list of what remains unpinned, so that pinning
+one is a deliberate act and adding an unpinned one doesn't go unnoticed.
 
-Le tableau ne reste pas dans le code : la carte **Méthodologie et sources** du
-tableau de bord l'affiche en entier, précédée du décompte des sources non
-figées, et « Exporter » écrit un second fichier `…-methodologie.csv` à côté des
-données. Un tableau de grammes sans les facteurs qui l'ont produit n'est pas
-vérifiable.
+The table isn't confined to the code: the dashboard's **Methodology and
+sources** card displays it in full, preceded by the count of unpinned
+sources, and "Export" writes a second `…-methodology.csv` file next to the
+data. A table of grams without the factors that produced it isn't
+verifiable.
 
-Les mix électriques sont tous des facteurs de **localisation** (location-based
-au sens du GHG Protocol). Ils ignorent les garanties d'origine achetées par les
-exploitants de centres de données, qui feraient s'effondrer le chiffre en
-approche market-based. C'est le choix conservateur, et le seul calculable sans
-publication des fournisseurs.
+Grid mixes are all **location-based** factors (in the GHG Protocol sense).
+They ignore the origin guarantees data-center operators purchase, which
+would collapse the figure under a market-based approach. It's the
+conservative choice, and the only one computable without provider
+disclosure.
 
-### Limites de débit
+### Rate limits
 
-Les plafonds des plans Claude ne sont publiés nulle part, varient selon le plan
-et le modèle, et **le taux d'occupation réel n'est stocké nulle part en local** :
-`/usage` l'obtient en interrogeant l'API. Par ordre de fiabilité décroissante :
+Claude plan caps are published nowhere, vary by plan and model, and **actual
+window occupancy is stored nowhere locally**: `/usage` obtains it by querying
+the API. In decreasing order of reliability:
 
-1. **Le relevé en direct.** TRACE interroge le même endpoint que la commande
-   `/usage` de Claude Code, avec les identifiants OAuth déjà déposés sur la
-   machine. Le jeton ne quitte jamais le module qui le lit : ni journal, ni
-   configuration, ni interface. C'est le chiffre d'Anthropic, il prime sur
-   tout le reste.
+1. **The live reading.** TRACE queries the same endpoint Claude Code's
+   `/usage` command uses, with the OAuth credentials already stored on the
+   machine. The token never leaves the module that reads it: no log, no
+   config file, no UI. It's Anthropic's own figure, and it takes priority
+   over everything else.
 
-   **Discipline d'interrogation**, apprise à la dure — la première version
-   appelait l'endpoint à chaque cycle, soit toutes les vingt secondes, et s'est
-   fait renvoyer un `429` avec une jauge figée sur la dernière valeur connue :
+   **Query discipline:**
 
-   - un appel toutes les **5 minutes** au maximum, découplé du rafraîchissement
-     local qui, lui, ne relit que des fichiers ;
-   - **report exponentiel** sur échec (2, 4, 8… minutes, plafonné à une heure),
-     et respect de l'en-tête `Retry-After` quand le serveur le fournit ;
-   - le dernier relevé est **persisté**, un seul par fenêtre, remplacé à chaque
-     succès. Il survit donc à un redémarrage, et un redémarrage ne déclenche pas
-     d'appel si le relevé en cache est récent ;
-   - passé 20 minutes, la valeur reste affichée — c'est la meilleure information
-     disponible — mais l'interface annonce son âge au lieu de la présenter comme
-     courante. **Un chiffre daté vaut mieux qu'une estimation fausse** ;
-   - **la cadence s'annonce** : la jauge indique l'âge du relevé *et* l'échéance
-     du suivant (« en direct · il y a 4 min · prochain relevé dans 11 min »).
-     Dire l'âge seul ne suffisait pas — un chiffre immobile pendant un quart
-     d'heure se lit comme une panne, et on prend l'habitude de cliquer sur ⟳ à
-     chaque consultation. Attendre la cadence n'est pas un incident, et n'est
-     donc pas signalé comme tel : le bandeau rouge reste réservé aux vrais
-     échecs ;
-   - le bouton ⟳ court-circuite la cadence.
-2. **Votre relevé manuel.** Si le direct n'est pas disponible : tapez `/usage`,
-   cliquez sur « ajuster » sous la jauge et reportez le chiffre. TRACE remonte
-   au plafond par produit en croix.
-3. **Auto-calibrage sur un refus de fenêtre passé.** Ordre de grandeur
-   seulement : mesuré sur un cas réel, l'écart atteignait un facteur 2,6. La
-   valeur s'affiche avec un « ≈ » et une jauge à segments évidés, pour qu'on ne
-   la confonde jamais avec une mesure.
-4. **Rien de tout cela** : la consommation de la fenêtre est affichée sans
-   pourcentage. Une jauge sans échelle vaut mieux qu'une jauge fausse.
+   - one call every **5 minutes** at most, decoupled from the local refresh,
+     which only re-reads files;
+   - **exponential backoff** on failure (2, 4, 8… minutes, capped at one
+     hour), and respect for the `Retry-After` header when the server
+     provides one;
+   - the last reading is **persisted**, one per window, replaced on each
+     success. It survives a restart, and a restart doesn't trigger a call if
+     the cached reading is recent;
+   - past 20 minutes, the value stays displayed — it's the best information
+     available — but the interface announces its age instead of presenting
+     it as current. **A dated figure beats a false estimate**;
+   - **the cadence is announced**: the gauge shows the reading's age *and*
+     the next reading's due time ("live · 4 min ago · next in 11 min"). A
+     figure frozen for a quarter hour would otherwise read as an outage,
+     encouraging a reflex click on ⟳ at every check. Waiting out the cadence
+     isn't an incident, so it isn't flagged as one — the red banner is
+     reserved for actual failures;
+   - the ⟳ button bypasses the cadence.
+2. **Your manual reading.** If live data isn't available: type `/usage`,
+   click "adjust" under the gauge, and enter the figure. TRACE cross-derives
+   the per-product cap from it.
+3. **Auto-calibration on a past window rejection.** Order of magnitude only:
+   measured on a real case, the discrepancy reached a factor of 2.6. The
+   value displays with an "≈" and a hollow-segment gauge, so it's never
+   mistaken for a measurement.
+4. **None of the above**: window consumption is shown without a percentage.
+   A gauge with no scale beats a false one.
 
-Pour Codex, un relevé dont la fenêtre a expiré n'est pas réaffiché tel quel :
-la fenêtre s'est réinitialisée depuis. TRACE s'en sert comme point de calibrage
-et recalcule l'occupation de la fenêtre courante — donc 0 % si vous n'avez pas
-touché à Codex depuis.
+For Codex, a reading whose window has expired isn't shown as-is: the window
+has since reset. TRACE uses it as a calibration point and recomputes the
+current window's occupancy — so 0% if you haven't touched Codex since.
 
-Un piège important est traité ici : `rateLimitType` vaut toujours `five_hour`,
-y compris quand la requête a en réalité été bloquée par un **plafond de dépense
-mensuel**. Sur ce poste, deux refus sur trois étaient de ce type. Les confondre
-calibrerait la jauge 5 h sur un événement sans rapport avec elle — TRACE classe
-donc la cause réelle à partir du message et n'utilise que les vrais refus de
-fenêtre.
+An important trap is handled here: `rateLimitType` is always `five_hour`,
+even when the request was actually blocked by a **monthly spend cap**. On
+this account, two rejections out of three were of that type. Conflating them
+would calibrate the 5-hour gauge on an unrelated event — TRACE classifies the
+real cause from the message and only uses genuine window rejections.
 
-L'origine de l'échelle est toujours écrite sous la jauge.
+The scale's origin is always written under the gauge.
 
-La consommation est **pondérée** (sortie ×5, écriture de cache ×1,25, lecture
-×0,1) : un total brut serait écrasé par le cache et ne suivrait pas du tout le
-comportement réel des plafonds.
+Consumption is **weighted** (output ×5, cache write ×1.25, cache read ×0.1):
+a raw total would be swamped by cache and wouldn't track the real behavior
+of the caps at all.
 
-### Ne jamais compter deux fois
+### Never double-counting
 
-Trois pièges distincts, trois parades. Ils ont en commun de produire des
-chiffres **trop grands**, ce qui est la pire des erreurs pour un outil dont on
-attend qu'il dise quand lever le pied.
+Three distinct traps, three safeguards. They share the property of
+producing **inflated** numbers, the worst kind of error for a tool meant to
+tell you when to ease off.
 
-**1. Le doublon de streaming.** Claude Code réécrit chaque message au fil du
-streaming : sur ce poste, **4 345 des 10 577 entrées sont des doublons**. Sans
-déduplication par `message.id`, la facture affichée serait gonflée de ~70 %.
-Codex, lui, expose à la fois un cumul de session et un delta par tour — sommer
-le cumul multiplierait la consommation par le nombre de tours.
+**1. The streaming duplicate.** Claude Code rewrites each message throughout
+streaming: on this machine, **4,345 of 10,577 entries are duplicates**.
+Without deduplication by `message.id`, the displayed bill would be inflated
+by ~70%. Codex, for its part, exposes both a session cumulative and a
+per-turn delta — summing the cumulative would multiply consumption by the
+number of turns.
 
-**2. L'empilement des agrégats journaliers.** Les rapports d'organisation
-(APIs Admin Anthropic et OpenAI) renvoient un agrégat de la journée **en
-cours**, qui grossit d'un relevé à l'autre. Fusionnés comme un flux
-d'événements, les états successifs s'additionnaient au lieu de se corriger : à
-une minute de cadence, la journée courante finissait comptée plus de mille
-fois. Ces sources sont désormais fusionnées par **remplacement** sur la clé
-`(jour, source, modèle, projet)` — un relevé vide, causé par une coupure
-réseau, n'efface rien.
+**2. Stacked daily aggregates.** Organization reports (Anthropic and OpenAI
+Admin APIs) return an aggregate for the **current** day, which grows from
+one reading to the next. Merged as an event stream, successive states would
+add up instead of correcting each other: at a one-minute cadence, the
+current day would end up counted over a thousand times. These sources are
+therefore merged by **replacement** on the `(day, source, model, project)`
+key — an empty reading, caused by a network outage, erases nothing.
 
-**3. La mesure locale et la facture.** `claude-code` lit les journaux de cette
-machine, `anthropic-api` lit la facturation de l'organisation : ce sont les
-**mêmes requêtes vues deux fois**. Les additionner doublait le total dès
-qu'une clé Admin était renseignée, jauges comprises. La règle appliquée
-(`crates/trace-core/src/provenance.rs`) :
+**3. Local measurement versus billing.** `claude-code` reads this machine's
+logs, `anthropic-api` reads the organization's billing: these are the
+**same requests seen twice**. Summing them would double the total as soon as
+an Admin key is configured, gauges included. The rule applied
+(`crates/trace-core/src/provenance.rs`):
 
-- la mesure locale garde la main sur les jours qu'elle couvre — elle seule
-  porte le projet, la session et l'heure ;
-- le chiffre facturé ne comble que les jours où cette machine n'a rien vu
-  passer : une autre machine, un autre poste, une période antérieure à
-  l'installation ;
-- l'écart entre les deux n'est pas masqué pour autant : il devient la carte
-  **« Mesuré ici / facturé »**, seule vérification *externe* dont TRACE dispose
-  sur ses propres chiffres. Un écart durable dit soit qu'une autre machine
-  consomme sur le même compte, soit que la lecture des journaux se trompe. Les
-  deux méritent d'être vus plutôt que moyennés en silence.
+- local measurement takes precedence on the days it covers — it alone
+  carries the project, session, and time;
+- the billed figure only fills in days this machine saw nothing on: another
+  machine, another workstation, a period before installation;
+- the gap between the two isn't hidden either: it becomes the **"Measured
+  here / billed"** card, the only *external* check TRACE has on its own
+  numbers. A persistent gap says either that another machine is consuming
+  on the same account, or that log reading is off. Both deserve to be seen
+  rather than silently averaged away.
 
-Un agrégat journalier ne nourrit par ailleurs **aucune jauge** : horodaté à
-minuit, il déversait la consommation d'une journée entière — toutes machines
-confondues — dans la fenêtre de cinq heures qui contient minuit.
+A daily aggregate also feeds **no gauge**: timestamped at midnight, it would
+dump a full day's consumption — across every machine — into the five-hour
+window that contains midnight.
 
 ---
 
-## Présence dans le Dock (macOS)
+## Dock presence (macOS)
 
-TRACE est une application d'arrière-plan : **aucune icône dans le Dock au
-repos**, c'est le propre d'un outil de barre de menus.
+TRACE is a background application: **no Dock icon at rest**, as befits a
+menu-bar tool.
 
-L'icône apparaît en revanche tant que le tableau de bord est ouvert, et
-disparaît à sa fermeture. Sans cela la fenêtre devenait un piège : introuvable
-au `⌘Tab`, et définitivement perdue si elle passait derrière une autre. Un clic
-sur l'icône du Dock rouvre le tableau de bord, comme dans n'importe quelle
-application macOS.
+The icon appears while the dashboard is open, and disappears when it
+closes. Without this, the window would become a trap: unreachable via
+`⌘Tab`, and effectively lost if it slid behind another window. Clicking the
+Dock icon reopens the dashboard, as in any macOS application.
 
-Effet de bord bienvenu : tant que l'icône est présente, le menu applicatif
-l'est aussi, et les raccourcis d'édition standard fonctionnent dans les champs
-de saisie des réglages.
+A welcome side effect: while the icon is present, the application menu is
+too, and standard editing shortcuts work in the settings' input fields.
 
-## Alertes
+## Alerts
 
-TRACE prévient par une notification système au franchissement d'un seuil
-(80 % et 95 % par défaut, modifiables). Trois règles gouvernent ce
-comportement :
+TRACE warns via a system notification when a threshold is crossed (80% and
+95% by default, adjustable). Three rules govern this behavior:
 
-- **Jamais sur une échelle approximative.** Seules les jauges dont l'échelle
-  vient du serveur ou de votre calage déclenchent une alerte. L'estimation
-  déduite d'un refus 429 s'était révélée fausse d'un facteur 2,6 — une alerte
-  fausse détruirait la confiance dans toutes les autres.
-- **Une fois par seuil et par fenêtre.** Le franchissement est un événement,
-  pas un état : répéter la notification à chaque cycle ferait de l'outil une
-  nuisance. Un bond de 0 à 96 % ne produit qu'une notification, celle du seuil
-  le plus haut franchi.
-- **Une nouvelle fenêtre réarme les seuils.** Une fenêtre glissante, qui n'a
-  pas de réinitialisation annoncée, se réarme une fois par heure : une
-  saturation qui dure mérite plus d'un rappel, mais pas un par minute.
+- **Never on an approximate scale.** Only gauges whose scale comes from the
+  server or from your own calibration trigger an alert. An estimate derived
+  from a 429 rejection has proven wrong by a factor of 2.6 — a false alert
+  would destroy trust in every other one.
+- **Once per threshold and per window.** Crossing a threshold is an event,
+  not a state: repeating the notification every cycle would make the tool a
+  nuisance. A jump from 0 to 96% produces a single notification, for the
+  highest threshold crossed.
+- **A new window rearms the thresholds.** A sliding window, which has no
+  announced reset, rearms once an hour: a sustained saturation deserves more
+  than one reminder, but not one per minute.
 
-### Trajectoire
+### Trajectory
 
-Le seuil dit où vous en êtes ; la trajectoire dit où vous allez. À 40 % en
-montant vite il reste le temps d'agir, à 80 % souvent plus : c'est la pente,
-pas le niveau, qui indique s'il faut lever le pied.
+The threshold says where you are; the trajectory says where you're headed.
+At 40% and climbing fast there's still time to act, at 80% often less: it's
+the slope, not the level, that indicates whether to ease off.
 
-Chaque jauge porte donc une projection — *« pleine dans 26 min à ce rythme »* —
-calculée sur la cadence des **45 dernières minutes**, et visible dans le
-tableau de bord, le popover, l'infobulle de la barre d'état et la CLI. Trois
-refus délibérés la rendent défendable :
+Every gauge therefore carries a projection — *"full in 26 min at this
+rate"* — computed on the pace of the **last 45 minutes**, and shown in the
+dashboard, the popover, the menu-bar tooltip, and the CLI. Three deliberate
+refusals keep it defensible:
 
-- **Sans échelle fiable, pas de projection.** Il faut un plafond mesuré, ou
-  déduit d'un pourcentage communiqué par le serveur.
-- **Sans activité récente, pas de projection.** Une cadence nulle ne sature
-  jamais ; annoncer « dans 340 h » serait du bruit.
-- **Une saturation postérieure à la réinitialisation n'en est pas une.**
-  Atteindre le plafond à 3 h du matin n'a aucune importance si la fenêtre se
-  vide à 2 h.
+- **No reliable scale, no projection.** A measured cap is required, or one
+  derived from a percentage the server communicated.
+- **No recent activity, no projection.** A zero pace never saturates;
+  announcing "in 340 h" would be noise.
+- **Saturation past the reset doesn't count as saturation.** Hitting the cap
+  at 3 a.m. is irrelevant if the window empties at 2 a.m.
 
-Une alerte de trajectoire est émise **une seule fois par fenêtre**, et
-seulement **avant le premier seuil** : plus tard, elle doublerait l'alerte de
-seuil au lieu de l'anticiper.
+A trajectory alert fires **at most once per window**, and only **before the
+first threshold**: any later, it would duplicate the threshold alert instead
+of anticipating it.
 
-## Confidentialité
+## Privacy
 
-Tout est local. Les journaux analysés contiennent votre code et vos
-conversations : TRACE ne les envoie nulle part.
+Everything is local. The logs analyzed contain your code and your
+conversations: TRACE sends none of it anywhere.
 
-Les requêtes réseau, exhaustivement :
+The network requests, exhaustively:
 
-| Destination | Quand | Ce qui part |
+| Destination | When | What's sent |
 |---|---|---|
-| `api.anthropic.com/api/oauth/usage` | toutes les 15 min, si Claude Code est connecté | le jeton OAuth déjà présent sur la machine |
-| `api.anthropic.com` (rapports d'organisation) | à chaque cycle, **si** une clé Admin est renseignée | la clé Admin |
-| `api.openai.com` (rapport d'organisation) | idem | la clé Admin |
-| `api.github.com` | au démarrage puis une fois par jour, si `checkUpdates` est actif | rien d'autre que l'adresse IP et la version installée |
+| `api.anthropic.com/api/oauth/usage` | every 15 min, if Claude Code is connected | the OAuth token already present on the machine |
+| `api.anthropic.com` (organization reports) | every cycle, **if** an Admin key is configured | the Admin key |
+| `api.openai.com` (organization report) | same | the Admin key |
+| `api.github.com` | at startup then once a day, if `checkUpdates` is enabled | nothing beyond the IP address and installed version |
 
-Le dernier est le seul ajouté sans qu'on le demande, et il se coupe d'un clic
-dans les réglages : rien n'est téléchargé ni installé, c'est une notification
-et un lien.
+The last one is the only one added without being asked for, and it's a
+one-click toggle in settings: nothing is downloaded or installed, it's a
+notification and a link.
 
-- Le renderer n'a **aucun accès** au système de fichiers (`contextIsolation`
-  actif, `nodeIntegration` désactivé, surface IPC énumérée explicitement) et
-  tourne sous une **politique de sécurité du contenu** qui interdit tout par
-  défaut : script local uniquement, aucune connexion sortante, aucune ressource
-  distante. Les noms de projets et de modèles viennent de journaux analysés —
-  ils sont échappés à l'affichage, et la CSP est la seconde barrière.
-- Les clés d'API sont chiffrées par le trousseau du système (`safeStorage`).
-  Si le trousseau est indisponible, TRACE **refuse** d'enregistrer la clé
-  plutôt que de l'écrire en clair.
-- Index et préférences vivent dans le répertoire de configuration standard de
-  la plateforme. Le dossier est en `0700`, `config.json` et `index.json` en
-  `0600` : l'index porte le nom de tous vos projets, vos identifiants de
-  session et votre volumétrie. Sur macOS le dossier héritait déjà du `0700`
-  d'Electron, ce qui masquait le problème ; sous Linux (`~/.config/trace`) le
-  mode par défaut donnait `0755`, et l'index `0644`.
+- The renderer has **no filesystem access** (`contextIsolation` active,
+  `nodeIntegration` disabled, an explicitly enumerated IPC surface) and runs
+  under a **content security policy** that denies everything by default:
+  local scripts only, no outbound connections, no remote resources. Project
+  and model names come from parsed logs — they're escaped on display, and
+  the CSP is the second barrier.
+- API keys are encrypted through the system keychain (`safeStorage`). If the
+  keychain is unavailable, TRACE **refuses** to save the key rather than
+  write it in plaintext.
+- The index and preferences live in the platform's standard config
+  directory. The folder is `0700`, `config.json` and `index.json` are
+  `0600`: the index carries the names of all your projects, your session
+  identifiers, and your volumetrics.
 
 ---
 
@@ -408,168 +387,161 @@ et un lien.
 
 ```
 crates/trace-core/src/
-  collectors/    une source = un module, isolé (une source en échec n'en bloque aucune autre)
-  carbon/        estimateur EcoLogits, facteurs, registre des sources citables
-  models.rs      registre : tarifs, fenêtres de contexte, paramètres estimés
-  ratelimits.rs  reconstruction des fenêtres, calibrage, projection de saturation
-  aggregate.rs   coût et carbone calculés PAR MODÈLE puis sommés, jamais sur un tarif moyen
-  provenance.rs  qui mesure quoi, et qui l'emporte quand deux sources se superposent
-  present.rs     ce que la barre d'état affiche — logique pure, donc testable
-crates/trace-cli/  le binaire `trace`
-src-tauri/src/     barre d'état, popover, tableau de bord, icônes PNG générées
-src/renderer/      popover et tableau de bord — HTML/CSS/JS natifs, SVG écrit à la main
-src/i18n/          deux catalogues JSON, embarqués dans le binaire
+  collectors/    one source = one module, isolated (a failing source blocks none of the others)
+  carbon/        EcoLogits estimator, factors, citable-source registry
+  models.rs      registry: pricing, context windows, estimated parameters
+  ratelimits.rs  window reconstruction, calibration, saturation projection
+  aggregate.rs   cost and carbon computed PER MODEL then summed, never on an average rate
+  provenance.rs  who measures what, and who wins when two sources overlap
+  present.rs     what the menu bar displays — pure logic, hence testable
+crates/trace-cli/  the `trace` binary
+src-tauri/src/     menu-bar icon, popover, dashboard, generated PNG icons
+src/renderer/      popover and dashboard — native HTML/CSS/JS, hand-written SVG
+src/i18n/          two JSON catalogs, embedded in the binary
 ```
 
-L'indexation est incrémentale : chaque fichier est relu depuis un offset en
-octets, et les lignes incomplètes — Claude Code écrit pendant qu'on lit — sont
-reprises au passage suivant. Sur 186 Mo de journaux : **230 ms à froid**, et rien
-ensuite tant qu'aucun fichier n'a grossi.
+Indexing is incremental: each file is re-read from a byte offset, and
+incomplete lines — Claude Code writes while it's being read — are picked up
+on the next pass. Across 186 MB of logs: **230 ms cold**, and nothing
+afterward as long as no file has grown.
 
-### Un seul processus écrit l'index
+### A single process writes the index
 
-L'application et la CLI partagent le même fichier, et toutes deux le relisent,
-le complètent, puis le réécrivent en entier. Lancer `trace` pendant que
-l'application tourne faisait donc s'écraser mutuellement les offsets des
-collecteurs.
+The app and the CLI share the same file, and both re-read it, complete it,
+then rewrite it in full. Running `trace` while the app is running would
+therefore make the two overwrite each other's collector offsets.
 
-Un verrou par fichier n'y suffirait pas : la fenêtre à protéger n'est pas
-l'écriture — atomique, quelques millisecondes — mais tout le cycle
-lecture → collecte → écriture. L'application se déclare donc **propriétaire**
-de l'index à chaque cycle ; les autres processus lisent et affichent des
-chiffres justes, mais n'écrivent pas. La marque expire au bout de cinq minutes,
-et un arrêt brutal ne condamne pas le fichier.
+A per-file lock wouldn't be enough: the window to protect isn't the write —
+atomic, a few milliseconds — but the whole read → collect → write cycle. The
+app therefore declares itself **owner** of the index on each cycle; other
+processes read and display correct numbers, but don't write. The claim
+expires after five minutes, and an abrupt stop doesn't strand the file.
 
 ### Compaction
 
-L'index conservait un enregistrement par requête sur toute la rétention — trois
-ans. Or au-delà de quelques semaines, plus aucune vue ne consomme la requête
-unitaire : série journalière, histogramme horaire, ventilations par modèle et
-par projet passent toutes par une agrégation.
+The index would otherwise keep one record per request over the full
+retention window — three years. Beyond a few weeks, though, no view
+consumes the individual request anymore: the daily series, the hourly
+histogram, and the per-model and per-project breakdowns all go through
+aggregation.
 
-Au-delà de **90 jours** (réglable, 0 désactive), les requêtes sont donc repliées
-en agrégats **horaires**. Mesuré sur un index réel, replier à l'heure divise le
-volume par 46, replier au jour par 98 — le facteur deux gagné coûterait
-l'histogramme horaire, la vue qui montre les rythmes de travail. Ce qui est
-perdu, et assumé : la session, qu'un agrégat horaire recouvre plusieurs fois.
-Le classement des sessions ne remonte donc pas au-delà de la frontière de
-compaction, ce qui est de toute façon le seul horizon où il veut dire quelque
-chose.
+Past **90 days** (adjustable, 0 disables it), requests are folded into
+**hourly** aggregates. Measured on a real index, folding to the hour divides
+the volume by 46, folding to the day by 98 — the extra factor of two would
+cost the hourly histogram, the view that shows work rhythms. What's lost,
+knowingly: the session, which an hourly aggregate can span several of.
+Session ranking therefore doesn't reach past the compaction boundary, which
+is the only horizon where it means anything anyway.
 
-Une relecture complète des journaux — provoquée par un élargissement de la
-rétention — ne ressuscite pas le détail replié : la borne de compaction voyage
-avec l'index et écarte à l'entrée tout ce qui est plus ancien.
+A full log re-read — triggered by widening the retention — doesn't revive
+folded detail: the compaction boundary travels with the index and discards
+anything older at the door.
 
-## Jusqu'où remonte l'historique
+## How far back history goes
 
-Périodes disponibles : 24 h, 7 j, 30 j, 90 j, 1 an, et **Tout** — qui remonte
-aussi loin que les sources le permettent. La date du plus ancien événement
-indexé est affichée à côté du sélecteur : une période longue qui paraît vide
-s'explique alors par la source, et non par une perte de données.
+Available periods: 24h, 7d, 30d, 90d, 1 year, and **All** — which reaches as
+far back as the sources allow. The date of the oldest indexed event is
+displayed next to the selector: a long period that looks empty is then
+explained by the source, not by data loss.
 
-Car la limite ne vient pas de TRACE, qui garde trois ans, mais des outils :
+The limit doesn't come from TRACE, which keeps three years, but from the
+tools:
 
-- **Claude Code** purge ses sessions au bout de ~2 mois. Rien avant n'est
-  récupérable — `stats-cache.json` conserve une activité plus ancienne, mais
-  sans aucun compteur de tokens.
-- **Codex** garde ses rollouts bien plus longtemps ; ses plus anciens fichiers
-  (format `.json`, avant 2026) ne contiennent en revanche aucun compteur.
+- **Claude Code** purges its sessions after ~2 months. Nothing before that
+  is recoverable — `stats-cache.json` retains older activity, but with no
+  token counters at all.
+- **Codex** keeps its rollouts much longer; its oldest files (`.json`
+  format, pre-2026) contain no counters either.
 
-Élargir la rétention dans la configuration déclenche automatiquement une
-relecture complète des sources : l'historique déjà élagué ne reviendrait pas
-tout seul, les collecteurs reprenant leur lecture à un offset.
+Widening the retention setting automatically triggers a full re-read of the
+sources: already-trimmed history wouldn't come back on its own, since
+collectors resume reading from an offset.
 
-## Recoupement : pourquoi les chiffres diffèrent de `stats-cache.json`
+## Cross-check: why the numbers differ from `stats-cache.json`
 
-Claude Code tient son propre compteur dans `~/.claude/stats-cache.json`. Il
-annonce **1,69× le total de TRACE**, de façon constante jour après jour.
+Claude Code keeps its own counter in `~/.claude/stats-cache.json`. It
+reports **1.69× TRACE's total**, consistently day after day.
 
-Ce n'est pas TRACE qui sous-compte : ce cache additionne les réécritures de
-streaming. Vérification directe sur les mêmes journaux — 2,33 Md de tokens
-sans déduplication, 1,38 Md avec, soit un rapport de 1,69× qui correspond
-exactement à l'écart observé. Un même message écrit trois fois pendant sa
-génération n'est facturé qu'une fois.
+TRACE isn't undercounting: that cache sums streaming rewrites. Direct check
+on the same logs — 2.33B tokens without deduplication, 1.38B with, a 1.69×
+ratio that matches the observed gap exactly. A message rewritten three times
+during its generation is billed once.
 
-## Logos de fournisseurs
+## Provider logos
 
-Déposez un fichier dans `logo/` (PNG ou WebP, fond transparent) puis lancez
-`npm run logos` : il est reconnu par son nom de fichier, redimensionné et
-intégré en base64 dans `src/renderer/shared/logos.js`. Les scripts d'empaquetage
-le font automatiquement.
+Drop a file into `logo/` (PNG or WebP, transparent background) then run
+`npm run logos`: it's recognized by its filename, resized, and embedded as
+base64 in `src/renderer/shared/logos.js`. The packaging scripts do this
+automatically.
 
-Les logos sont rendus en **masque CSS**, pas en image. Ce sont des silhouettes
-monochromes, et le masque laisse la couleur suivre le thème : le logo OpenAI
-est noir dans son fichier, ce qui serait invisible sur fond sombre — en masque
-il devient blanc, ce qui est précisément son usage officiel. Le logo Claude
-garde son terracotta de marque, lisible sur les deux fonds.
+Logos render as a **CSS mask**, not an image. They're monochrome
+silhouettes, and the mask lets the color follow the theme: the OpenAI logo
+is black in its file, which would be invisible on a dark background — as a
+mask it becomes white, which is precisely its official usage. The Claude
+logo keeps its brand terracotta, legible on both backgrounds.
 
-Un fournisseur sans fichier retombe sur un glyphe géométrique dessiné dans
-`marks.js` — une forme neutre vaut mieux qu'une marque déposée reproduite de
-travers.
+A provider without a file falls back to a geometric glyph drawn in
+`marks.js` — a neutral shape beats a trademark reproduced poorly.
 
-## Un mot sur les couleurs
+## A note on colors
 
-L'interface tient à un codage strict : **ambre = tokens, sarcelle = CO₂e, bleu =
-coût**. Une couleur porte donc toujours la même information, et un graphe se lit
-sans sa légende.
+The interface holds to a strict code: **amber = tokens, teal = CO₂e, blue =
+cost**. A color therefore always carries the same meaning, and a chart reads
+without its legend.
 
-Les marques de fournisseur (à gauche des noms de modèles et des jauges) sont
-donc identifiées par leur **forme**, et teintées hors de ce trio — sans quoi un
-logo sarcelle sur la même ligne qu'une valeur CO₂e sarcelle deviendrait ambigu.
+Provider marks (to the left of model names and gauges) are identified by
+**shape** instead, and tinted outside that trio — otherwise a teal logo on
+the same line as a teal CO₂e value would become ambiguous.
 
 ## Distribution
 
-`build/entitlements.mac.plist` porte le jeu d'habilitations macOS, et pas une
-de plus — chaque habilitation ajoutée élargit ce que l'application peut faire
-une fois compromise.
+`build/entitlements.mac.plist` carries the macOS entitlement set, and not
+one more — every added entitlement widens what the app can do once
+compromised.
 
-Sans **notarisation**, le DMG est refusé par Gatekeeper sur toute machine autre
-que celle qui l'a construit. Le workflow l'active ; elle ne se déclenche que si
-la signature a eu lieu, la construction locale sans certificat reste donc
-possible. Les secrets attendus par `.github/workflows/release-tauri.yml`,
-déclenché sur un tag `v*` :
+Without **notarization**, the DMG is rejected by Gatekeeper on any machine
+other than the one that built it. The workflow enables it; it only triggers
+if signing happened, so a local build without a certificate remains
+possible. Secrets expected by `.github/workflows/release-tauri.yml`,
+triggered on a `v*` tag:
 
-| Secret | Rôle |
+| Secret | Role |
 |---|---|
-| `MAC_CERTIFICATE_P12` / `MAC_CERTIFICATE_PASSWORD` / `APPLE_SIGNING_IDENTITY` | certificat « Developer ID Application » |
-| `APPLE_ID` / `APPLE_APP_SPECIFIC_PASSWORD` / `APPLE_TEAM_ID` | notarisation |
-| `WIN_CERTIFICATE_P12` / `WIN_CERTIFICATE_PASSWORD` | signature Authenticode |
+| `MAC_CERTIFICATE_P12` / `MAC_CERTIFICATE_PASSWORD` / `APPLE_SIGNING_IDENTITY` | "Developer ID Application" certificate |
+| `APPLE_ID` / `APPLE_APP_SPECIFIC_PASSWORD` / `APPLE_TEAM_ID` | notarization |
+| `WIN_CERTIFICATE_P12` / `WIN_CERTIFICATE_PASSWORD` | Authenticode signing |
 
-Absents, le workflow produit des binaires non signés et le dit, plutôt que
-d'échouer sur un certificat qu'un fork n'a pas.
+If absent, the workflow produces unsigned binaries and says so, rather than
+failing on a certificate a fork wouldn't have.
 
-**Pas de mise à jour automatique**, et il n'y en aura pas : installer du code
-en arrière-plan sur la machine de quelqu'un demande une chaîne de confiance
-qu'une application de barre de menus sans serveur ne peut pas tenir
-sérieusement. TRACE se contente de lire la dernière version publiée et de le
-dire une fois (`crates/trace-core/src/update.rs`).
+**No auto-update**, and there won't be one: installing code in the
+background on someone's machine requires a trust chain that a serverless
+menu-bar app can't seriously maintain. TRACE only reads the latest published
+version and reports it once (`crates/trace-core/src/update.rs`).
 
 ---
 
-## Limites connues
+## Known limitations
 
-- Les paramètres des modèles fermés sont estimés : la fourchette carbone couvre
-  environ un ordre de grandeur. C'est irréductible sans publication des
-  fournisseurs.
-- Les tarifs sont figés dans `crates/trace-core/src/models.rs` et doivent être mis à jour
-  quand ils changent (surchargeables via `modelOverrides` dans la configuration).
-- La pondération des limites de débit est une approximation : les vrais
-  plafonds pondèrent aussi par modèle, selon une formule non publiée. D'où le
-  calibrage manuel, qui court-circuite le problème en partant d'une valeur vraie.
-- Gemini CLI et Ollama ne fournissent pas d'historique de tokens (voir plus haut).
-- Le départage mesure locale / facturation raisonne à la **journée** : si vous
-  utilisez le même compte depuis cette machine *et* depuis une autre le même
-  jour, la part de l'autre machine n'est pas comptée dans les totaux. La carte
-  « Mesuré ici / facturé » la rend visible, mais ne la réintègre pas — il
-  faudrait pour cela un horodatage par requête que les rapports d'organisation
-  ne donnent pas.
-- **Copilot Chat** stocke ses sessions dans une base SQLite
-  (`globalStorage/github.copilot-chat/session-store.db`). Elle n'a pas été
-  inspectée : tant qu'on n'a pas vérifié qu'elle contient de vrais compteurs de
-  tokens, aucun collecteur ne sera écrit. C'est la même règle qui a fait
-  retirer Gemini, Grok et Ollama — jamais de source incapable de produire un
-  chiffre mesuré.
+- Closed-model parameters are estimated: the carbon range spans roughly an
+  order of magnitude. That's irreducible without provider disclosure.
+- Pricing is pinned in `crates/trace-core/src/models.rs` and needs updating
+  when it changes (overridable via `modelOverrides` in the config).
+- Rate-limit weighting is an approximation: the real caps also weight by
+  model, per an unpublished formula. Hence manual calibration, which
+  sidesteps the problem by starting from a true value.
+- Gemini CLI and Ollama provide no token history (see above).
+- The local-measurement/billing split reasons at the **daily** level: using
+  the same account from this machine *and* from another one on the same day
+  means the other machine's share isn't reflected in the totals. The
+  "Measured here / billed" card surfaces this but doesn't reconcile it — that
+  would require a per-request timestamp organization reports don't provide.
+- **Copilot Chat** stores its sessions in a SQLite database
+  (`globalStorage/github.copilot-chat/session-store.db`). It hasn't been
+  inspected: until it's confirmed to hold real token counters, no collector
+  will be written for it. Same rule that keeps Gemini, Grok, and Ollama out
+  — never a source incapable of producing a measured figure.
 
-## Licence
+## License
 
 MIT
