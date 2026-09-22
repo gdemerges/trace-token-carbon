@@ -211,6 +211,7 @@
   "set.keyStored": "•••••••• (saved)",
   "set.keychainKo": "Keychain unavailable: TRACE will refuse to store a key in the clear.",
   "set.keychainOk": "Encrypted by the system keychain.",
+  "set.keychainError": "Key not saved: the system keychain refused ({error}). It was not written anywhere.",
   "set.language": "Language",
   "set.language.auto": "Automatic",
   "set.language.en": "English",

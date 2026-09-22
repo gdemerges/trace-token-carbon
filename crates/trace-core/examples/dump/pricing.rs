@@ -19,9 +19,9 @@ fn tk(i: i64, o: i64, cr: i64, cw: i64, w5: i64, w1: i64) -> Tokens {
     }
 }
 
-fn main() {
+pub fn run() {
     let path = std::env::args()
-        .nth(1)
+        .nth(2)
         .expect("chemin du fichier d'identifiants");
     let ids = std::fs::read_to_string(path).unwrap();
     let vectors = [

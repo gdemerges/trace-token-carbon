@@ -1,6 +1,7 @@
 //! Vidage carbone de référence, pour la comparaison différentielle avec la
 //! version JS. Non distribué.
 
+use super::f;
 use trace_core::carbon::{self, Options, Pair};
 use trace_core::models::resolve_model;
 use trace_core::util::Tokens;
@@ -15,20 +16,9 @@ fn tk(i: i64, o: i64, cr: i64, cw: i64) -> Tokens {
     }
 }
 
-/// Même rendu que `Number.prototype.toExponential(10)` de JS, qui écrit le
-/// signe de l'exposant même positif. Sans ça la comparaison achoppe sur la
-/// mise en forme au lieu de comparer les nombres.
-fn f(x: f64) -> String {
-    let s = format!("{x:.10e}");
-    match s.split_once('e') {
-        Some((m, e)) if !e.starts_with('-') => format!("{m}e+{e}"),
-        _ => s,
-    }
-}
-
-fn main() {
+pub fn run() {
     let path = std::env::args()
-        .nth(1)
+        .nth(2)
         .expect("chemin du fichier d'identifiants");
     let ids = std::fs::read_to_string(path).unwrap();
     let vectors = [

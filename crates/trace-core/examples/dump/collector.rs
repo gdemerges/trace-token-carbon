@@ -3,7 +3,7 @@
 
 use trace_core::collectors::{claude_code, CollectorState};
 
-fn main() {
+pub fn run() {
     let state = CollectorState::default();
     // `TRACE_CC_DIR` permet de viser une copie gelée des journaux : les vrais
     // sont écrits pendant qu'on les lit, et l'écart d'une exécution à l'autre

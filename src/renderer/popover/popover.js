@@ -1,4 +1,4 @@
-import { tokens, usd, co2, pct, windowLabel, ago, esc } from '../shared/format.js';
+import { tokens, usd, co2, pct, ago, esc } from '../shared/format.js';
 import { gauge } from '../shared/charts.js';
 import { providerMark } from '../shared/marks.js';
 import { groupByProduct, originLabel, timingLabel, projectionLabel } from '../shared/gauges.js';
@@ -14,9 +14,10 @@ function renderWindow(g) {
   row.className = 'win';
 
   const shown = g.percent == null
-    ? `<span class="faint num" style="font-size:11px">${tokens(g.used)} consommés</span>`
+    ? `<span class="faint num" style="font-size:11px">${esc(t('gauges.used', { amount: tokens(g.used) }))}</span>`
     : `${g.approximate ? '≈ ' : ''}${pct(g.percent)}`;
 
+  // eslint-disable-next-line no-unsanitized/property -- audité : texte échappé par esc(), nombres formatés, fragments construits ici
   row.innerHTML = `<div class="win-top">
       <span class="wname">${esc(g.label)}</span>
       <span class="val num ${g.percent >= 85 ? 'c-hot' : ''}${g.approximate ? ' faint' : ''}">${shown}</span>
@@ -33,6 +34,7 @@ function renderWindow(g) {
 function renderBlock(block) {
   const wrap = document.createElement('div');
   wrap.className = 'block';
+  // eslint-disable-next-line no-unsanitized/property -- audité : texte échappé par esc(), nombres formatés, fragments construits ici
   wrap.innerHTML = `<div class="block-head">
       ${providerMark(block.provider, 13)}
       <span class="pname">${esc(block.product)}</span>

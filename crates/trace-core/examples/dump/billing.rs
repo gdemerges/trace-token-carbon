@@ -6,7 +6,7 @@ use trace_core::collectors::billing::{
     parse_anthropic_buckets, parse_cost_buckets, parse_openai_buckets,
 };
 
-fn main() {
+pub fn run() {
     let usage = vec![json!({ "starting_at": "2026-09-01T00:00:00Z", "results": [
         { "model": "claude-opus-5", "workspace_id": "ws_1", "uncached_input_tokens": 1000, "input_tokens": 51000, "output_tokens": 200, "cache_read_input_tokens": 50000, "num_requests": 7 },
         { "model": "claude-sonnet-5", "input_tokens": 900, "output_tokens": 100 },

@@ -1,6 +1,7 @@
 //! Vidage du rapport complet sur les journaux réels, pour la comparaison
 //! différentielle avec la version JS. Non distribué.
 
+use super::{f, fo};
 use trace_core::aggregate::{report, Options};
 use trace_core::collectors::{claude_code, CollectorState};
 
@@ -9,18 +10,7 @@ use trace_core::collectors::{claude_code, CollectorState};
 const TO: i64 = 1_788_900_000_000;
 const FROM: i64 = TO - 30 * 86_400_000;
 
-fn f(x: f64) -> String {
-    let s = format!("{x:.10e}");
-    match s.split_once('e') {
-        Some((m, e)) if !e.starts_with('-') => format!("{m}e+{e}"),
-        _ => s,
-    }
-}
-fn fo(x: Option<f64>) -> String {
-    x.map(f).unwrap_or_else(|| "null".into())
-}
-
-fn main() {
+pub fn run() {
     let dir = std::env::var("TRACE_CC_DIR").ok();
     let collected = claude_code::collect(dir.as_deref(), &CollectorState::default());
     let opts = Options {

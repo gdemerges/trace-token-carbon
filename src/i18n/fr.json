@@ -211,6 +211,7 @@
   "set.keyStored": "•••••••• (enregistrée)",
   "set.keychainKo": "Trousseau indisponible : TRACE refusera d'enregistrer une clé en clair.",
   "set.keychainOk": "Chiffrée par le trousseau du système.",
+  "set.keychainError": "Clé non enregistrée : le trousseau du système a refusé ({error}). Elle n'a été écrite nulle part.",
   "set.language": "Langue",
   "set.language.auto": "Automatique",
   "set.language.en": "Anglais",

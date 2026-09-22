@@ -98,6 +98,23 @@ fn tray_menu(app: &tauri::AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // En premier : les autres greffons, et le cœur, journalisent dès leur
+        // initialisation. Une application empaquetée n'a pas de terminal, et
+        // un `eprintln!` y partait dans le vide — le fichier tournant, dans
+        // le dossier de journaux du système, est la seule trace qui reste.
+        .plugin(
+            tauri_plugin_log::Builder::new()
+                .level(log::LevelFilter::Info)
+                .targets([
+                    tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::LogDir {
+                        file_name: Some("trace".into()),
+                    }),
+                    tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Stderr),
+                ])
+                .max_file_size(1_000_000)
+                .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepOne)
+                .build(),
+        )
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(
@@ -127,8 +144,11 @@ pub fn run() {
             commands::renderer_log,
             commands::quit,
         ])
-        .manage(state::AppState::boot())
         .setup(|app| {
+            // Dans `setup` et non à la construction : le journal n'existe
+            // qu'une fois les greffons initialisés, et le premier
+            // rafraîchissement a déjà des choses à dire.
+            app.manage(state::AppState::boot());
             let handle = app.handle().clone();
 
             // Aucune icône dans le Dock : TRACE vit dans la barre d'état.
@@ -172,7 +192,7 @@ pub fn run() {
             let registered = match app.global_shortcut().register(default_shortcut()) {
                 Ok(()) => true,
                 Err(e) => {
-                    eprintln!("raccourci global indisponible : {e}");
+                    log::warn!("raccourci global indisponible : {e}");
                     false
                 }
             };
@@ -318,7 +338,7 @@ fn notify_update(app: &tauri::AppHandle, found: &trace_core::update::Update) {
         .body(&body)
         .show()
     {
-        eprintln!("notification de mise à jour refusée : {e}");
+        log::warn!("notification de mise à jour refusée : {e}");
     }
     // L'interface reçoit aussi l'annonce : une notification système se rate,
     // un bandeau dans la fenêtre attend qu'on la regarde.
@@ -336,7 +356,7 @@ fn notify(app: &tauri::AppHandle, notifications: Vec<trace_core::alerts::Notific
             .body(&n.body)
             .show()
         {
-            eprintln!("notification refusée : {e}");
+            log::warn!("notification refusée : {e}");
         }
     }
 }

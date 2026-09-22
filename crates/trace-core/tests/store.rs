@@ -23,6 +23,8 @@ impl Sandbox {
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         std::env::set_var("TRACE_HOME", &dir);
+        // Jamais le trousseau réel de la machine qui lance les tests.
+        trace_core::secrets::use_memory_backend();
         store::reset_signature();
         Sandbox { dir, _guard: guard }
     }
@@ -95,10 +97,8 @@ fn un_champ_absent_du_fichier_reprend_son_defaut() {
 #[test]
 fn la_configuration_fait_l_aller_retour_sans_perte() {
     let _s = Sandbox::new("cfg-roundtrip");
-    let mut c = Config {
-        anthropic_admin_key: Some("sk-ant-admin-factice".into()),
-        ..Config::default()
-    };
+    trace_core::secrets::set("anthropic", Some("sk-ant-admin-factice")).unwrap();
+    let mut c = Config::default();
     c.carbon.pue = Some(1.15);
     c.alerts.thresholds = vec![50.0, 75.0, 90.0];
     store::save_config(&c).unwrap();
@@ -106,10 +106,67 @@ fn la_configuration_fait_l_aller_retour_sans_perte() {
     let back = store::load_config();
     assert_eq!(
         back.anthropic_admin_key.as_deref(),
-        Some("sk-ant-admin-factice")
+        Some("sk-ant-admin-factice"),
+        "la clé revient du trousseau"
     );
     assert_eq!(back.carbon.pue, Some(1.15));
     assert_eq!(back.alerts.thresholds, vec![50.0, 75.0, 90.0]);
+}
+
+#[test]
+fn une_cle_n_est_jamais_ecrite_dans_la_configuration() {
+    let _s = Sandbox::new("cfg-cle-absente");
+    let c = Config {
+        anthropic_admin_key: Some("sk-ant-admin-secret".into()),
+        openai_admin_key: Some("sk-admin-secret".into()),
+        ..Config::default()
+    };
+    store::save_config(&c).unwrap();
+    let text = std::fs::read_to_string(store::config_path()).unwrap();
+    assert!(!text.contains("secret"), "aucune clé en clair : {text}");
+}
+
+#[test]
+fn une_cle_en_clair_d_une_version_anterieure_passe_au_trousseau() {
+    let _s = Sandbox::new("cfg-migration-cle");
+    std::fs::write(
+        store::config_path(),
+        r#"{"anthropicAdminKey":"sk-ant-admin-ancienne","currency":"EUR"}"#,
+    )
+    .unwrap();
+
+    let c = store::load_config();
+    assert_eq!(
+        c.anthropic_admin_key.as_deref(),
+        Some("sk-ant-admin-ancienne")
+    );
+    assert_eq!(
+        trace_core::secrets::get("anthropic").as_deref(),
+        Some("sk-ant-admin-ancienne"),
+        "la clé est désormais dans le trousseau"
+    );
+    let text = std::fs::read_to_string(store::config_path()).unwrap();
+    assert!(!text.contains("sk-ant"), "et plus dans le fichier : {text}");
+    assert!(
+        text.contains("EUR"),
+        "le reste de la configuration est gardé"
+    );
+}
+
+#[test]
+fn une_cle_reprise_survit_a_une_reconstruction_de_la_configuration() {
+    let _s = Sandbox::new("cfg-carry");
+    trace_core::secrets::set("openai", Some("sk-admin-x")).unwrap();
+    let current = store::load_config();
+    // Ce que fait un correctif venu de l'interface : repasser par le JSON.
+    let mut rebuilt: Config =
+        serde_json::from_value(serde_json::to_value(&current).unwrap()).unwrap();
+    assert_eq!(
+        rebuilt.openai_admin_key, None,
+        "le JSON ne porte pas de clé"
+    );
+    rebuilt.carry_secrets_from(&current);
+    assert_eq!(rebuilt.openai_admin_key.as_deref(), Some("sk-admin-x"));
 }
 
 #[cfg(unix)]
@@ -283,6 +340,97 @@ fn une_signature_inchangee_evite_de_reecrire() {
     let after = std::fs::read(store::index_path()).unwrap();
     assert_eq!(before, after);
     assert_eq!(first, after.len() as u64);
+}
+
+#[test]
+fn l_index_fait_l_aller_retour_sans_perte() {
+    let _s = Sandbox::new("index-roundtrip");
+    let now = trace_core::util::now_ms();
+    let config = Config {
+        compact_after_days: 0,
+        ..Config::default()
+    };
+    let mut idx = index_with(vec![event(now - 1000, 10), event(now, 20)]);
+    idx.collectors
+        .insert("claude-code".into(), Default::default());
+    idx.compacted_through = 42;
+    store::save_index(idx, &config);
+
+    let back = store::load_index(&config);
+    assert_eq!(back.events.len(), 2);
+    assert_eq!(
+        back.events[0].tokens.total, 10,
+        "l'ordre chronologique est gardé"
+    );
+    assert_eq!(back.events[1].tokens.total, 20);
+    assert!(back.collectors.contains_key("claude-code"));
+    assert_eq!(back.compacted_through, 42);
+}
+
+#[test]
+fn deux_evenements_identiques_restent_deux_lignes() {
+    let _s = Sandbox::new("index-doublons");
+    let now = trace_core::util::now_ms();
+    let config = Config {
+        compact_after_days: 0,
+        ..Config::default()
+    };
+    // Le contenu sert d'identifiant : deux enregistrements identiques ne
+    // doivent pas se fondre en un seul, sous peine de perdre des tokens.
+    store::save_index(index_with(vec![event(now, 10), event(now, 10)]), &config);
+    assert_eq!(store::load_index(&config).events.len(), 2);
+}
+
+#[test]
+fn un_evenement_retire_de_l_index_disparait_de_la_base() {
+    let _s = Sandbox::new("index-retrait");
+    let now = trace_core::util::now_ms();
+    let config = Config {
+        compact_after_days: 0,
+        ..Config::default()
+    };
+    store::save_index(
+        index_with(vec![event(now - 1000, 1), event(now, 2)]),
+        &config,
+    );
+    store::save_index(index_with(vec![event(now, 2), event(now + 1, 3)]), &config);
+    let totals: Vec<i64> = store::load_index(&config)
+        .events
+        .iter()
+        .map(|e| e.tokens.total)
+        .collect();
+    assert_eq!(totals, vec![2, 3]);
+}
+
+#[test]
+fn l_ancien_index_json_est_repris_puis_supprime() {
+    let _s = Sandbox::new("index-migration");
+    let now = trace_core::util::now_ms();
+    let config = Config {
+        compact_after_days: 0,
+        ..Config::default()
+    };
+    let legacy = index_with(vec![event(now, 33)]);
+    std::fs::write(
+        store::legacy_index_path(),
+        serde_json::to_string(&legacy).unwrap(),
+    )
+    .unwrap();
+
+    let loaded = store::load_index(&config);
+    assert_eq!(loaded.events.len(), 1, "l'historique JSON est relu");
+    assert!(
+        store::legacy_index_path().exists(),
+        "un simple lecteur ne détruit rien"
+    );
+
+    store::save_index(loaded, &config);
+    assert!(store::index_path().exists());
+    assert!(
+        !store::legacy_index_path().exists(),
+        "une fois versé dans la base, l'ancien fichier disparaît"
+    );
+    assert_eq!(store::load_index(&config).events[0].tokens.total, 33);
 }
 
 // ---------------------------------------------------------------------------

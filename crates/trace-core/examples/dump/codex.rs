@@ -2,7 +2,7 @@
 
 use trace_core::collectors::{codex_cli, CollectorState};
 
-fn main() {
+pub fn run() {
     let dir = std::env::var("TRACE_CODEX_DIR").ok();
     let r = codex_cli::collect(dir.as_deref(), &CollectorState::default());
     println!("#events\t{}", r.events.len());

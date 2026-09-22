@@ -99,7 +99,27 @@ fn origin_key(limit_source: Option<&str>) -> &'static str {
     }
 }
 
+/// Les avertissements du cœur — trousseau muet, index illisible — sur
+/// stderr, où ils ne se mêlent ni à la sortie normale ni au `--json`.
+struct StderrLogger;
+
+impl log::Log for StderrLogger {
+    fn enabled(&self, m: &log::Metadata) -> bool {
+        m.level() <= log::Level::Warn
+    }
+    fn log(&self, r: &log::Record) {
+        if self.enabled(r.metadata()) {
+            eprintln!("trace: {}", r.args());
+        }
+    }
+    fn flush(&self) {}
+}
+
 fn main() {
+    static LOGGER: StderrLogger = StderrLogger;
+    if log::set_logger(&LOGGER).is_ok() {
+        log::set_max_level(log::LevelFilter::Warn);
+    }
     let args: Vec<String> = std::env::args().skip(1).collect();
     let has = |flag: &str| args.iter().any(|a| a == flag);
 
@@ -110,8 +130,10 @@ fn main() {
         .iter()
         .find_map(|k| std::env::var(k).ok())
         .unwrap_or_default();
-    let configured = trace_core::store::load_config().locale;
-    let locale = i18n::resolve_locale(Some(lang_arg.unwrap_or(&configured)), Some(&env_lang));
+    // Une seule lecture : elle interroge le trousseau, qui peut demander une
+    // autorisation à l'utilisateur.
+    let config = trace_core::store::load_config();
+    let locale = i18n::resolve_locale(Some(lang_arg.unwrap_or(&config.locale)), Some(&env_lang));
     i18n::set_locale(locale);
 
     if has("--help") || has("-h") {
@@ -138,7 +160,7 @@ fn main() {
     // L'index appartient à l'application tant qu'elle tourne. `save_index` le
     // vérifie de lui-même, mais le dire ici documente le contrat : la CLI lit
     // les mêmes chiffres et n'écrit que si la place est libre.
-    let state = core::refresh(trace_core::store::load_config(), true);
+    let state = core::refresh(config, true);
     let snap = core::snapshot(&state, &opts);
     let tot = &snap.report.totals;
 

@@ -1,6 +1,7 @@
 //! Vidage des jauges, pour la comparaison différentielle avec la version JS.
 //! Non distribué.
 
+use super::{f, fo};
 use trace_core::collectors::{Cause, CollectorState, Quota};
 use trace_core::ratelimits::{compute_gauges, duration_label, weighted_usage, Gauge};
 use trace_core::store::Config;
@@ -8,16 +9,6 @@ use trace_core::util::Tokens;
 
 const NOW: i64 = 1_788_900_000_000;
 
-fn f(x: f64) -> String {
-    let s = format!("{x:.10e}");
-    match s.split_once('e') {
-        Some((m, e)) if !e.starts_with('-') => format!("{m}e+{e}"),
-        _ => s,
-    }
-}
-fn fo(x: Option<f64>) -> String {
-    x.map(f).unwrap_or_else(|| "null".into())
-}
 fn io_(x: Option<i64>) -> String {
     x.map(|v| v.to_string()).unwrap_or_else(|| "null".into())
 }
@@ -37,7 +28,7 @@ fn live(source: &str, kind: &str, percent: f64, resets_at: i64, ts: i64) -> Quot
     }
 }
 
-fn main() {
+pub fn run() {
     let dir = std::env::var("TRACE_CC_DIR").ok();
     let r =
         trace_core::collectors::claude_code::collect(dir.as_deref(), &CollectorState::default());

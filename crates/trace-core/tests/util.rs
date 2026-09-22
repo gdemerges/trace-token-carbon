@@ -167,3 +167,29 @@ fn le_nom_de_projet_est_le_dernier_segment() {
 fn la_fenetre_glissante_recule_du_bon_nombre_d_heures() {
     assert_eq!(since(5.0, 10_000_000), 10_000_000 - 18_000_000);
 }
+
+#[test]
+fn seules_les_adresses_https_connues_s_ouvrent() {
+    use trace_core::util::external_url_allowed as ok;
+    assert!(ok(
+        "https://github.com/gdemerges/trace-token-carbon/releases"
+    ));
+    assert!(ok("https://ecologits.ai/latest/methodology/llm_inference/"));
+    assert!(
+        ok("https://GitHub.com/"),
+        "l'hôte ne dépend pas de la casse"
+    );
+
+    assert!(!ok("http://github.com/"), "pas de HTTP en clair");
+    assert!(!ok("file:///etc/passwd"));
+    assert!(!ok("javascript:alert(1)"));
+    assert!(!ok("https://evil.example/"), "hôte hors liste");
+    assert!(
+        !ok("https://github.com.evil.example/"),
+        "un suffixe ne suffit pas"
+    );
+    assert!(
+        !ok("https://github.com@evil.example/"),
+        "des identifiants ne déguisent pas l'hôte"
+    );
+}

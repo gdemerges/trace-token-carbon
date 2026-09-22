@@ -9,7 +9,7 @@ name: Rust
 
 on:
   push:
-    branches: [main, tauri]
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
@@ -32,6 +32,13 @@ jobs:
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
+      # Le trousseau sous Linux passe par Secret Service, donc par D-Bus :
+      # `keyring` se lie à libdbus, y compris pour le cœur seul.
+      - name: Dépendances système (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libdbus-1-dev pkg-config
       # Le cœur et la CLI seulement : ni l'un ni l'autre ne touche à Tauri, et
       # les compiler seuls fait tomber les erreurs de portabilité en trente
       # secondes plutôt qu'en dix minutes.
@@ -57,8 +64,56 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev libdbus-1-dev patchelf
+      - run: cargo clippy -p trace-app --all-targets
       # Compilation sans signature : on vérifie que la construction aboutit,
       # pas qu'elle est distribuable. La signature exige des secrets, elle n'a
       # rien à faire dans une CI déclenchée par une pull request.
       - run: cargo build --release -p trace-app
+
+  # La version minimale annoncée dans Cargo.toml (`rust-version`) n'engage
+  # que si elle est éprouvée : elle affichait 1.82 alors que les dépendances
+  # de Tauri exigeaient déjà 1.89, et rien ne le signalait.
+  msrv:
+    name: version minimale de Rust
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Lire rust-version
+        id: msrv
+        run: echo "version=$(sed -n 's/^rust-version = "\(.*\)"/\1/p' Cargo.toml)" >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ steps.msrv.outputs.version }}
+      - uses: Swatinem/rust-cache@v2
+      - name: Dépendances système
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev libdbus-1-dev patchelf
+      - run: cargo check --workspace --all-targets --locked
+
+  # Avis de sécurité publiés sur les dépendances (base RustSec). L'application
+  # manipule des jetons OAuth et des clés Admin : une faille connue dans la
+  # chaîne TLS ou HTTP doit bloquer, pas attendre qu'on y pense.
+  audit:
+    name: audit des dépendances
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: taiki-e/install-action@cargo-audit
+      - run: cargo audit
+
+  # Le renderer : lint (dont l'interdiction d'interpoler du HTML non échappé)
+  # et tests des modules partagés, sans navigateur.
+  renderer:
+    name: interface (lint et tests)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test

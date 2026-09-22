@@ -7,7 +7,7 @@
   "license": "MIT",
   "private": true,
   "scripts": {
-    "test": "node --test \"test/**/*.test.js\"",
+    "test": "node --test \"test/**/*.test.js\" \"test/**/*.test.mjs\"",
     "icons": "node scripts/make-icons.js",
     "logos": "node scripts/make-logos.js",
     "tauri:dev": "cargo run -p trace-app",
@@ -15,8 +15,13 @@
     "test:rust": "cargo test",
     "cli:rust": "cargo run -q --release -p trace-cli --",
     "icons:tauri": "node scripts/make-tauri-icons.js",
-    "tauri:bundle": "node scripts/make-tauri-icons.js && cargo tauri build"
+    "tauri:bundle": "node scripts/make-tauri-icons.js && cargo tauri build",
+    "lint": "eslint ."
   },
-  "devDependencies": {},
-  "dependencies": {}
+  "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "eslint": "^9.39.5",
+    "eslint-plugin-no-unsanitized": "^4.1.5",
+    "globals": "^17.12.0"
+  }
 }

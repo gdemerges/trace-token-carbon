@@ -3,7 +3,7 @@
 
 use trace_core::collectors::anthropic_oauth as oauth;
 
-fn main() {
+pub fn run() {
     println!("identifiants trouvés : {}", oauth::is_available());
     let r = oauth::collect(oauth::MIN_INTERVAL_MS, None);
     if let Some(l) = &r.live {

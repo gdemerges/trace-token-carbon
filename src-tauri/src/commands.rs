@@ -56,12 +56,25 @@ pub fn refresh(state: State<'_, AppState>) -> Value {
 
 #[tauri::command]
 pub fn config_get(state: State<'_, AppState>) -> Value {
-    // Jamais de clé vers l'interface : elle n'a besoin que de savoir qu'il y
-    // en a une, ce que porte `hasKeys` dans l'instantané.
-    let mut c = state.config();
-    c.anthropic_admin_key = None;
-    c.openai_admin_key = None;
-    to_value(&c)
+    // Jamais de clé vers l'interface — elles ne sont d'ailleurs pas
+    // sérialisées. Elle n'a besoin que de savoir qu'il y en a une, et si le
+    // trousseau répond.
+    let c = state.config();
+    let mut v = to_value(&c);
+    if let Some(o) = v.as_object_mut() {
+        o.insert(
+            "hasKeys".into(),
+            json!({
+                "anthropic": c.anthropic_admin_key.is_some(),
+                "openai": c.openai_admin_key.is_some(),
+            }),
+        );
+        o.insert(
+            "encryptionAvailable".into(),
+            json!(trace_core::secrets::available()),
+        );
+    }
+    v
 }
 
 #[tauri::command]
@@ -69,7 +82,7 @@ pub fn config_set(state: State<'_, AppState>, patch: Value) -> Value {
     match state.patch_config(patch) {
         Ok(c) => to_value(&c),
         Err(e) => {
-            eprintln!("config_set : {e}");
+            log::error!("config_set : {e}");
             config_get(state)
         }
     }
@@ -81,7 +94,18 @@ pub fn config_set(state: State<'_, AppState>, patch: Value) -> Value {
 pub fn strings(state: State<'_, AppState>) -> Value {
     let locale = i18n::resolve_locale(Some(&state.config().locale), sys_locale().as_deref());
     i18n::set_locale(locale);
-    json!({ "lang": locale, "strings": i18n::catalog_json(locale) })
+    // `locale` et `intlLocale` sont les noms que lit `initI18n` : n'envoyer
+    // que `lang` laissait l'interface anglaise formater nombres et dates à la
+    // française (« 1 234,5 »).
+    let intl_locale = match locale {
+        "en" => "en-US",
+        _ => "fr-FR",
+    };
+    json!({
+        "locale": locale,
+        "intlLocale": intl_locale,
+        "strings": i18n::catalog_json(locale),
+    })
 }
 
 /// Langue du système.
@@ -93,33 +117,26 @@ fn sys_locale() -> Option<String> {
     sys_locale::get_locale()
 }
 
-/// Enregistre une clé Admin.
+/// Enregistre une clé Admin dans le trousseau du système.
 ///
-/// Une chaîne vide EFFACE la clé plutôt que d'en stocker une vide : c'est le
-/// geste par lequel l'utilisateur retire son accès, et une chaîne vide passée
-/// à l'API produirait un 401 incompréhensible.
+/// `null` ou une chaîne vide EFFACE la clé plutôt que d'en stocker une vide :
+/// c'est le geste par lequel l'utilisateur retire son accès, et une chaîne
+/// vide passée à l'API produirait un 401 incompréhensible.
+///
+/// Rend `{ ok, error }`, la forme qu'attend l'écran de réglages : un simple
+/// booléen n'y affichait qu'un « undefined » en cas d'échec.
 #[tauri::command]
-pub fn key_set(state: State<'_, AppState>, provider: String, value: String) -> bool {
-    let key = value.trim();
-    let field = match provider.as_str() {
-        "anthropic" => "anthropicAdminKey",
-        "openai" => "openaiAdminKey",
-        other => {
-            eprintln!("fournisseur inconnu : {other}");
-            return false;
-        }
-    };
-    let patch = json!({ field: if key.is_empty() { Value::Null } else { Value::from(key) } });
-    match state.patch_config(patch) {
-        Ok(_) => {
+pub fn key_set(state: State<'_, AppState>, provider: String, value: Option<String>) -> Value {
+    match state.set_key(&provider, value.as_deref()) {
+        Ok(()) => {
             // La clé change ce que les sources peuvent lire : on relit tout de
             // suite plutôt que d'attendre le prochain cycle.
             state.refresh();
-            true
+            json!({ "ok": true })
         }
         Err(e) => {
-            eprintln!("key_set : {e}");
-            false
+            log::error!("key_set : {e}");
+            json!({ "ok": false, "error": i18n::t1("set.keychainError", "error", e) })
         }
     }
 }
@@ -138,7 +155,7 @@ pub fn dashboard_open(app: AppHandle) {
         let _ = win.hide();
     }
     if let Err(e) = windows::show_dashboard(&app) {
-        eprintln!("ouverture du tableau de bord : {e}");
+        log::error!("ouverture du tableau de bord : {e}");
     }
 }
 
@@ -168,15 +185,15 @@ pub fn shortcut_status(state: State<'_, AppState>) -> Value {
 
 #[tauri::command]
 pub fn open_external(app: AppHandle, url: String) {
-    // Seuls http(s) sortent. Une chaîne venue d'un journal — nom de projet ou
-    // de modèle — ne doit pas pouvoir faire ouvrir `file://` ou pire.
-    if !url.starts_with("https://") && !url.starts_with("http://") {
-        eprintln!("ouverture refusée, schéma non autorisé : {url}");
+    // HTTPS vers une liste fermée d'hôtes : le dépôt et les éditeurs des
+    // sources citées. Voir `trace_core::util::external_url_allowed`.
+    if !trace_core::util::external_url_allowed(&url) {
+        log::warn!("ouverture refusée, adresse hors liste : {url}");
         return;
     }
     use tauri_plugin_opener::OpenerExt;
     if let Err(e) = app.opener().open_url(url, None::<&str>) {
-        eprintln!("ouverture externe : {e}");
+        log::error!("ouverture externe : {e}");
     }
 }
 
@@ -191,7 +208,7 @@ pub fn renderer_log(kind: String, message: String, source: String, line: u32) {
     } else {
         format!(" [{source}:{line}]")
     };
-    eprintln!("renderer/{kind}{origin} : {message}");
+    log::error!("renderer/{kind}{origin} : {message}");
 }
 
 #[tauri::command]

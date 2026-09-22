@@ -1,19 +1,24 @@
 //! Persistance : préférences utilisateur et index d'indexation incrémentale.
 //!
-//! Deux exigences ont dicté l'implémentation, et elles valent toujours :
+//! Trois exigences ont dicté l'implémentation :
 //!
-//!  - Écriture atomique (fichier temporaire puis `rename`). Un rafraîchissement
-//!    interrompu ne doit pas laisser un index tronqué qui ferait recompter
-//!    l'historique depuis zéro — ou pire, en double.
-//!  - Permissions restreintes. La configuration peut contenir des clés Admin,
-//!    et l'index porte les noms de projets, les identifiants de session et la
-//!    volumétrie.
+//!  - Écriture atomique. Un rafraîchissement interrompu ne doit pas laisser un
+//!    index tronqué qui ferait recompter l'historique depuis zéro — ou pire,
+//!    en double. La configuration passe par un fichier temporaire puis
+//!    `rename` ; l'index, par une transaction SQLite.
+//!  - N'écrire que ce qui change. L'index est une base SQLite dont chaque
+//!    cycle ne touche que les lignes ajoutées ou retirées, là où l'ancien
+//!    fichier JSON était réécrit en entier.
+//!  - Permissions restreintes. L'index porte les noms de projets, les
+//!    identifiants de session et la volumétrie. Les clés Admin, elles, ne
+//!    sont pas ici du tout : voir `crate::secrets`.
 
 use crate::collectors::{CollectorState, Event, Quota};
 use crate::util::{now_ms, Tokens};
 use chrono::{Local, TimeZone, Timelike};
+use rusqlite::{params, Connection, Transaction, TransactionBehavior};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::PathBuf;
 
@@ -73,6 +78,12 @@ pub fn config_path() -> PathBuf {
     ensure_dir().join("config.json")
 }
 pub fn index_path() -> PathBuf {
+    ensure_dir().join("index.db")
+}
+/// L'index des versions antérieures, un seul fichier JSON réécrit en entier à
+/// chaque cycle. Relu une dernière fois, puis supprimé une fois versé dans la
+/// base.
+pub fn legacy_index_path() -> PathBuf {
     ensure_dir().join("index.json")
 }
 pub fn owner_path() -> PathBuf {
@@ -129,7 +140,13 @@ pub struct Config {
     pub version: u32,
     // --- Sources ---
     pub disabled_sources: Vec<String>,
+    /// Les clés Admin, telles que lues dans le trousseau. Jamais écrites dans
+    /// `config.json` : on les DÉSÉRIALISE encore, pour reprendre celles
+    /// qu'une version antérieure y avait laissées en clair, mais on ne les
+    /// sérialise plus. Voir `crate::secrets`.
+    #[serde(skip_serializing)]
     pub anthropic_admin_key: Option<String>,
+    #[serde(skip_serializing)]
     pub openai_admin_key: Option<String>,
     pub api_lookback_days: i64,
     // --- Carbone ---
@@ -167,6 +184,11 @@ pub struct Config {
     /// Posé par l'appelant quand il sait ne pas être le processus écrivain.
     #[serde(skip)]
     pub read_only: bool,
+    /// Des clés trouvées en clair dans `config.json` n'ont pas pu passer au
+    /// trousseau. On les laisse alors où elles étaient plutôt que de les
+    /// perdre à la prochaine écriture — sans jamais en AJOUTER de nouvelles.
+    #[serde(skip)]
+    pub unmigrated_keys: bool,
 }
 
 impl Default for Config {
@@ -201,18 +223,89 @@ impl Default for Config {
             compact_after_days: 90,
             model_overrides: HashMap::new(),
             read_only: false,
+            unmigrated_keys: false,
         }
     }
 }
 
-/// Charge la configuration, chaque champ absent prenant sa valeur par défaut.
-pub fn load_config() -> Config {
-    read_json::<Config>(&config_path()).unwrap_or_default()
+impl Config {
+    pub fn admin_key(&self, provider: &str) -> Option<&str> {
+        match provider {
+            "anthropic" => self.anthropic_admin_key.as_deref(),
+            "openai" => self.openai_admin_key.as_deref(),
+            _ => None,
+        }
+    }
+
+    fn admin_key_mut(&mut self, provider: &str) -> Option<&mut Option<String>> {
+        match provider {
+            "anthropic" => Some(&mut self.anthropic_admin_key),
+            "openai" => Some(&mut self.openai_admin_key),
+            _ => None,
+        }
+    }
+
+    /// Reprend les clés d'une autre configuration.
+    ///
+    /// Une configuration reconstruite depuis son JSON — un correctif venu de
+    /// l'interface, par exemple — n'a plus de clés, puisqu'elles ne sont pas
+    /// sérialisées. Sans ceci, modifier la langue « effacerait » les clés en
+    /// mémoire jusqu'au redémarrage.
+    pub fn carry_secrets_from(&mut self, other: &Config) {
+        self.anthropic_admin_key = other.anthropic_admin_key.clone();
+        self.openai_admin_key = other.openai_admin_key.clone();
+        self.unmigrated_keys = other.unmigrated_keys;
+    }
 }
 
+/// Charge la configuration, chaque champ absent prenant sa valeur par défaut,
+/// et les clés depuis le trousseau.
+///
+/// Une clé encore en clair dans le fichier — écrite par une version
+/// antérieure — passe au trousseau, puis le fichier est réécrit sans elle.
+pub fn load_config() -> Config {
+    let mut config = read_json::<Config>(&config_path()).unwrap_or_default();
+    let mut migrated = false;
+    for provider in crate::secrets::PROVIDERS {
+        let Some(slot) = config.admin_key_mut(provider) else {
+            continue;
+        };
+        match slot.clone() {
+            Some(plain) => match crate::secrets::set(provider, Some(&plain)) {
+                Ok(()) => migrated = true,
+                Err(e) => {
+                    log::warn!("trousseau : la clé {provider} reste dans config.json : {e}");
+                    config.unmigrated_keys = true;
+                }
+            },
+            None => *slot = crate::secrets::get(provider),
+        }
+    }
+    if migrated && !config.unmigrated_keys {
+        let _ = save_config(&config);
+    }
+    config
+}
+
+/// Écrit la configuration. Les clés n'y figurent pas : elles vont au
+/// trousseau par `crate::secrets::set`, seule voie pour en enregistrer une.
 pub fn save_config(config: &Config) -> std::io::Result<()> {
-    // 0600 : la configuration peut contenir des clés Admin.
-    let json = serde_json::to_string_pretty(config).unwrap_or_else(|_| "{}".into());
+    let mut value = serde_json::to_value(config).unwrap_or_else(|_| serde_json::json!({}));
+    if config.unmigrated_keys {
+        if let Some(obj) = value.as_object_mut() {
+            for (field, key) in [
+                ("anthropicAdminKey", &config.anthropic_admin_key),
+                ("openaiAdminKey", &config.openai_admin_key),
+            ] {
+                if let Some(k) = key {
+                    obj.insert(field.into(), serde_json::Value::from(k.as_str()));
+                }
+            }
+        }
+    }
+    let json = serde_json::to_string_pretty(&value).unwrap_or_else(|_| "{}".into());
+    // 0600 malgré tout : la configuration porte les noms de modèles
+    // personnalisés, les calibrages et, dans le cas dégradé ci-dessus, une clé.
     write_atomic(&config_path(), &json, 0o600)
 }
 
@@ -360,7 +453,7 @@ fn empty_index() -> Index {
 }
 
 pub fn load_index(config: &Config) -> Index {
-    let Some(idx) = read_json::<Index>(&index_path()) else {
+    let Some(idx) = read_stored_index() else {
         return empty_index();
     };
     if idx.version != INDEX_VERSION {
@@ -573,15 +666,210 @@ pub fn save_index(idx: Index, config: &Config) -> Index {
     if config.read_only || owned_by_another(now) {
         return trimmed;
     }
-    // 0600 comme la configuration : l'index porte l'historique d'usage, les
-    // noms de projets et les identifiants de session.
-    let json = serde_json::to_string(&trimmed).unwrap_or_else(|_| "{}".into());
-    if write_atomic(&index_path(), &json, 0o600).is_ok() {
-        if let Ok(mut last) = LAST_SIGNATURE.lock() {
-            *last = Some(signature);
+    match write_db(&trimmed) {
+        Ok(()) => {
+            if let Ok(mut last) = LAST_SIGNATURE.lock() {
+                *last = Some(signature);
+            }
+            // L'ancien index JSON est désormais dans la base. Le garder
+            // laisserait une copie de tout l'historique, que plus rien ne
+            // met à jour, à côté de celle qui fait foi.
+            let legacy = legacy_index_path();
+            if legacy.exists() {
+                let _ = fs::remove_file(legacy);
+            }
         }
+        Err(e) => log::error!("index : écriture impossible : {e}"),
     }
     trimmed
+}
+
+// ---------------------------------------------------------------------------
+// Base SQLite
+// ---------------------------------------------------------------------------
+
+const SCHEMA: &str = "
+CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS events (id TEXT PRIMARY KEY, ts INTEGER NOT NULL, data TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS events_ts ON events(ts);
+CREATE TABLE IF NOT EXISTS quota (id TEXT PRIMARY KEY, ts INTEGER NOT NULL, data TEXT NOT NULL);
+";
+
+fn open_db() -> rusqlite::Result<Connection> {
+    let path = index_path();
+    let conn = Connection::open(&path)?;
+    // L'application et la CLI peuvent se croiser : on attend le verrou
+    // plutôt que d'échouer au premier conflit.
+    conn.busy_timeout(std::time::Duration::from_secs(5))?;
+    // WAL : un lecteur — la CLI pendant que l'application écrit — ne bloque
+    // pas l'écrivain, et réciproquement.
+    conn.pragma_update(None, "journal_mode", "WAL")?;
+    conn.execute_batch(SCHEMA)?;
+    // 0600 comme la configuration : l'index porte l'historique d'usage, les
+    // noms de projets et les identifiants de session. SQLite crée ses
+    // fichiers `-wal` et `-shm` avec les permissions de la base elle-même.
+    #[cfg(unix)]
+    {
+        let _ = fs::set_permissions(&path, fs::Permissions::from_mode(0o600));
+    }
+    Ok(conn)
+}
+
+/// Identifiant stable d'un enregistrement : l'empreinte FNV-1a de son JSON.
+///
+/// Les enregistrements n'ont pas de clé naturelle — un agrégat horaire n'a ni
+/// session ni requête. L'empreinte du contenu en tient lieu, et c'est ce qui
+/// permet de n'écrire que la DIFFÉRENCE d'un cycle à l'autre : quelques
+/// lignes, au lieu de réécrire tout l'historique à chaque minute.
+fn fingerprint(data: &str) -> String {
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    for b in data.bytes() {
+        h ^= u64::from(b);
+        h = h.wrapping_mul(0x0100_0000_01b3);
+    }
+    format!("{h:016x}")
+}
+
+/// Associe un identifiant à chaque ligne. Deux enregistrements identiques
+/// restent deux lignes : le second reçoit un suffixe d'occurrence.
+fn with_ids(rows: Vec<(i64, String)>) -> Vec<(String, i64, String)> {
+    let mut seen: HashMap<String, usize> = HashMap::new();
+    rows.into_iter()
+        .map(|(ts, data)| {
+            let base = fingerprint(&data);
+            let n = seen.entry(base.clone()).or_insert(0);
+            let id = if *n == 0 { base } else { format!("{base}#{n}") };
+            *n += 1;
+            (id, ts, data)
+        })
+        .collect()
+}
+
+/// Met une table en conformité avec les lignes voulues, en n'écrivant que
+/// ce qui a changé.
+fn sync_rows(tx: &Transaction, table: &str, rows: Vec<(i64, String)>) -> rusqlite::Result<()> {
+    let wanted = with_ids(rows);
+    let existing: HashSet<String> = {
+        let mut stmt = tx.prepare(&format!("SELECT id FROM {table}"))?;
+        let ids = stmt.query_map([], |r| r.get::<_, String>(0))?;
+        ids.collect::<rusqlite::Result<_>>()?
+    };
+    let wanted_ids: HashSet<&str> = wanted.iter().map(|(id, _, _)| id.as_str()).collect();
+
+    let mut delete = tx.prepare(&format!("DELETE FROM {table} WHERE id = ?1"))?;
+    for id in existing
+        .iter()
+        .filter(|id| !wanted_ids.contains(id.as_str()))
+    {
+        delete.execute([id])?;
+    }
+    let mut insert = tx.prepare(&format!(
+        "INSERT INTO {table} (id, ts, data) VALUES (?1, ?2, ?3)"
+    ))?;
+    for (id, ts, data) in wanted.iter().filter(|(id, _, _)| !existing.contains(id)) {
+        insert.execute(params![id, ts, data])?;
+    }
+    Ok(())
+}
+
+fn write_db(idx: &Index) -> rusqlite::Result<()> {
+    let mut conn = open_db()?;
+    // IMMEDIATE : le verrou d'écriture est pris d'entrée, pas au premier
+    // INSERT — deux écrivains ne peuvent pas lire le même état puis se
+    // contredire.
+    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    {
+        let mut meta = tx.prepare(
+            "INSERT INTO meta (key, value) VALUES (?1, ?2)
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        )?;
+        for (k, v) in [
+            ("version", idx.version.to_string()),
+            ("updatedAt", idx.updated_at.to_string()),
+            ("retentionDays", idx.retention_days.to_string()),
+            ("compactAfterDays", idx.compact_after_days.to_string()),
+            ("compactedThrough", idx.compacted_through.to_string()),
+            ("collectors", to_json(&idx.collectors)),
+            ("live", to_json(&idx.live)),
+        ] {
+            meta.execute(params![k, v])?;
+        }
+    }
+    sync_rows(
+        &tx,
+        "events",
+        idx.events.iter().map(|e| (e.ts, to_json(e))).collect(),
+    )?;
+    sync_rows(
+        &tx,
+        "quota",
+        idx.quota.iter().map(|q| (q.ts, to_json(q))).collect(),
+    )?;
+    tx.commit()
+}
+
+/// Sérialisation de nos propres types : elle ne peut pas échouer, sauf bogue.
+fn to_json<T: Serialize>(v: &T) -> String {
+    serde_json::to_string(v).unwrap_or_default()
+}
+
+fn read_db() -> rusqlite::Result<Option<Index>> {
+    let conn = open_db()?;
+    let meta: HashMap<String, String> = {
+        let mut stmt = conn.prepare("SELECT key, value FROM meta")?;
+        let rows = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?;
+        rows.collect::<rusqlite::Result<_>>()?
+    };
+    let Some(version) = meta.get("version").and_then(|v| v.parse().ok()) else {
+        return Ok(None);
+    };
+    let num = |k: &str| meta.get(k).and_then(|v| v.parse().ok()).unwrap_or(0);
+    let rows = |table: &str| -> rusqlite::Result<Vec<String>> {
+        let mut stmt = conn.prepare(&format!("SELECT data FROM {table} ORDER BY ts, rowid"))?;
+        let rows = stmt.query_map([], |r| r.get::<_, String>(0))?;
+        rows.collect()
+    };
+    // Une ligne illisible — écrite par une version future, par exemple — est
+    // écartée seule plutôt que d'invalider tout l'historique.
+    let events = rows("events")?
+        .iter()
+        .filter_map(|d| serde_json::from_str(d).ok())
+        .collect();
+    let quota = rows("quota")?
+        .iter()
+        .filter_map(|d| serde_json::from_str(d).ok())
+        .collect();
+    let json = |k: &str| meta.get(k).map(String::as_str).unwrap_or("");
+    Ok(Some(Index {
+        version,
+        updated_at: num("updatedAt"),
+        retention_days: num("retentionDays"),
+        compact_after_days: num("compactAfterDays"),
+        compacted_through: num("compactedThrough"),
+        collectors: serde_json::from_str(json("collectors")).unwrap_or_default(),
+        events,
+        quota,
+        live: serde_json::from_str(json("live")).unwrap_or_default(),
+        reindexed: false,
+    }))
+}
+
+/// L'index tel qu'il est stocké : la base, ou à défaut l'ancien index JSON.
+///
+/// L'ancien fichier n'est pas converti ici — un lecteur n'écrit pas. Il est
+/// repris en mémoire, et c'est la prochaine écriture du processus
+/// propriétaire qui le verse dans la base puis le supprime.
+fn read_stored_index() -> Option<Index> {
+    if index_path().exists() {
+        return match read_db() {
+            Ok(idx) => idx,
+            Err(e) => {
+                log::error!("index : lecture impossible : {e}");
+                None
+            }
+        };
+    }
+    read_json::<Index>(&legacy_index_path())
 }
 
 /// Somme de tokens vide, exposée pour les appelants qui construisent un index

@@ -10,9 +10,10 @@ build/*
 !build/entitlements.mac.plist
 
 # Index et préférences vivent dans le répertoire de configuration système,
-# jamais dans le dépôt — ils contiennent l'historique d'usage et les clés.
+# jamais dans le dépôt : ils contiennent l'historique d'usage.
 config.json
 index.json
+index.db*
 
 # Artefacts de compilation Rust.
 target/

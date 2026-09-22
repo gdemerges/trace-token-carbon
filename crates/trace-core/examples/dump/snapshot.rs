@@ -4,7 +4,7 @@
 
 use trace_core::core::{self, SnapshotOptions};
 
-fn main() {
+pub fn run() {
     let state = core::refresh(trace_core::store::load_config(), false);
     let snap = core::snapshot(
         &state,

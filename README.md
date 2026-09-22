@@ -13,37 +13,36 @@ macOS · Windows · Linux — Rust and Tauri, packaged at **4.4 MB**.
 ```bash
 cargo run -p trace-app     # launch the app
 cargo run -p trace-cli     # the same numbers, in the terminal
-cargo test                 # 135 tests across the core, presentation, and catalogs
+cargo test                 # core, CLI, and app tests
+npm ci && npm test         # renderer tests (shared modules, catalogs)
+npm run lint               # renderer lint, including unescaped-HTML checks
 cargo tauri build          # package for the current system
 ```
 
-Rust 1.82 or newer. On Linux, the system webview requires
-`libwebkit2gtk-4.1-dev`, `libappindicator3-dev`, and `librsvg2-dev`.
+Rust 1.89 or newer — the floor set by Tauri's own dependencies, and checked
+in CI. On Linux, the system webview requires `libwebkit2gtk-4.1-dev`,
+`libappindicator3-dev`, and `librsvg2-dev`; the keychain integration
+requires `libdbus-1-dev` and `pkg-config`.
 
-Tests run in continuous integration on all three systems
-(`.github/workflows/rust.yml`), with `clippy` and `rustfmt` as blocking
-errors. This isn't precautionary boilerplate: file paths, POSIX permissions,
-config-directory construction, and especially live-process detection differ
-across systems, and CI has caught faults on Windows that no macOS machine
-could surface.
+Continuous integration (`.github/workflows/rust.yml`) runs on all three
+systems, with `clippy` and `rustfmt` as blocking errors. This isn't
+precautionary boilerplate: file paths, POSIX permissions, config-directory
+construction, and especially live-process detection differ across systems,
+and CI has caught faults on Windows that no macOS machine could surface.
+Three more jobs guard what the matrix doesn't: a build on the minimum Rust
+version declared in `Cargo.toml`, `cargo audit` against the RustSec
+advisory database, and the renderer's lint and tests.
 
-### Architecture
+The core can dump what it reads and computes, source by source, for
+comparing two versions or inspecting a collector:
 
-Three crates, and the boundary between them is what holds the rest together:
-
+```bash
+cargo run -p trace-core --example dump                # lists the dumps
+cargo run -p trace-core --example dump -- collector   # events read from Claude Code
+cargo run -p trace-core --example dump -- snapshot    # the JSON sent to the interface
 ```
-crates/trace-core/   log reading, pricing, carbon, aggregation, rate limits,
-                     alerts. Knows NOTHING about Tauri or any UI: that's what
-                     lets it be tested on all three systems without launching
-                     anything.
-crates/trace-cli/    the `trace` binary.
-src-tauri/           menu-bar icon, popover, dashboard.
-src/renderer/        the interface, in framework-free, bundler-free JavaScript.
-```
 
-The renderer is the same DOM, the same hand-written SVG, the same
-stylesheet across every platform target. Only the IPC bridge changes, and it
-exposes exactly the same surface.
+The code layout is described under [Architecture](#architecture).
 
 ## Using it
 
@@ -210,15 +209,19 @@ the API. In decreasing order of reliability:
 
    **Query discipline:**
 
-   - one call every **5 minutes** at most, decoupled from the local refresh,
-     which only re-reads files;
-   - **exponential backoff** on failure (2, 4, 8… minutes, capped at one
-     hour), and respect for the `Retry-After` header when the server
-     provides one;
+   - one call every **15 minutes** at most, decoupled from the local
+     refresh, which only re-reads files. A five-hour window doesn't move in a
+     quarter hour, and TRACE shares this endpoint's quota with Claude Code
+     itself;
+   - **exponential backoff** on failure, capped at one hour: from 10 minutes
+     after a rate-limit rejection (429), from 45 seconds after a transient
+     network failure — punishing a micro-outage for ten minutes would leave
+     a frozen figure for no reason. The `Retry-After` header takes
+     precedence when the server provides one;
    - the last reading is **persisted**, one per window, replaced on each
      success. It survives a restart, and a restart doesn't trigger a call if
      the cached reading is recent;
-   - past 20 minutes, the value stays displayed — it's the best information
+   - past 45 minutes, the value stays displayed — it's the best information
      available — but the interface announces its age instead of presenting
      it as current. **A dated figure beats a false estimate**;
    - **the cadence is announced**: the gauge shows the reading's age *and*
@@ -367,23 +370,49 @@ The last one is the only one added without being asked for, and it's a
 one-click toggle in settings: nothing is downloaded or installed, it's a
 notification and a link.
 
-- The renderer has **no filesystem access** (`contextIsolation` active,
-  `nodeIntegration` disabled, an explicitly enumerated IPC surface) and runs
-  under a **content security policy** that denies everything by default:
-  local scripts only, no outbound connections, no remote resources. Project
-  and model names come from parsed logs — they're escaped on display, and
-  the CSP is the second barrier.
-- API keys are encrypted through the system keychain (`safeStorage`). If the
-  keychain is unavailable, TRACE **refuses** to save the key rather than
-  write it in plaintext.
+- The renderer has **no filesystem access**. It can only call the commands
+  the app explicitly registers, under a Tauri capability file
+  (`src-tauri/capabilities/default.json`) that grants window dragging and
+  notifications and nothing else, and it runs under a **content security
+  policy** (`src-tauri/tauri.conf.json`) that denies everything by default:
+  local scripts only, no outbound connections, no remote resources.
+- Project and model names come from parsed logs. They're escaped on display
+  — the lint (`npm run lint`) rejects any HTML interpolation that doesn't go
+  through the escaping function, unless the exception is annotated as
+  audited — and the CSP is the second barrier.
+- Links open in the browser only over HTTPS, and only to a closed list of
+  hosts: the GitHub repository and the publishers of the sources the
+  methodology cites.
+- **API keys live in the system keychain** — Keychain on macOS, Credential
+  Manager on Windows, Secret Service (GNOME Keyring, KWallet) on Linux — and
+  never in `config.json`. If the keychain is unavailable, TRACE **refuses**
+  to save the key rather than write it in plaintext, and says so in
+  settings. A key left in plaintext by an earlier version moves to the
+  keychain on first launch, and the file is rewritten without it. On macOS,
+  the CLI is a separate binary: the first time it reads a key, the system
+  asks whether to allow it.
 - The index and preferences live in the platform's standard config
-  directory. The folder is `0700`, `config.json` and `index.json` are
-  `0600`: the index carries the names of all your projects, your session
-  identifiers, and your volumetrics.
+  directory. On macOS and Linux the folder is `0700`, and `config.json`
+  and `index.db` are `0600`: the index carries the names of all your
+  projects, your session identifiers, and your volumetrics. On Windows the
+  folder sits in your profile (`%APPDATA%\TRACE`), whose default ACLs
+  already restrict it to your account.
+- Diagnostics go to a log file in the platform's log directory
+  (`~/Library/Logs/com.gdemerges.trace` on macOS,
+  `%LOCALAPPDATA%\com.gdemerges.trace\logs` on Windows,
+  `~/.local/share/com.gdemerges.trace/logs` on Linux), capped at 1 MB with
+  one rotated copy. It carries errors and warnings — never a key, a token, or
+  log content.
 
 ---
 
 ## Architecture
+
+Three crates, and the boundary between them is what holds the rest
+together: `trace-core` knows NOTHING about Tauri or any UI, which is what
+lets it be tested on all three systems without launching anything. The
+renderer is the same DOM, the same hand-written SVG, the same stylesheet
+across every platform target.
 
 ```
 crates/trace-core/src/
@@ -394,10 +423,13 @@ crates/trace-core/src/
   aggregate.rs   cost and carbon computed PER MODEL then summed, never on an average rate
   provenance.rs  who measures what, and who wins when two sources overlap
   present.rs     what the menu bar displays — pure logic, hence testable
+  store.rs       preferences (JSON) and the index (SQLite)
+  secrets.rs     Admin keys, in the system keychain
 crates/trace-cli/  the `trace` binary
 src-tauri/src/     menu-bar icon, popover, dashboard, generated PNG icons
 src/renderer/      popover and dashboard — native HTML/CSS/JS, hand-written SVG
 src/i18n/          two JSON catalogs, embedded in the binary
+test/              renderer tests (`node --test`)
 ```
 
 Indexing is incremental: each file is re-read from a byte offset, and
@@ -405,15 +437,26 @@ incomplete lines — Claude Code writes while it's being read — are picked up
 on the next pass. Across 186 MB of logs: **230 ms cold**, and nothing
 afterward as long as no file has grown.
 
+### The index
+
+The index is a SQLite database (`index.db`, SQLite embedded in the binary).
+Each cycle writes only what changed — the few requests added, the records
+folded by compaction — in a single transaction, where the earlier JSON index
+was rewritten in full every time something moved. It runs in WAL mode, so
+the CLI can read while the app writes. An `index.json` left by an earlier
+version is read once, moved into the database on the next write, then
+deleted.
+
 ### A single process writes the index
 
-The app and the CLI share the same file, and both re-read it, complete it,
-then rewrite it in full. Running `trace` while the app is running would
+The app and the CLI share the same index, and both read it, complete it,
+then write it back. Running `trace` while the app is running would
 therefore make the two overwrite each other's collector offsets.
 
-A per-file lock wouldn't be enough: the window to protect isn't the write —
-atomic, a few milliseconds — but the whole read → collect → write cycle. The
-app therefore declares itself **owner** of the index on each cycle; other
+A database lock wouldn't be enough: the window to protect isn't the write —
+a transaction, a few milliseconds — but the whole read → collect → write
+cycle, which includes network calls no lock should be held across. The app
+therefore declares itself **owner** of the index on each cycle; other
 processes read and display correct numbers, but don't write. The claim
 expires after five minutes, and an abrupt stop doesn't strand the file.
 

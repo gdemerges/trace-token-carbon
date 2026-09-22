@@ -277,3 +277,33 @@ pub fn parse_flexible_ts(v: &serde_json::Value) -> Option<i64> {
         _ => None,
     }
 }
+
+/// L'hôte d'une URL `https://`, en minuscules. `None` pour tout autre schéma,
+/// et pour une URL qui porte des identifiants (`https://a@b/`) : c'est le
+/// déguisement classique d'un hôte derrière un autre.
+fn https_host(url: &str) -> Option<String> {
+    let rest = url.strip_prefix("https://")?;
+    let authority = rest.split(['/', '?', '#']).next()?;
+    if authority.contains('@') {
+        return None;
+    }
+    let host = authority.split(':').next()?.to_ascii_lowercase();
+    (!host.is_empty()).then_some(host)
+}
+
+/// Les adresses que l'application accepte d'ouvrir dans le navigateur.
+///
+/// HTTPS seulement, et vers une liste fermée d'hôtes : le dépôt (annonce de
+/// version) et les éditeurs des sources citées par la méthodologie. Une
+/// chaîne venue d'un journal — nom de projet ou de modèle — ne doit pas
+/// pouvoir faire ouvrir une adresse arbitraire, ni `file://`.
+pub fn external_url_allowed(url: &str) -> bool {
+    let Some(host) = https_host(url) else {
+        return false;
+    };
+    host == "github.com"
+        || crate::carbon::sources::all()
+            .iter()
+            .filter_map(|s| https_host(s.url))
+            .any(|h| h == host)
+}

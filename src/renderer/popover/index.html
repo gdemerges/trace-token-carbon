@@ -3,16 +3,15 @@
 <head>
 <meta charset="utf-8" />
 <!--
-  Politique de sécurité du contenu.
-  Le renderer n'a besoin de rien d'extérieur : son script est local, ses styles
-  sont dans la page, ses logos sont des `data:`. Tout interdire par défaut et
-  n'ouvrir que cela ferme la porte à l'injection d'un script distant par une
-  chaîne venue d'un journal analysé — noms de projets et de modèles compris.
+  Politique de sécurité du contenu : dans `src-tauri/tauri.conf.json`
+  (`app.security.csp`), une seule définition pour les deux fenêtres. Tauri
+  l'envoie en en-tête et y ajoute l'empreinte de ses propres scripts.
+  Tout est interdit par défaut : une chaîne venue d'un journal analysé — nom de
+  projet ou de modèle — ne doit pas pouvoir charger un script distant.
 -->
-<meta http-equiv="Content-Security-Policy"
-      content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src ipc: http://ipc.localhost; form-action 'none'; base-uri 'none'" />
 
 <title>TRACE</title>
+<link rel="icon" href="data:," />
 <link rel="stylesheet" href="../shared/theme.css" />
 <style>
   /* Le popover flotte : sur macOS il s'appuie sur le flou système, ailleurs

@@ -76,17 +76,43 @@ impl AppState {
     /// désérialiser le correctif seul : un correctif ne porte que les champs
     /// qui changent, et le désérialiser directement remettrait tous les autres
     /// à leur défaut.
-    pub fn patch_config(&self, patch: serde_json::Value) -> Result<Config, String> {
+    pub fn patch_config(&self, mut patch: serde_json::Value) -> Result<Config, String> {
         let current = self.config();
+        // Une clé ne passe JAMAIS par ici : elle irait dans `config.json`.
+        // La seule voie est `set_key`, qui l'envoie au trousseau.
+        if let Some(p) = patch.as_object_mut() {
+            p.remove("anthropicAdminKey");
+            p.remove("openaiAdminKey");
+        }
         let mut merged = serde_json::to_value(&current).map_err(|e| e.to_string())?;
         merge(&mut merged, &patch);
-        let next: Config = serde_json::from_value(merged).map_err(|e| e.to_string())?;
+        let mut next: Config = serde_json::from_value(merged).map_err(|e| e.to_string())?;
+        // Les clés ne sont pas sérialisées : sans ceci, changer la langue les
+        // ferait disparaître de la mémoire jusqu'au redémarrage.
+        next.carry_secrets_from(&current);
         store::save_config(&next).map_err(|e| e.to_string())?;
         trace_core::i18n::set_locale(&next.locale);
         if let Ok(mut s) = self.inner.lock() {
             s.config = next.clone();
         }
         Ok(next)
+    }
+
+    /// Enregistre ou efface une clé Admin, dans le trousseau et en mémoire.
+    ///
+    /// Un trousseau indisponible est une erreur remontée telle quelle :
+    /// l'interface l'affiche, et la clé n'est écrite nulle part ailleurs.
+    pub fn set_key(&self, provider: &str, value: Option<&str>) -> Result<(), String> {
+        trace_core::secrets::set(provider, value)?;
+        let stored = trace_core::secrets::get(provider);
+        if let Ok(mut s) = self.inner.lock() {
+            match provider {
+                "anthropic" => s.config.anthropic_admin_key = stored,
+                "openai" => s.config.openai_admin_key = stored,
+                _ => {}
+            }
+        }
+        Ok(())
     }
 
     pub fn calibrate(&self, gauge_id: &str, percent: f64) -> Result<(), String> {

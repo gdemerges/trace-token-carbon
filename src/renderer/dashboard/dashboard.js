@@ -1,4 +1,4 @@
-import { nf, tokens, usd, co2, energy, water, pct, windowLabel, ago, shortDate, esc } from '../shared/format.js';
+import { nf, tokens, usd, co2, energy, water, pct, ago, shortDate, esc } from '../shared/format.js';
 import { traceStrip, gauge, bars, rangeBar } from '../shared/charts.js';
 import { providerMark, PROVIDER_LABEL } from '../shared/marks.js';
 import { groupByProduct, originLabel, timingLabel, projectionLabel } from '../shared/gauges.js';
@@ -29,6 +29,7 @@ function renderHero() {
   const tr = snap.report.trend;
   const c = tot.carbon.gramsCO2e;
 
+  // eslint-disable-next-line no-unsanitized/property -- audité : texte échappé par esc(), nombres formatés, fragments construits ici
   $('#figures').innerHTML = `
     <div class="fig"><div class="legend">${esc(t('hero.tokens'))}</div>
       <div class="v num c-tokens">${tokens(tot.tokens.total)}</div>
@@ -55,6 +56,7 @@ function renderHero() {
 function card(cls, title, aside = '') {
   const s = document.createElement('section');
   s.className = `card panel ${cls}`;
+  // eslint-disable-next-line no-unsanitized/property -- audité : texte échappé par esc(), nombres formatés, fragments construits ici
   s.innerHTML = `<h2>${esc(title)}${aside ? `<span class="aside faint">${aside}</span>` : ''}</h2>`;
   return s;
 }
@@ -71,6 +73,7 @@ function gaugesCard() {
   for (const block of groupByProduct(snap.gauges)) {
     const b = document.createElement('div');
     b.className = 'block';
+    // eslint-disable-next-line no-unsanitized/property -- audité : texte échappé par esc(), nombres formatés, fragments construits ici
     b.innerHTML = `<div class="block-head">
         ${providerMark(block.provider, 14)}
         <span class="pname">${esc(block.product)}</span>
@@ -87,6 +90,7 @@ function gaugesCard() {
         ? `<span class="faint num" style="font-size:12px">${esc(t('gauges.used', { amount: tokens(g.used) }))}</span>`
         : `${g.approximate ? '≈ ' : ''}${pct(g.percent)}`;
 
+      // eslint-disable-next-line no-unsanitized/property -- audité : texte échappé par esc(), nombres formatés, fragments construits ici
       row.innerHTML = `<div class="win-top">
           <span class="wname">${esc(g.label)}</span>
           ${g.calibratable ? `<button class="calib" type="button">${esc(t('gauges.adjust'))}</button>` : ''}
@@ -133,6 +137,7 @@ function openCalibration(row, g) {
   if (row.querySelector('.calib-form')) return;
   const form = document.createElement('form');
   form.className = 'calib-form';
+  // eslint-disable-next-line no-unsanitized/property -- audité : balisage voulu du catalogue embarqué, paramètres numériques formatés
   form.innerHTML = `<span class="faint">${t('calib.prompt', { cmd: '<code>/usage</code>' })}</span>
     <span class="calib-input"><input type="number" min="1" max="100" step="1" required placeholder="72" aria-label="${esc(t('calib.aria'))}" /> %</span>
     <button class="btn primary" type="submit">${esc(t('calib.submit'))}</button>
@@ -203,6 +208,7 @@ function consumptionCard() {
 
   if (grain === 'day') {
     const d = snap.report.daily;
+    // eslint-disable-next-line no-unsanitized/property -- audité : texte échappé par esc(), nombres formatés, fragments construits ici
     axis.innerHTML = d.length
       ? `<span>${shortDate(d[0].date)}</span><span>${shortDate(d[Math.floor(d.length / 2)].date)}</span><span>${shortDate(d[d.length - 1].date)}</span>`
       : '';
@@ -213,6 +219,7 @@ function consumptionCard() {
     const h = snap.report.hours;
     // Les heures creuses restent visibles : un profil de travail se lit autant
     // par ses trous que par ses pics.
+    // eslint-disable-next-line no-unsanitized/property -- audité : texte échappé par esc(), nombres formatés, fragments construits ici
     axis.innerHTML = [0, 6, 12, 18, 23].map((n) => `<span>${esc(t('consumption.hourAxis', { n: String(n).padStart(2, '0') }))}</span>`).join('');
     requestAnimationFrame(() =>
       bars(host, h.map((x) => ({
@@ -241,6 +248,7 @@ function modelsCard() {
       <td class="num c-carbon">${co2(g.carbon.gramsCO2e.mid)}</td></tr>`;
   }).join('');
 
+  // eslint-disable-next-line no-unsanitized/method -- audité : texte échappé par esc(), nombres formatés, fragments construits ici
   s.insertAdjacentHTML('beforeend', `<table><thead><tr>
       <th>${esc(t('models.col'))}</th><th>${esc(t('col.tokens'))}</th><th>${esc(t('col.share'))}</th>
       <th>${esc(t('col.requests'))}</th><th>${esc(t('col.cost'))}</th><th>CO₂e</th>
@@ -259,6 +267,7 @@ function breakdownCard() {
   ];
   const total = parts.reduce((a, p) => a + p.value, 0) || 1;
 
+  // eslint-disable-next-line no-unsanitized/method -- audité : balisage voulu du catalogue embarqué, paramètres numériques formatés
   s.insertAdjacentHTML('beforeend', `<table><tbody>${parts.map((p) => `<tr>
       <td><div class="name-cell"><i class="swatch" style="background:${p.color}"></i><span>${esc(p.label)}</span></div></td>
       <td class="num">${tokens(p.value)}</td>
@@ -278,6 +287,7 @@ function projectsCard() {
       <td class="num">${tokens(p.tokens.total)}</td>
       <td class="num c-cost">${usd(p.costUSD)}</td>
       <td class="num c-carbon">${co2(p.carbon.gramsCO2e.mid)}</td></tr>`).join('');
+  // eslint-disable-next-line no-unsanitized/method -- audité : texte échappé par esc(), nombres formatés, fragments construits ici
   s.insertAdjacentHTML('beforeend', `<table><thead><tr><th>${esc(t('col.project'))}</th><th>${esc(t('col.tokens'))}</th>
     <th>${esc(t('col.cost'))}</th><th>CO₂e</th></tr></thead>
     <tbody>${rows || `<tr><td colspan="4" class="faint">${esc(t('table.empty'))}</td></tr>`}</tbody></table>`);
@@ -293,11 +303,12 @@ function carbonCard() {
   s.appendChild(host);
   requestAnimationFrame(() => rangeBar(host, g.min, g.mid, g.max, g.max));
 
+  // eslint-disable-next-line no-unsanitized/method -- audité : texte échappé par esc(), nombres formatés, fragments construits ici
   s.insertAdjacentHTML('beforeend', `
     <div style="display:flex;justify-content:space-between;margin-top:5px;font-size:10.5px" class="faint num">
       <span>${co2(g.min)}</span><span>${esc(t('carbon.median', { amount: co2(g.mid) }))}</span><span>${co2(g.max)}</span></div>
     <div class="equivs">${snap.report.totals.equivalents.slice(0, 4).map((e) => `
-      <div class="equiv"><div style="font-size:14px">${e.icon}</div>
+      <div class="equiv"><div style="font-size:14px">${esc(e.icon)}</div>
         <div class="n num">${nf(e.amount, e.amount < 10 ? 1 : 0)}</div>
         <div class="l faint">${esc(e.label)}</div></div>`).join('')}</div>`);
 
@@ -317,6 +328,7 @@ function carbonCard() {
   s.appendChild(sensitivityBlock());
   s.appendChild(uncertaintyBlock());
 
+  // eslint-disable-next-line no-unsanitized/method -- audité : balisage voulu du catalogue embarqué, paramètres numériques formatés
   s.insertAdjacentHTML('beforeend', `
     <div class="note" style="margin-top:13px;max-width:78ch">
       ${t('carbon.method')}
@@ -341,6 +353,7 @@ function sensitivityBlock() {
   const scale = Math.max(...rows.map((r) => r.gramsCO2e.mid)) || 1;
   const current = (snap.config.carbon || {}).gridKey || 'us-average';
 
+  // eslint-disable-next-line no-unsanitized/property -- audité : texte échappé par esc(), nombres formatés, fragments construits ici
   wrap.innerHTML = `<div class="sens-head">${esc(t('carbon.elsewhere'))}</div>
     ${rows.map((r) => `
       <div class="sens${r.key === current ? ' on' : ''}">
@@ -367,6 +380,7 @@ function uncertaintyBlock() {
   if (!levers.length) return wrap;
 
   const scale = Math.max(...levers.map((l) => l.ratio)) || 1;
+  // eslint-disable-next-line no-unsanitized/property -- audité : texte échappé par esc(), nombres formatés, fragments construits ici
   wrap.innerHTML = `<div class="sens-head">${esc(t('carbon.uncertainty'))}</div>
     ${levers.map((l) => `
       <div class="lever" title="${esc(l.note)}">
@@ -416,6 +430,7 @@ function methodologyCard() {
   det.id = 'method-annex';
   det.open = annexOpen;
   det.addEventListener('toggle', () => { annexOpen = det.open; });
+  // eslint-disable-next-line no-unsanitized/property -- audité : balisage voulu du catalogue embarqué, paramètres numériques formatés
   det.innerHTML = `<summary>${esc(t('method.summary'))}</summary>
     ${[...groups].map(([group, rows]) => `
       <div class="annex-group">${esc(group)}</div>
@@ -447,6 +462,7 @@ function sourcesCard() {
       || (src.events ? t('sources.idle') : t('sources.nothing')));
     const provider = { 'claude-code': 'anthropic', 'anthropic-oauth': 'anthropic', 'anthropic-api': 'anthropic',
       'codex-cli': 'openai', 'openai-api': 'openai' }[src.id] || 'unknown';
+    // eslint-disable-next-line no-unsanitized/method -- audité : texte échappé par esc(), nombres formatés, fragments construits ici
     wrap.insertAdjacentHTML('beforeend', `<div class="src">
         ${providerMark(provider, 13)}
         <i class="dot" style="background:${color}"></i>
@@ -483,6 +499,7 @@ function reconciliationCard() {
     // Sous 5 %, l'écart relève de l'arrondi des fenêtres journalières : on le
     // chiffre sans le colorer, pour ne pas transformer un accord en alarme.
     const cls = ecart < 5 ? 'faint' : 'c-hot';
+    // eslint-disable-next-line no-unsanitized/method -- audité : balisage voulu du catalogue embarqué, paramètres numériques formatés
     s.insertAdjacentHTML('beforeend', `<div class="recon">
         <div class="recon-head">
           <span class="pname">${esc(PROVIDER_LABEL[r.family] || r.family)}</span>
@@ -601,6 +618,7 @@ const gridOptions = () =>
 async function openSettings() {
   const cfg = await window.trace.getConfig();
   const body = $('#settings-body');
+  // eslint-disable-next-line no-unsanitized/property -- audité : balisage voulu du catalogue embarqué, paramètres numériques formatés
   body.innerHTML = `
     <div class="field">
       <label for="lang">${esc(t('set.language'))}</label>
@@ -630,7 +648,7 @@ async function openSettings() {
     <div class="field">
       <label for="grid">${esc(t('set.grid'))}</label>
       <div class="help">${esc(t('set.gridHelp'))}</div>
-      <select id="grid">${gridOptions().map(([k, l]) => `<option value="${k}" ${(cfg.carbon || {}).gridKey === k ? 'selected' : ''}>${l}</option>`).join('')}</select>
+      <select id="grid">${gridOptions().map(([k, l]) => `<option value="${esc(k)}" ${(cfg.carbon || {}).gridKey === k ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>
     </div>
     <div class="field">
       <label for="tray">${esc(t('set.tray'))}</label>
@@ -660,14 +678,14 @@ async function openSettings() {
       <label for="ak">${esc(t('set.anthropicKey'))}</label>
       <div class="help">${esc(t('set.anthropicKeyHelp'))}
         ${cfg.encryptionAvailable ? esc(t('set.keychainOk')) : `<strong class="c-hot">${esc(t('set.keychainKo'))}</strong>`}</div>
-      <div class="row2"><input type="password" id="ak" placeholder="${esc(cfg.anthropicAdminKey ? t('set.keyStored') : 'sk-ant-admin…')}" />
+      <div class="row2"><input type="password" id="ak" placeholder="${esc(cfg.hasKeys?.anthropic ? t('set.keyStored') : 'sk-ant-admin…')}" />
         <button class="btn" id="save-ak">${esc(t('ui.save'))}</button></div>
       <div class="msg" id="ak-msg"></div>
     </div>
     <div class="field">
       <label for="ok">${esc(t('set.openaiKey'))}</label>
       <div class="help">${esc(t('set.openaiKeyHelp'))}</div>
-      <div class="row2"><input type="password" id="ok" placeholder="${esc(cfg.openaiAdminKey ? t('set.keyStored') : 'sk-admin-…')}" />
+      <div class="row2"><input type="password" id="ok" placeholder="${esc(cfg.hasKeys?.openai ? t('set.keyStored') : 'sk-admin-…')}" />
         <button class="btn" id="save-ok">${esc(t('ui.save'))}</button></div>
       <div class="msg" id="ok-msg"></div>
     </div>
@@ -681,10 +699,14 @@ async function openSettings() {
     withPending(btn, t('ui.sending'), async () => {
       const input = document.getElementById(inputId);
       const msg = document.getElementById(msgId);
-      const res = await window.trace.setKey(provider, input.value.trim() || null);
+      const value = input.value.trim() || null;
+      const res = await window.trace.setKey(provider, value);
       msg.textContent = res.ok ? t('set.keySaved') : res.error;
       msg.className = `msg ${res.ok ? 'c-carbon' : 'c-hot'}`;
-      if (res.ok) input.value = '';
+      if (res.ok) {
+        input.value = '';
+        if (value) input.placeholder = t('set.keyStored');
+      }
     });
   $('#save-ak').onclick = (e) => saveKey(e.currentTarget, 'anthropic', 'ak', 'ak-msg');
   $('#save-ok').onclick = (e) => saveKey(e.currentTarget, 'openai', 'ok', 'ok-msg');

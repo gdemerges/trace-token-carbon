@@ -14,7 +14,7 @@ members = ["crates/trace-core", "crates/trace-cli", "src-tauri"]
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.82"
+rust-version = "1.89"
 license = "MIT"
 authors = ["Guillaume Demergès"]
 
@@ -32,6 +32,16 @@ dirs = "5"
 # requêtes par quart d'heure — tout un ordonnanceur asynchrone dans un binaire
 # qu'on a justement choisi Tauri pour garder petit.
 ureq = { version = "2", default-features = false, features = ["tls", "json", "gzip"] }
+# Les clés Admin vivent dans le trousseau du système, jamais dans config.json.
+# Trois implémentations natives, et Secret Service (GNOME Keyring, KWallet)
+# sous Linux, chiffré côté client par `crypto-rust` : pas d'OpenSSL.
+keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service", "crypto-rust"] }
+# L'index : SQLite embarqué (`bundled`), pour ne dépendre d'aucune
+# bibliothèque installée et avoir la même version sur les trois systèmes.
+rusqlite = { version = "0.40", features = ["bundled"] }
+# La façade de journalisation : le cœur signale, l'hôte décide où ça va —
+# un fichier tournant pour l'application, stderr pour la CLI.
+log = "0.4"
 
 # Le binaire est distribué : on optimise pour la taille autant que pour la
 # vitesse. Le travail réel est de la lecture de fichiers, pas du calcul.

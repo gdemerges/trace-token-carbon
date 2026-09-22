@@ -5,7 +5,7 @@ use trace_core::collectors::{claude_code, CollectorState};
 
 const TO: i64 = 1_788_900_000_000;
 
-fn main() {
+pub fn run() {
     let dir = std::env::var("TRACE_CC_DIR").ok();
     let collected = claude_code::collect(dir.as_deref(), &CollectorState::default());
     let opts = Options {
