@@ -96,6 +96,7 @@ fn snap_with(gauges: Vec<Gauge>, tokens_total: i64, cost: f64, grams: f64) -> Sn
         has_keys: Default::default(),
         methodology: serde_json::Value::Null,
         stale_error: None,
+        budget: None,
         extra: serde_json::Value::Null,
     }
 }

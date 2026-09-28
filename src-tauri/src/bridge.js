@@ -34,6 +34,7 @@
     openDashboard: () => invoke('dashboard_open'),
     closePopover: () => invoke('popover_close'),
     exportCsv: (options) => invoke('export_csv', { options: options ?? null }),
+    exportReport: (options) => invoke('export_report', { options: options ?? null }),
     shortcutStatus: () => invoke('shortcut_status'),
     openExternal: (url) => invoke('open_external', { url }),
     quit: () => invoke('quit'),

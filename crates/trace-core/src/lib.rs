@@ -8,6 +8,7 @@
 
 pub mod aggregate;
 pub mod alerts;
+pub mod budget;
 pub mod carbon;
 pub mod collectors;
 pub mod core;
@@ -17,6 +18,7 @@ pub mod present;
 pub mod pricing;
 pub mod provenance;
 pub mod ratelimits;
+pub mod report_md;
 pub mod secrets;
 pub mod store;
 pub mod update;

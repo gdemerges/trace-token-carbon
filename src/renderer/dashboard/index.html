@@ -47,6 +47,12 @@
   .fig .v { font-size: 25px; font-weight: 600; letter-spacing: -0.02em; margin: 5px 0 2px; }
   .fig .x { font-size: 11px; }
   .trend { font-size: 11px; font-weight: 600; }
+  .budget-line { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  .budget-line .v { font-size: 22px; font-weight: 600; }
+  .budget-bar { position: relative; height: 8px; margin-top: 10px; border-radius: 4px; background: var(--rule-soft); }
+  .budget-fill { height: 100%; border-radius: 4px; background: var(--cost); }
+  .budget-fill.hot { background: var(--hot); }
+  .budget-mark { position: absolute; top: -3px; width: 2px; height: 14px; margin-left: -1px; background: var(--ink-dim); }
 
   main {
     padding: 20px 22px 40px; display: grid; gap: 16px; grid-template-columns: repeat(12, 1fr);
@@ -241,6 +247,7 @@
     <span class="spacer"></span>
     <span class="legend" id="updated"></span>
     <button class="icon-btn" id="refresh" title="Actualiser" data-i18n-title="ui.refresh" data-i18n-aria="ui.refresh">⟳</button>
+    <button class="icon-btn" id="export-report" title="Exporter le rapport carbone" data-i18n-title="ui.exportReport" data-i18n-aria="ui.exportReport">¶</button>
     <button class="icon-btn" id="export" title="Exporter en CSV" data-i18n-title="ui.exportCsv" data-i18n-aria="ui.exportCsv">↓</button>
     <button class="icon-btn" id="settings-btn" title="Réglages" data-i18n-title="ui.settings" data-i18n-aria="ui.settings">⚙</button>
   </div>

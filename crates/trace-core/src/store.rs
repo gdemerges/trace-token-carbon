@@ -159,6 +159,9 @@ pub struct Config {
     /// modifiable à la main.
     pub limit_meta: HashMap<String, LimitMeta>,
     pub alerts: AlertsConfig,
+    /// Plafond de dépense mensuelle, en dollars, aux tarifs publiés. Absent =
+    /// pas de budget : rien n'est calculé, rien n'est affiché.
+    pub budget_monthly_usd: Option<f64>,
     // --- Interface ---
     /// `auto` suit la langue du système ; `fr` ou `en` la forcent.
     pub locale: String,
@@ -211,6 +214,7 @@ impl Default for Config {
                 thresholds: vec![80.0, 95.0],
                 projection: true,
             },
+            budget_monthly_usd: None,
             locale: "auto".into(),
             shortcut: "CommandOrControl+Alt+T".into(),
             launch_at_login: false,

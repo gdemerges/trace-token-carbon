@@ -120,6 +120,7 @@ pub fn collect(configured_dir: Option<&str>, state: &CollectorState) -> Collecte
     });
 
     let mut out = Collected {
+        errors: super::dir_problem(&dir).into_iter().collect(),
         state: CollectorState {
             files: Default::default(),
         },
@@ -202,6 +203,9 @@ pub fn collect(configured_dir: Option<&str>, state: &CollectorState) -> Collecte
             });
         });
 
+        if !res.ok {
+            out.stats.unreadable += 1;
+        }
         let keep = order.len().saturating_sub(DEDUP_WINDOW);
         out.state.files.insert(
             key,

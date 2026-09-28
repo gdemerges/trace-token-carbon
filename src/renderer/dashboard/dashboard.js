@@ -24,6 +24,21 @@ function trendChip(value, significant, inverse = true) {
   return `<span class="trend ${cls}">${up ? '▲' : '▼'} ${nf(Math.abs(value), 0)} %</span>`;
 }
 
+/**
+ * La variation d'un groupe (modèle, projet) contre la période précédente.
+ *
+ * Même garde-fou que pour les totaux : une période de comparaison presque
+ * vide produit des pourcentages absurdes, qu'on remplace par un tiret. Un
+ * groupe sans homologue est « nouveau », pas « +∞ % ».
+ */
+function changeCell(g, total) {
+  const v = g.versusPrevious;
+  if (!v) return `<td class="num faint">${esc(t('col.new'))}</td>`;
+  const significant = v.tokens > Math.max(1000, total * 0.02);
+  const title = t('col.changeTitle', { tokens: tokens(v.tokens), cost: usd(v.costUSD) });
+  return `<td class="num" title="${esc(title)}">${trendChip(v.tokensChange, significant)}</td>`;
+}
+
 function renderHero() {
   const tot = snap.report.totals;
   const tr = snap.report.trend;
@@ -58,6 +73,45 @@ function card(cls, title, aside = '') {
   s.className = `card panel ${cls}`;
   // eslint-disable-next-line no-unsanitized/property -- audité : texte échappé par esc(), nombres formatés, fragments construits ici
   s.innerHTML = `<h2>${esc(title)}${aside ? `<span class="aside faint">${aside}</span>` : ''}</h2>`;
+  return s;
+}
+
+/**
+ * Le budget mensuel : où l'on en est, et où cela mène.
+ *
+ * Il décrit le MOIS EN COURS quelle que soit la période affichée : un plafond
+ * mensuel comparé à une vue sur sept jours n'aurait aucun sens.
+ */
+function budgetCard() {
+  const b = snap.budget;
+  if (!b) return null;
+  const month = new Date(b.monthStart).toLocaleDateString(intl(), { month: 'long', year: 'numeric' });
+  const s = card('span-12', t('budget.title'), esc(month));
+
+  const hot = b.state !== 'ok';
+  const fill = Math.min(100, b.percent);
+  const mark = b.projectedPercent != null ? Math.min(100, b.projectedPercent) : null;
+  const verdict = b.state === 'over' ? t('budget.over')
+    : b.state === 'projected-over' ? t('budget.projectedOver')
+    : b.projectedUSD != null ? t('budget.onTrack') : '';
+
+  // eslint-disable-next-line no-unsanitized/method -- audité : texte échappé par esc(), nombres formatés, fragments construits ici
+  s.insertAdjacentHTML('beforeend', `
+    <div class="budget-line">
+      <span class="v num ${hot ? 'c-hot' : 'c-cost'}">${usd(b.spentUSD)}</span>
+      <span class="faint num">${esc(t('budget.of', { limit: usd(b.limitUSD), percent: nf(b.percent, 0) }))}</span>
+      ${verdict ? `<span class="${hot ? 'c-hot' : 'faint'}">${esc(verdict)}</span>` : ''}
+    </div>
+    <div class="budget-bar" role="img" aria-label="${esc(t('budget.aria', { percent: nf(b.percent, 0) }))}">
+      <div class="budget-fill ${hot ? 'hot' : ''}" style="width:${fill}%"></div>
+      ${mark != null ? `<div class="budget-mark" style="left:${mark}%" title="${esc(t('budget.projectedTitle', { amount: usd(b.projectedUSD) }))}"></div>` : ''}
+    </div>
+    <div class="note" style="margin-top:9px">
+      ${b.projectedUSD != null
+        ? esc(t('budget.projection', { amount: usd(b.projectedUSD), percent: nf(b.projectedPercent, 0) }))
+        : esc(t('budget.noProjection'))}
+      ${b.costIncomplete ? ` <strong class="c-hot">${esc(t('budget.incomplete'))}</strong>` : ''}
+    </div>`);
   return s;
 }
 
@@ -245,14 +299,16 @@ function modelsCard() {
       <td class="num faint">${share < 0.1 ? '<0,1 %' : pct(share, share < 10 ? 1 : 0)}</td>
       <td class="num">${nf(g.requests)}</td>
       <td class="num c-cost">${g.costUnknown ? '—' : usd(g.costUSD)}</td>
-      <td class="num c-carbon">${co2(g.carbon.gramsCO2e.mid)}</td></tr>`;
+      <td class="num c-carbon">${co2(g.carbon.gramsCO2e.mid)}</td>
+      ${changeCell(g, total)}</tr>`;
   }).join('');
 
   // eslint-disable-next-line no-unsanitized/method -- audité : texte échappé par esc(), nombres formatés, fragments construits ici
   s.insertAdjacentHTML('beforeend', `<table><thead><tr>
       <th>${esc(t('models.col'))}</th><th>${esc(t('col.tokens'))}</th><th>${esc(t('col.share'))}</th>
       <th>${esc(t('col.requests'))}</th><th>${esc(t('col.cost'))}</th><th>CO₂e</th>
-    </tr></thead><tbody>${rows || `<tr><td colspan="6" class="faint">${esc(t('table.empty'))}</td></tr>`}</tbody></table>`);
+      <th title="${esc(t('col.changeHelp'))}">${esc(t('col.change'))}</th>
+    </tr></thead><tbody>${rows || `<tr><td colspan="7" class="faint">${esc(t('table.empty'))}</td></tr>`}</tbody></table>`);
   return s;
 }
 
@@ -282,15 +338,18 @@ function breakdownCard() {
 
 function projectsCard() {
   const s = card('span-7', t('projects.title'));
+  const total = snap.report.totals.tokens.total || 1;
   const rows = snap.report.byProject.slice(0, 10).map((p) => `<tr>
       <td><div class="name-cell"><span>${esc(p.key)}</span></div></td>
       <td class="num">${tokens(p.tokens.total)}</td>
       <td class="num c-cost">${usd(p.costUSD)}</td>
-      <td class="num c-carbon">${co2(p.carbon.gramsCO2e.mid)}</td></tr>`).join('');
+      <td class="num c-carbon">${co2(p.carbon.gramsCO2e.mid)}</td>
+      ${changeCell(p, total)}</tr>`).join('');
   // eslint-disable-next-line no-unsanitized/method -- audité : texte échappé par esc(), nombres formatés, fragments construits ici
   s.insertAdjacentHTML('beforeend', `<table><thead><tr><th>${esc(t('col.project'))}</th><th>${esc(t('col.tokens'))}</th>
-    <th>${esc(t('col.cost'))}</th><th>CO₂e</th></tr></thead>
-    <tbody>${rows || `<tr><td colspan="4" class="faint">${esc(t('table.empty'))}</td></tr>`}</tbody></table>`);
+    <th>${esc(t('col.cost'))}</th><th>CO₂e</th>
+    <th title="${esc(t('col.changeHelp'))}">${esc(t('col.change'))}</th></tr></thead>
+    <tbody>${rows || `<tr><td colspan="5" class="faint">${esc(t('table.empty'))}</td></tr>`}</tbody></table>`);
   return s;
 }
 
@@ -595,7 +654,7 @@ function render() {
     return;
   }
 
-  const cards = [gaugesCard(), consumptionCard(), modelsCard(), breakdownCard(), projectsCard(),
+  const cards = [budgetCard(), gaugesCard(), consumptionCard(), modelsCard(), breakdownCard(), projectsCard(),
                  reconciliationCard(), sourcesCard(), carbonCard(), methodologyCard()];
   for (const c of cards) if (c) main.appendChild(c);
 }
@@ -644,6 +703,11 @@ async function openSettings() {
       <label class="switch" style="margin-top:8px"><input type="checkbox" id="alerts-proj" ${(cfg.alerts || {}).projection !== false ? 'checked' : ''} />
         ${esc(t('set.projection'))}</label>
       <div class="help" style="margin-top:6px">${t('set.projectionHelp')}</div>
+    </div>
+    <div class="field">
+      <label for="budget">${esc(t('set.budget'))}</label>
+      <div class="help">${esc(t('set.budgetHelp'))}</div>
+      <div class="row2"><input type="number" id="budget" min="0" step="1" value="${cfg.budgetMonthlyUsd > 0 ? cfg.budgetMonthlyUsd : ''}" placeholder="—" /><span class="faint">${esc(t('set.budgetUnit'))}</span></div>
     </div>
     <div class="field">
       <label for="grid">${esc(t('set.grid'))}</label>
@@ -725,6 +789,8 @@ async function openSettings() {
           thresholds: thresholds.length ? thresholds : [80, 95],
           projection: $('#alerts-proj').checked,
         },
+        // Vide = pas de budget : `null` efface la clé plutôt que d'en poser une à zéro.
+        budgetMonthlyUsd: Number($('#budget').value) > 0 ? Number($('#budget').value) : null,
         locale: $('#lang').value,
         compactAfterDays: Math.max(0, Number($('#compact').value) || 0),
         checkUpdates: $('#updates').checked,
@@ -829,8 +895,16 @@ $('#export').onclick = (e) =>
   withPending(e.currentTarget, null, async () => {
     const res = await window.trace.exportCsv({ days });
     if (res.canceled) return;
-    if (res.ok) toast(t('toast.exported', { n: nf(res.rows), file: res.filePath.split('/').pop() }));
-    else toast(res.error, 'error');
+    // `split(/[\\/]/)` : un chemin Windows sépare par des antislashs, et
+    // `split('/')` rendait alors le chemin entier.
+    if (res.ok) toast(t('toast.exported', { n: nf(res.rows), file: res.filePath.split(/[\\/]/).pop() }));
+    else toast(t('toast.exportFailed', { error: res.error }), 'error');
+  });
+$('#export-report').onclick = (e) =>
+  withPending(e.currentTarget, null, async () => {
+    const res = await window.trace.exportReport({ days });
+    if (res.ok) toast(t('toast.reportExported', { file: res.filePath }));
+    else toast(t('toast.exportFailed', { error: res.error }), 'error');
   });
 $('#settings-btn').onclick = openSettings;
 $('#close-settings').onclick = () => $('#settings').close();

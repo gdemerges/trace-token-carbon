@@ -207,6 +207,8 @@ pub struct Snapshot {
     /// ce qu'il reste à figer avant qu'un livrable soit opposable.
     pub methodology: serde_json::Value,
     pub stale_error: Option<String>,
+    /// Le budget mensuel, quand un plafond est fixé.
+    pub budget: Option<crate::budget::BudgetStatus>,
     /// Ce que les sources rapportent au-delà des tokens — pour l'instant, le
     /// coût facturé par Anthropic.
     pub extra: serde_json::Value,
@@ -341,6 +343,7 @@ pub fn snapshot(state: &State, opts: &SnapshotOptions) -> Snapshot {
             "providers": crate::carbon::factors::provider_table(),
         }),
         stale_error: None,
+        budget: crate::budget::status(&state.events, config, now_ms()),
         extra: match &state.cost {
             Some(c) => serde_json::json!({ "anthropic-api": { "cost": c } }),
             None => serde_json::json!({}),

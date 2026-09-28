@@ -261,6 +261,28 @@ fn main() {
         c.off
     );
 
+    // Le budget du mois, quand un plafond est fixé : il décrit le mois en
+    // cours, quelle que soit la période affichée au-dessus.
+    if let Some(b) = &snap.budget {
+        let colour = if b.state == "ok" { c.dim } else { c.red };
+        let projected = b
+            .projected_usd
+            .map(|p| format!("  {}", t1("cli.budgetProjected", "amount", usd(Some(p)))))
+            .unwrap_or_default();
+        println!(
+            " {}{}{} {} / {}  {}{}%{}{}",
+            c.dim,
+            pad(&t("cli.budget"), 7),
+            c.off,
+            usd(Some(b.spent_usd)),
+            usd(Some(b.limit_usd)),
+            colour,
+            b.percent.round() as i64,
+            c.off,
+            projected
+        );
+    }
+
     // Le détail carbone ne s'affiche que sur demande : la vue par défaut tient
     // en un écran, et la sensibilité n'intéresse qu'au moment de rédiger un
     // bilan.
@@ -437,6 +459,7 @@ fn print_json(snap: &trace_core::core::Snapshot, locale: &str) {
             // seulement où l'on en est : la trajectoire part avec le niveau.
             "saturatesAt": g.projection.as_ref().filter(|p| p.before_reset).map(|p| p.at),
         })).collect::<Vec<_>>(),
+        "budget": snap.budget,
         "reconciliation": snap.report.reconciliation.iter().map(|r| serde_json::json!({
             "family": r.family, "local": r.local, "billed": r.billed,
             "deltaPct": r.delta_pct, "days": r.days.len(),

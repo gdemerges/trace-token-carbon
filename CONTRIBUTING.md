@@ -33,6 +33,35 @@ npm run lint
 npm test
 ```
 
+## Troubleshooting a local build
+
+**`error[E0463]: can't find crate for tauri`** (or a plugin, or
+`tauri_macros`) although the dependency is declared: the `target/` cache holds
+artifacts that cargo thinks are fresh but rustc can't load — typically after a
+toolchain update. Purge the affected crates and rebuild:
+
+```bash
+cargo clean -p tauri -p tauri-macros -p tauri-codegen \
+  -p tauri-plugin-global-shortcut -p tauri-plugin-notification \
+  -p tauri-plugin-opener -p tauri-plugin-log
+cargo build -p trace-app
+```
+
+A full `cargo clean` also works, but recompiles everything.
+
+**`os error 4551` (Windows)** — "an application control policy blocked this
+file": Smart App Control refuses a freshly compiled, unsigned executable (test
+binary, build script, `trace.exe`). It isn't a test failure. Delete the blocked
+file — or its `target/debug/build/<crate>-<hash>/` directory for a build
+script — and run the command again; it usually passes on the next build.
+Doctests, compiled to temporary executables, can't be retried this way: run
+them in CI.
+
+**The UI test fixture.** `test/fixtures/snapshot.json` is a real snapshot,
+anonymized (project names replaced). Regenerate it when the JSON shape
+changes: `cargo run -p trace-core --example dump -- snapshot`, then rename the
+projects.
+
 ## Rules the code relies on
 
 - **No HTML interpolation without `esc()`.** Project and model names come

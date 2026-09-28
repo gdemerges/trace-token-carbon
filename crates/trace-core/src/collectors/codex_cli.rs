@@ -44,6 +44,10 @@ pub fn collect(configured_dir: Option<&str>, state: &CollectorState) -> Collecte
     }
 
     let mut out = Collected {
+        errors: root_dirs(configured_dir)
+            .iter()
+            .filter_map(|d| super::dir_problem(d))
+            .collect(),
         stats: Stats {
             files: files.len(),
             ..Default::default()
@@ -171,6 +175,9 @@ pub fn collect(configured_dir: Option<&str>, state: &CollectorState) -> Collecte
             });
         });
 
+        if !res.ok {
+            out.stats.unreadable += 1;
+        }
         out.state.files.insert(
             key,
             FileCursor {

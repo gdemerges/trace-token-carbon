@@ -123,6 +123,28 @@ pub struct Stats {
     pub files: usize,
     pub events: usize,
     pub skipped_duplicates: usize,
+    /// Fichiers trouvés mais impossibles à lire (verrouillés, droits). Ils
+    /// sont réessayés au passage suivant ; sans ce compteur, ils manquaient
+    /// aux totaux sans que rien ne le dise.
+    pub unreadable: usize,
+}
+
+/// Le motif lisible d'un dossier de journaux qui existe mais qu'on ne peut pas
+/// lister. `is_dir` répond vrai dans ce cas : sans ce contrôle, le balayage
+/// rendait zéro fichier et la source se lisait « aucune donnée ».
+pub(crate) fn dir_problem(dir: &std::path::Path) -> Option<String> {
+    if !dir.is_dir() {
+        return None;
+    }
+    std::fs::read_dir(dir).err().map(|e| {
+        crate::i18n::tp(
+            "source.dirDenied",
+            &[
+                ("path", dir.display().to_string()),
+                ("reason", e.to_string()),
+            ],
+        )
+    })
 }
 
 #[derive(Debug, Default)]
@@ -289,7 +311,7 @@ fn collect_ported(
     config: &crate::store::Config,
     state: &HashMap<String, CollectorState>,
 ) -> Partial {
-    use crate::i18n::t;
+    use crate::i18n::{t, t1};
     let disabled: std::collections::HashSet<&str> =
         config.disabled_sources.iter().map(String::as_str).collect();
     let mut out = Partial::default();
@@ -312,6 +334,13 @@ fn collect_ported(
             Some(mut res) => {
                 entry.new_events = res.events.len();
                 entry.quota = res.quota.len();
+                if res.stats.unreadable > 0 {
+                    res.errors
+                        .push(t1("source.unreadable", "n", res.stats.unreadable));
+                }
+                if !res.errors.is_empty() {
+                    entry.error = Some(res.errors.join(" ; "));
+                }
                 entry.stats = res.stats;
                 out.events.append(&mut res.events);
                 out.quota.append(&mut res.quota);

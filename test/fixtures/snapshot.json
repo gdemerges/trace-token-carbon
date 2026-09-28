@@ -1,0 +1,2753 @@
+{
+ "generatedAt": 1790620849550,
+ "range": {
+  "from": 1788028849539,
+  "to": 1790620849539,
+  "days": 30,
+  "all": false
+ },
+ "dataHorizon": {
+  "from": 1789553097534,
+  "bySource": {
+   "claude-code": 1789801613024,
+   "codex-cli": 1789553097534
+  }
+ },
+ "liveStatus": {
+  "ok": true,
+  "waiting": false,
+  "pacing": true,
+  "error": null,
+  "ageMs": 0,
+  "nextAttemptIn": 900000
+ },
+ "report": {
+  "range": {
+   "from": 1788028849539,
+   "to": 1790620849539
+  },
+  "totals": {
+   "tokens": {
+    "input": 195324,
+    "output": 876457,
+    "cacheWrite": 2696894,
+    "cacheWrite5m": 0,
+    "cacheWrite1h": 2696894,
+    "cacheRead": 172901103,
+    "thinking": 236807,
+    "total": 176669778
+   },
+   "requests": 1088,
+   "costUSD": 122.13761129999997,
+   "costUnknown": false,
+   "costWithoutCacheUSD": 826.879136,
+   "carbon": {
+    "gramsCO2e": {
+     "min": 3621.969105622938,
+     "max": 35157.800416500686,
+     "mid": 11252.87392490688
+    },
+    "energyWh": {
+     "min": 8933.94773225605,
+     "max": 84162.436422316,
+     "mid": 27345.68372189155
+    },
+    "waterL": {
+     "min": 12.228894771630944,
+     "max": 335.95550882718805,
+     "mid": 63.948431097307214
+    },
+    "usageG": 10090.557293377984,
+    "embodiedG": 1718.046341124502
+   },
+   "equivalents": [
+    {
+     "key": "car",
+     "label": "km en voiture",
+     "unit": "km",
+     "gPerUnit": 120,
+     "icon": "🚗",
+     "source": "ademe",
+     "note": "Voiture particulière moyenne, usage seul (hors fabrication du véhicule).",
+     "amount": 93.773949374224
+    },
+    {
+     "key": "streaming",
+     "label": "h de streaming vidéo",
+     "unit": "h",
+     "gPerUnit": 36,
+     "icon": "📺",
+     "source": "ademe",
+     "note": "Ordre de grandeur très dépendant du terminal, de la définition et du réseau.",
+     "amount": 312.5798312474133
+    },
+    {
+     "key": "phone",
+     "label": "charges de smartphone",
+     "unit": "",
+     "gPerUnit": 8,
+     "icon": "🔋",
+     "source": "ademe",
+     "note": "Une charge complète sur le mix français, hors fabrication de l’appareil.",
+     "amount": 1406.60924061336
+    },
+    {
+     "key": "tgv",
+     "label": "km en TGV",
+     "unit": "km",
+     "gPerUnit": 2.3,
+     "icon": "🚆",
+     "source": "ademe",
+     "note": "Par voyageur-kilomètre, sur le mix électrique français.",
+     "amount": 4892.553880394296
+    },
+    {
+     "key": "beef",
+     "label": "g de bœuf",
+     "unit": "g",
+     "gPerUnit": 27,
+     "icon": "🥩",
+     "source": "ademe",
+     "note": "Viande bovine, du champ à l’assiette. Périmètre cycle de vie, contrairement aux autres équivalents.",
+     "amount": 416.77310832988445
+    }
+   ],
+   "carbonSensitivity": [
+    {
+     "key": "france",
+     "label": "France",
+     "intensity": 56,
+     "gramsCO2e": {
+      "min": 825.6434654267946,
+      "max": 8814.957816315777,
+      "mid": 2689.910626526339
+     },
+     "ratio": 0.2390421011091705
+    },
+    {
+     "key": "eu-27",
+     "label": "Union européenne",
+     "intensity": 250,
+     "gramsCO2e": {
+      "min": 2558.829325484468,
+      "max": 25142.47048224508,
+      "mid": 7998.254217153504
+     },
+     "ratio": 0.7107743560025437
+    },
+    {
+     "key": "us-average",
+     "label": "États-Unis (moyenne)",
+     "intensity": 369,
+     "gramsCO2e": {
+      "min": 3621.969105622938,
+      "max": 35157.800416500686,
+      "mid": 11252.87392490688
+     },
+     "ratio": 1
+    },
+    {
+     "key": "world",
+     "label": "Moyenne mondiale",
+     "intensity": 480,
+     "gramsCO2e": {
+      "min": 4613.637303903359,
+      "max": 44499.830859377755,
+      "mid": 14288.497417389148
+     },
+     "ratio": 1.2697642853496547
+    }
+   ],
+   "carbonUncertainty": [
+    {
+     "key": "grid",
+     "label": "Mix électrique",
+     "ratio": 5.094687778919659,
+     "note": "Amplitude entre la France et la moyenne mondiale. Ce n'est pas une incertitude de mesure mais une hypothèse de localisation."
+    },
+    {
+     "key": "model",
+     "label": "Taille des modèles",
+     "ratio": 5.049886564205768,
+     "note": "Nombre de paramètres totaux et actifs. Aucun fournisseur fermé ne le publie : c'est l'estimation la plus contestable du calcul."
+    },
+    {
+     "key": "weights",
+     "label": "Pondération des tokens",
+     "ratio": 2.094432696979419,
+     "note": "Coût énergétique relatif du prefill et du cache par rapport au décodage. Dérivation interne TRACE, hors périmètre EcoLogits."
+    },
+    {
+     "key": "infra",
+     "label": "Infrastructure (PUE)",
+     "ratio": 1.0894037362945246,
+     "note": "Rendement du centre de données, entre les bornes annoncées par les exploitants possibles du fournisseur."
+    }
+   ],
+   "cacheSavingsUSD": 704.7415247,
+   "cacheHitRatio": 0.9835476229497934
+  },
+  "trend": {
+   "tokens": null,
+   "cost": null,
+   "carbon": null,
+   "previous": {
+    "tokens": {
+     "input": 0,
+     "output": 0,
+     "cacheWrite": 0,
+     "cacheWrite5m": 0,
+     "cacheWrite1h": 0,
+     "cacheRead": 0,
+     "thinking": 0,
+     "total": 0
+    },
+    "costUSD": 0,
+    "carbon": {
+     "gramsCO2e": {
+      "min": 0,
+      "max": 0,
+      "mid": 0
+     },
+     "energyWh": {
+      "min": 0,
+      "max": 0,
+      "mid": 0
+     },
+     "waterL": {
+      "min": 0,
+      "max": 0,
+      "mid": 0
+     },
+     "usageG": 0,
+     "embodiedG": 0
+    }
+   },
+   "significant": true
+  },
+  "byModel": [
+   {
+    "key": "claude-opus-5-5",
+    "tokens": {
+     "input": 1612,
+     "output": 707200,
+     "cacheWrite": 2024687,
+     "cacheWrite5m": 0,
+     "cacheWrite1h": 2024687,
+     "cacheRead": 150779713,
+     "thinking": 196901,
+     "total": 153513212
+    },
+    "requests": 805,
+    "costUSD": 113.32478649999999,
+    "costUnknown": false,
+    "costWithoutCacheUSD": 781.71006,
+    "carbon": {
+     "gramsCO2e": {
+      "min": 3208.9964157416503,
+      "max": 31827.48922711745,
+      "mid": 10106.151535172818
+     },
+     "energyWh": {
+      "min": 7896.645393656594,
+      "max": 76078.48353204166,
+      "mid": 24510.50400419534
+     },
+     "waterL": {
+      "min": 10.780007656661478,
+      "max": 305.5819088537007,
+      "mid": 57.3949067181063
+     },
+     "usageG": 9044.375977548081,
+     "embodiedG": 1572.3275636249982
+    },
+    "models": [
+     {
+      "id": "claude-opus-5",
+      "label": "Claude Opus 5",
+      "provider": "anthropic",
+      "tokens": {
+       "input": 1612,
+       "output": 707200,
+       "cacheWrite": 2024687,
+       "cacheWrite5m": 0,
+       "cacheWrite1h": 2024687,
+       "cacheRead": 150779713,
+       "thinking": 196901,
+       "total": 153513212
+      },
+      "requests": 805,
+      "costUSD": 113.32478649999999,
+      "costUnknown": false
+     }
+    ],
+    "versusPrevious": {
+     "tokens": 127927677,
+     "costUSD": 56.662393249999994,
+     "tokensChange": 20,
+     "costChange": 20
+    }
+   },
+   {
+    "key": "claude-sonnet-5-5",
+    "tokens": {
+     "input": 358,
+     "output": 133798,
+     "cacheWrite": 422896,
+     "cacheWrite5m": 0,
+     "cacheWrite1h": 422896,
+     "cacheRead": 16719274,
+     "thinking": 28655,
+     "total": 17276326
+    },
+    "requests": 179,
+    "costUSD": 6.374134799999999,
+    "costUnknown": false,
+    "costWithoutCacheUSD": 35.623036,
+    "carbon": {
+     "gramsCO2e": {
+      "min": 255.321156605933,
+      "max": 1390.3455369188619,
+      "mid": 595.8058665102424
+     },
+     "energyWh": {
+      "min": 646.1573298162548,
+      "max": 3458.1447046673334,
+      "mid": 1494.826260301198
+     },
+     "waterL": {
+      "min": 0.8820936759326486,
+      "max": 13.890214563747122,
+      "mid": 3.5003528999272215
+     },
+     "usageG": 551.5908900511421,
+     "embodiedG": 55.52562926403222
+    },
+    "models": [
+     {
+      "id": "claude-sonnet-5",
+      "label": "Claude Sonnet 5",
+      "provider": "anthropic",
+      "tokens": {
+       "input": 358,
+       "output": 133798,
+       "cacheWrite": 422896,
+       "cacheWrite5m": 0,
+       "cacheWrite1h": 422896,
+       "cacheRead": 16719274,
+       "thinking": 28655,
+       "total": 17276326
+      },
+      "requests": 179,
+      "costUSD": 6.374134799999999,
+      "costUnknown": false
+     }
+    ]
+   },
+   {
+    "key": "codex",
+    "tokens": {
+     "input": 193280,
+     "output": 23722,
+     "cacheWrite": 0,
+     "cacheWrite5m": 0,
+     "cacheWrite1h": 0,
+     "cacheRead": 3137536,
+     "thinking": 6898,
+     "total": 3354538
+    },
+    "requests": 67,
+    "costUSD": 0.871012,
+    "costUnknown": false,
+    "costWithoutCacheUSD": 4.40074,
+    "carbon": {
+     "gramsCO2e": {
+      "min": 129.37183433508758,
+      "max": 1711.9204787277824,
+      "mid": 470.61055297221554
+     },
+     "energyWh": {
+      "min": 319.57579376725334,
+      "max": 4058.6015531249996,
+      "mid": 1138.8726060999663
+     },
+     "waterL": {
+      "min": 0.469091611565504,
+      "max": 14.205105435937499,
+      "mid": 2.581374789022668
+     },
+     "usageG": 420.24399165088755,
+     "embodiedG": 81.76043190441095
+    },
+    "models": [
+     {
+      "id": "codex",
+      "label": "Codex",
+      "provider": "openai",
+      "tokens": {
+       "input": 193280,
+       "output": 23722,
+       "cacheWrite": 0,
+       "cacheWrite5m": 0,
+       "cacheWrite1h": 0,
+       "cacheRead": 3137536,
+       "thinking": 6898,
+       "total": 3354538
+      },
+      "requests": 67,
+      "costUSD": 0.871012,
+      "costUnknown": false
+     }
+    ]
+   },
+   {
+    "key": "claude-sonnet-5",
+    "tokens": {
+     "input": 74,
+     "output": 11737,
+     "cacheWrite": 249311,
+     "cacheWrite5m": 0,
+     "cacheWrite1h": 249311,
+     "cacheRead": 2264580,
+     "thinking": 4353,
+     "total": 2525702
+    },
+    "requests": 37,
+    "costUSD": 1.567678,
+    "costUnknown": false,
+    "costWithoutCacheUSD": 5.1453,
+    "carbon": {
+     "gramsCO2e": {
+      "min": 28.27969894026733,
+      "max": 228.0451737365886,
+      "mid": 80.3059702516051
+     },
+     "energyWh": {
+      "min": 71.56921501594861,
+      "max": 567.206632482,
+      "mid": 201.4808512950459
+     },
+     "waterL": {
+      "min": 0.09770182747131333,
+      "max": 2.2782799738027,
+      "mid": 0.4717966902510229
+     },
+     "usageG": 74.34643412787194,
+     "embodiedG": 8.432716331060693
+    },
+    "models": [
+     {
+      "id": "claude-sonnet-5",
+      "label": "Claude Sonnet 5",
+      "provider": "anthropic",
+      "tokens": {
+       "input": 74,
+       "output": 11737,
+       "cacheWrite": 249311,
+       "cacheWrite5m": 0,
+       "cacheWrite1h": 249311,
+       "cacheRead": 2264580,
+       "thinking": 4353,
+       "total": 2525702
+      },
+      "requests": 37,
+      "costUSD": 1.567678,
+      "costUnknown": false
+     }
+    ]
+   }
+  ],
+  "byProject": [
+   {
+    "key": "project-1",
+    "tokens": {
+     "input": 512,
+     "output": 265254,
+     "cacheWrite": 741865,
+     "cacheWrite5m": 0,
+     "cacheWrite1h": 741865,
+     "cacheRead": 56719963,
+     "thinking": 80031,
+     "total": 57727594
+    },
+    "requests": 256,
+    "costUSD": 41.3927629,
+    "costUnknown": false,
+    "costWithoutCacheUSD": 290.15825599999994,
+    "carbon": {
+     "gramsCO2e": {
+      "min": 1189.0832602823998,
+      "max": 11685.808189730764,
+      "mid": 3727.606909791239
+     },
+     "energyWh": {
+      "min": 2926.8407220553727,
+      "max": 27942.393234832998,
+      "mid": 9043.299452202613
+     },
+     "waterL": {
+      "min": 3.995540361851738,
+      "max": 112.23527949324588,
+      "mid": 21.176199738456194
+     },
+     "usageG": 3336.9774978627643,
+     "embodiedG": 576.8249372304601
+    },
+    "models": [
+     {
+      "id": "claude-opus-5",
+      "label": "Claude Opus 5",
+      "provider": "anthropic",
+      "tokens": {
+       "input": 478,
+       "output": 260964,
+       "cacheWrite": 639533,
+       "cacheWrite5m": 0,
+       "cacheWrite1h": 639533,
+       "cacheRead": 55582181,
+       "thinking": 79116,
+       "total": 56483156
+      },
+      "requests": 239,
+      "costUSD": 40.7129105,
+      "costUnknown": false
+     },
+     {
+      "id": "claude-sonnet-5",
+      "label": "Claude Sonnet 5",
+      "provider": "anthropic",
+      "tokens": {
+       "input": 34,
+       "output": 4290,
+       "cacheWrite": 102332,
+       "cacheWrite5m": 0,
+       "cacheWrite1h": 102332,
+       "cacheRead": 1137782,
+       "thinking": 915,
+       "total": 1244438
+      },
+      "requests": 17,
+      "costUSD": 0.6798524,
+      "costUnknown": false
+     }
+    ],
+    "versusPrevious": {
+     "tokens": 38485063,
+     "costUSD": 20.69638145,
+     "tokensChange": 50,
+     "costChange": 50
+    }
+   },
+   {
+    "key": "project-2",
+    "tokens": {
+     "input": 392,
+     "output": 157005,
+     "cacheWrite": 411426,
+     "cacheWrite5m": 0,
+     "cacheWrite1h": 411426,
+     "cacheRead": 32739895,
+     "thinking": 39122,
+     "total": 33308718
+    },
+    "requests": 196,
+    "costUSD": 21.4576788,
+    "costUnknown": false,
+    "costWithoutCacheUSD": 152.287932,
+    "carbon": {
+     "gramsCO2e": {
+      "min": 605.727160432754,
+      "max": 5835.9858046918425,
+      "mid": 1871.50403040005
+     },
+     "energyWh": {
+      "min": 1496.1963426617706,
+      "max": 13992.320111151666,
+      "mid": 4554.647081051896
+     },
+     "waterL": {
+      "min": 2.042513906312582,
+      "max": 56.202485779792525,
+      "mid": 10.665367970651433
+     },
+     "usageG": 1680.6647729081492,
+     "embodiedG": 282.6459136347239
+    },
+    "models": [
+     {
+      "id": "claude-opus-5",
+      "label": "Claude Opus 5",
+      "provider": "anthropic",
+      "tokens": {
+       "input": 296,
+       "output": 114655,
+       "cacheWrite": 298785,
+       "cacheWrite5m": 0,
+       "cacheWrite1h": 298785,
+       "cacheRead": 27265796,
+       "thinking": 28473,
+       "total": 27679532
+      },
+      "requests": 148,
+      "costUSD": 19.488603,
+      "costUnknown": false
+     },
+     {
+      "id": "claude-sonnet-5",
+      "label": "Claude Sonnet 5",
+      "provider": "anthropic",
+      "tokens": {
+       "input": 96,
+       "output": 42350,
+       "cacheWrite": 112641,
+       "cacheWrite5m": 0,
+       "cacheWrite1h": 112641,
+       "cacheRead": 5474099,
+       "thinking": 10649,
+       "total": 5629186
+      },
+      "requests": 48,
+      "costUSD": 1.9690758,
+      "costUnknown": false
+     }
+    ],
+    "versusPrevious": {
+     "tokens": 66617436,
+     "costUSD": 10.7288394,
+     "tokensChange": -50,
+     "costChange": -50
+    }
+   },
+   {
+    "key": "project-3",
+    "tokens": {
+     "input": 282,
+     "output": 93366,
+     "cacheWrite": 290378,
+     "cacheWrite5m": 0,
+     "cacheWrite1h": 290378,
+     "cacheRead": 25333532,
+     "thinking": 23827,
+     "total": 25717558
+    },
+    "requests": 141,
+    "costUSD": 16.9213863,
+    "costUnknown": false,
+    "costWithoutCacheUSD": 124.975898,
+    "carbon": {
+     "gramsCO2e": {
+      "min": 407.74791874247893,
+      "max": 4432.242081824204,
+      "mid": 1341.3880997274036
+     },
+     "energyWh": {
+      "min": 1005.0114040202265,
+      "max": 10607.621747645999,
+      "mid": 3257.9632313565326
+     },
+     "waterL": {
+      "min": 1.3719788708092633,
+      "max": 42.607280686378104,
+      "mid": 7.628994316996589
+     },
+     "usageG": 1202.1884323705606,
+     "embodiedG": 213.6808721595254
+    },
+    "models": [
+     {
+      "id": "claude-opus-5",
+      "label": "Claude Opus 5",
+      "provider": "anthropic",
+      "tokens": {
+       "input": 228,
+       "output": 81394,
+       "cacheWrite": 242127,
+       "cacheWrite5m": 0,
+       "cacheWrite1h": 242127,
+       "cacheRead": 23615293,
+       "thinking": 22154,
+       "total": 23939042
+      },
+      "requests": 114,
+      "costUSD": 16.264906500000002,
+      "costUnknown": false
+     },
+     {
+      "id": "claude-sonnet-5",
+      "label": "Claude Sonnet 5",
+      "provider": "anthropic",
+      "tokens": {
+       "input": 54,
+       "output": 11972,
+       "cacheWrite": 48251,
+       "cacheWrite5m": 0,
+       "cacheWrite1h": 48251,
+       "cacheRead": 1718239,
+       "thinking": 1673,
+       "total": 1778516
+      },
+      "requests": 27,
+      "costUSD": 0.6564798000000001,
+      "costUnknown": false
+     }
+    ]
+   },
+   {
+    "key": "project-4",
+    "tokens": {
+     "input": 198,
+     "output": 112702,
+     "cacheWrite": 263929,
+     "cacheWrite5m": 0,
+     "cacheWrite1h": 263929,
+     "cacheRead": 21211045,
+     "thinking": 28884,
+     "total": 21587874
+    },
+    "requests": 99,
+    "costUSD": 16.063352499999997,
+    "costUnknown": false,
+    "costWithoutCacheUSD": 110.19341,
+    "carbon": {
+     "gramsCO2e": {
+      "min": 501.63250802713355,
+      "max": 4710.696262015205,
+      "mid": 1537.2177400969358
+     },
+     "energyWh": {
+      "min": 1234.4089929141815,
+      "max": 11260.160216748332,
+      "mid": 3728.222503178779
+     },
+     "waterL": {
+      "min": 1.6851381481250476,
+      "max": 45.22831020393914,
+      "mid": 8.730174734785736
+     },
+     "usageG": 1375.7141036729695,
+     "embodiedG": 234.8626406488504
+    },
+    "models": [
+     {
+      "id": "claude-opus-5",
+      "label": "Claude Opus 5",
+      "provider": "anthropic",
+      "tokens": {
+       "input": 198,
+       "output": 112702,
+       "cacheWrite": 263929,
+       "cacheWrite5m": 0,
+       "cacheWrite1h": 263929,
+       "cacheRead": 21211045,
+       "thinking": 28884,
+       "total": 21587874
+      },
+      "requests": 99,
+      "costUSD": 16.063352499999997,
+      "costUnknown": false
+     }
+    ]
+   },
+   {
+    "key": "project-5",
+    "tokens": {
+     "input": 262,
+     "output": 87501,
+     "cacheWrite": 223504,
+     "cacheWrite5m": 0,
+     "cacheWrite1h": 223504,
+     "cacheRead": 12585670,
+     "thinking": 18870,
+     "total": 12896937
+    },
+    "requests": 130,
+    "costUSD": 7.7479751,
+    "costUnknown": false,
+    "costWithoutCacheUSD": 49.57766999999999,
+    "carbon": {
+     "gramsCO2e": {
+      "min": 266.86787781995133,
+      "max": 2132.845535452086,
+      "mid": 747.6250915160834
+     },
+     "energyWh": {
+      "min": 662.9743145483492,
+      "max": 5142.892181335999,
+      "mid": 1830.2100254096504
+     },
+     "waterL": {
+      "min": 0.9050511743559113,
+      "max": 20.657283595032936,
+      "mid": 4.285702720146018
+     },
+     "usageG": 675.347499376161,
+     "embodiedG": 101.9492755225852
+    },
+    "models": [
+     {
+      "id": "claude-opus-5",
+      "label": "Claude Opus 5",
+      "provider": "anthropic",
+      "tokens": {
+       "input": 152,
+       "output": 39681,
+       "cacheWrite": 108212,
+       "cacheWrite5m": 0,
+       "cacheWrite1h": 108212,
+       "cacheRead": 7387827,
+       "thinking": 9767,
+       "total": 7535872
+      },
+      "requests": 75,
+      "costUSD": 5.7688185,
+      "costUnknown": false
+     },
+     {
+      "id": "claude-sonnet-5",
+      "label": "Claude Sonnet 5",
+      "provider": "anthropic",
+      "tokens": {
+       "input": 110,
+       "output": 47820,
+       "cacheWrite": 115292,
+       "cacheWrite5m": 0,
+       "cacheWrite1h": 115292,
+       "cacheRead": 5197843,
+       "thinking": 9103,
+       "total": 5361065
+      },
+      "requests": 55,
+      "costUSD": 1.9791566,
+      "costUnknown": false
+     }
+    ]
+   },
+   {
+    "key": "project-6",
+    "tokens": {
+     "input": 72436,
+     "output": 47575,
+     "cacheWrite": 398353,
+     "cacheWrite5m": 0,
+     "cacheWrite1h": 398353,
+     "cacheRead": 9674364,
+     "thinking": 11642,
+     "total": 10192728
+    },
+    "requests": 122,
+    "costUSD": 6.9252049,
+    "costUnknown": false,
+    "costWithoutCacheUSD": 37.6465415,
+    "carbon": {
+     "gramsCO2e": {
+      "min": 172.0540628569134,
+      "max": 1896.3549710599018,
+      "mid": 564.5589133426326
+     },
+     "energyWh": {
+      "min": 427.25701859236574,
+      "max": 4556.071043739833,
+      "mid": 1379.418133198982
+     },
+     "waterL": {
+      "min": 0.591121960483375,
+      "max": 17.754784835401875,
+      "mid": 3.208783972137617
+     },
+     "usageG": 509.0052911504244,
+     "embodiedG": 87.24942944287918
+    },
+    "models": [
+     {
+      "id": "claude-opus-5",
+      "label": "Claude Opus 5",
+      "provider": "anthropic",
+      "tokens": {
+       "input": 86,
+       "output": 17604,
+       "cacheWrite": 157742,
+       "cacheWrite5m": 0,
+       "cacheWrite1h": 157742,
+       "cacheRead": 5576066,
+       "thinking": 3687,
+       "total": 5751498
+      },
+      "requests": 43,
+      "costUSD": 4.8059829999999994,
+      "costUnknown": false
+     },
+     {
+      "id": "claude-sonnet-5",
+      "label": "Claude Sonnet 5",
+      "provider": "anthropic",
+      "tokens": {
+       "input": 64,
+       "output": 17132,
+       "cacheWrite": 93632,
+       "cacheWrite5m": 0,
+       "cacheWrite1h": 93632,
+       "cacheRead": 2263404,
+       "thinking": 2841,
+       "total": 2374232
+      },
+      "requests": 32,
+      "costUSD": 0.9986568,
+      "costUnknown": false
+     },
+     {
+      "id": "claude-sonnet-5",
+      "label": "Claude Sonnet 5",
+      "provider": "anthropic",
+      "tokens": {
+       "input": 40,
+       "output": 7447,
+       "cacheWrite": 146979,
+       "cacheWrite5m": 0,
+       "cacheWrite1h": 146979,
+       "cacheRead": 1126798,
+       "thinking": 3438,
+       "total": 1281264
+      },
+      "requests": 20,
+      "costUSD": 0.8878256,
+      "costUnknown": false
+     },
+     {
+      "id": "codex",
+      "label": "Codex",
+      "provider": "openai",
+      "tokens": {
+       "input": 72246,
+       "output": 5392,
+       "cacheWrite": 0,
+       "cacheWrite5m": 0,
+       "cacheWrite1h": 0,
+       "cacheRead": 708096,
+       "thinking": 1676,
+       "total": 785734
+      },
+      "requests": 27,
+      "costUSD": 0.2327395,
+      "costUnknown": false
+     }
+    ]
+   },
+   {
+    "key": "project-7",
+    "tokens": {
+     "input": 72,
+     "output": 48319,
+     "cacheWrite": 109793,
+     "cacheWrite5m": 0,
+     "cacheWrite1h": 109793,
+     "cacheRead": 5492761,
+     "thinking": 18170,
+     "total": 5650945
+    },
+    "requests": 36,
+    "costUSD": 5.0526455,
+    "costUnknown": false,
+    "costWithoutCacheUSD": 29.221105,
+    "carbon": {
+     "gramsCO2e": {
+      "min": 206.4888676537483,
+      "max": 1657.4244487648125,
+      "mid": 585.0125619566508
+     },
+     "energyWh": {
+      "min": 508.12439602631554,
+      "max": 3961.8060265816675,
+      "mid": 1418.8341321064372
+     },
+     "waterL": {
+      "min": 0.6936597259515206,
+      "max": 15.913254206769698,
+      "mid": 3.3224062894331197
+     },
+     "usageG": 523.5497947472753,
+     "embodiedG": 85.0484035646951
+    },
+    "models": [
+     {
+      "id": "claude-opus-5",
+      "label": "Claude Opus 5",
+      "provider": "anthropic",
+      "tokens": {
+       "input": 72,
+       "output": 48319,
+       "cacheWrite": 109793,
+       "cacheWrite5m": 0,
+       "cacheWrite1h": 109793,
+       "cacheRead": 5492761,
+       "thinking": 18170,
+       "total": 5650945
+      },
+      "requests": 36,
+      "costUSD": 5.0526455,
+      "costUnknown": false
+     }
+    ]
+   },
+   {
+    "key": "project-8",
+    "tokens": {
+     "input": 64,
+     "output": 24344,
+     "cacheWrite": 53117,
+     "cacheWrite5m": 0,
+     "cacheWrite1h": 53117,
+     "cacheRead": 3322276,
+     "thinking": 5116,
+     "total": 3399801
+    },
+    "requests": 32,
+    "costUSD": 2.801228,
+    "costUnknown": false,
+    "costWithoutCacheUSD": 17.485885,
+    "carbon": {
+     "gramsCO2e": {
+      "min": 105.20806082937173,
+      "max": 887.1102684309596,
+      "mid": 305.5014747647623
+     },
+     "energyWh": {
+      "min": 258.8942589179527,
+      "max": 2120.4941258900003,
+      "mid": 740.9343798624568
+     },
+     "waterL": {
+      "min": 0.35342629107331525,
+      "max": 8.517318072324835,
+      "mid": 1.7350055147444015
+     },
+     "usageG": 273.40478616924656,
+     "embodiedG": 45.0933469697086
+    },
+    "models": [
+     {
+      "id": "claude-opus-5",
+      "label": "Claude Opus 5",
+      "provider": "anthropic",
+      "tokens": {
+       "input": 64,
+       "output": 24344,
+       "cacheWrite": 53117,
+       "cacheWrite5m": 0,
+       "cacheWrite1h": 53117,
+       "cacheRead": 3322276,
+       "thinking": 5116,
+       "total": 3399801
+      },
+      "requests": 32,
+      "costUSD": 2.801228,
+      "costUnknown": false
+     }
+    ]
+   },
+   {
+    "key": "project-9",
+    "tokens": {
+     "input": 121034,
+     "output": 18330,
+     "cacheWrite": 0,
+     "cacheWrite5m": 0,
+     "cacheWrite1h": 0,
+     "cacheRead": 2429440,
+     "thinking": 5222,
+     "total": 2568804
+    },
+    "requests": 40,
+    "costUSD": 0.6382725,
+    "costUnknown": false,
+    "costWithoutCacheUSD": 3.3713925,
+    "carbon": {
+     "gramsCO2e": {
+      "min": 98.40562696159448,
+      "max": 1266.6347061711115,
+      "mid": 353.04954665327534
+     },
+     "energyWh": {
+      "min": 243.08271200640002,
+      "max": 3002.9231203125,
+      "mid": 854.376202871009
+     },
+     "waterL": {
+      "min": 0.35681069512368,
+      "max": 10.51023092109375,
+      "mid": 1.9365337076503102
+     },
+     "usageG": 315.26481885940234,
+     "embodiedG": 60.76107211664384
+    },
+    "models": [
+     {
+      "id": "codex",
+      "label": "Codex",
+      "provider": "openai",
+      "tokens": {
+       "input": 121034,
+       "output": 18330,
+       "cacheWrite": 0,
+       "cacheWrite5m": 0,
+       "cacheWrite1h": 0,
+       "cacheRead": 2429440,
+       "thinking": 5222,
+       "total": 2568804
+      },
+      "requests": 40,
+      "costUSD": 0.6382725,
+      "costUnknown": false
+     }
+    ]
+   },
+   {
+    "key": "project-10",
+    "tokens": {
+     "input": 28,
+     "output": 7639,
+     "cacheWrite": 41382,
+     "cacheWrite5m": 0,
+     "cacheWrite1h": 41382,
+     "cacheRead": 1571139,
+     "thinking": 3541,
+     "total": 1620188
+    },
+    "requests": 14,
+    "costUSD": 0.5562018000000001,
+    "costUnknown": false,
+    "costWithoutCacheUSD": 3.301488,
+    "carbon": {
+     "gramsCO2e": {
+      "min": 15.619513362772855,
+      "max": 103.52576063526466,
+      "mid": 40.21221209575196
+     },
+     "energyWh": {
+      "min": 39.529286102584145,
+      "max": 257.4950265463333,
+      "mid": 100.8890210793152
+     },
+     "waterL": {
+      "min": 0.053962915340041474,
+      "max": 1.0342716899611053,
+      "mid": 0.23624630292127907
+     },
+     "usageG": 37.22804877826731,
+     "embodiedG": 3.966191033064858
+    },
+    "models": [
+     {
+      "id": "claude-sonnet-5",
+      "label": "Claude Sonnet 5",
+      "provider": "anthropic",
+      "tokens": {
+       "input": 28,
+       "output": 7639,
+       "cacheWrite": 41382,
+       "cacheWrite5m": 0,
+       "cacheWrite1h": 41382,
+       "cacheRead": 1571139,
+       "thinking": 3541,
+       "total": 1620188
+      },
+      "requests": 14,
+      "costUSD": 0.5562018000000001,
+      "costUnknown": false
+     }
+    ]
+   }
+  ],
+  "daily": [
+   {
+    "date": "2026-08-29",
+    "ts": 1787954400000,
+    "tokens": {
+     "input": 0,
+     "output": 0,
+     "cacheWrite": 0,
+     "cacheWrite5m": 0,
+     "cacheWrite1h": 0,
+     "cacheRead": 0,
+     "thinking": 0,
+     "total": 0
+    },
+    "requests": 0,
+    "costUSD": 0,
+    "gramsCO2e": 0,
+    "models": []
+   },
+   {
+    "date": "2026-08-30",
+    "ts": 1788040800000,
+    "tokens": {
+     "input": 0,
+     "output": 0,
+     "cacheWrite": 0,
+     "cacheWrite5m": 0,
+     "cacheWrite1h": 0,
+     "cacheRead": 0,
+     "thinking": 0,
+     "total": 0
+    },
+    "requests": 0,
+    "costUSD": 0,
+    "gramsCO2e": 0,
+    "models": []
+   },
+   {
+    "date": "2026-08-31",
+    "ts": 1788127200000,
+    "tokens": {
+     "input": 0,
+     "output": 0,
+     "cacheWrite": 0,
+     "cacheWrite5m": 0,
+     "cacheWrite1h": 0,
+     "cacheRead": 0,
+     "thinking": 0,
+     "total": 0
+    },
+    "requests": 0,
+    "costUSD": 0,
+    "gramsCO2e": 0,
+    "models": []
+   },
+   {
+    "date": "2026-09-01",
+    "ts": 1788213600000,
+    "tokens": {
+     "input": 0,
+     "output": 0,
+     "cacheWrite": 0,
+     "cacheWrite5m": 0,
+     "cacheWrite1h": 0,
+     "cacheRead": 0,
+     "thinking": 0,
+     "total": 0
+    },
+    "requests": 0,
+    "costUSD": 0,
+    "gramsCO2e": 0,
+    "models": []
+   },
+   {
+    "date": "2026-09-02",
+    "ts": 1788300000000,
+    "tokens": {
+     "input": 0,
+     "output": 0,
+     "cacheWrite": 0,
+     "cacheWrite5m": 0,
+     "cacheWrite1h": 0,
+     "cacheRead": 0,
+     "thinking": 0,
+     "total": 0
+    },
+    "requests": 0,
+    "costUSD": 0,
+    "gramsCO2e": 0,
+    "models": []
+   },
+   {
+    "date": "2026-09-03",
+    "ts": 1788386400000,
+    "tokens": {
+     "input": 0,
+     "output": 0,
+     "cacheWrite": 0,
+     "cacheWrite5m": 0,
+     "cacheWrite1h": 0,
+     "cacheRead": 0,
+     "thinking": 0,
+     "total": 0
+    },
+    "requests": 0,
+    "costUSD": 0,
+    "gramsCO2e": 0,
+    "models": []
+   },
+   {
+    "date": "2026-09-04",
+    "ts": 1788472800000,
+    "tokens": {
+     "input": 0,
+     "output": 0,
+     "cacheWrite": 0,
+     "cacheWrite5m": 0,
+     "cacheWrite1h": 0,
+     "cacheRead": 0,
+     "thinking": 0,
+     "total": 0
+    },
+    "requests": 0,
+    "costUSD": 0,
+    "gramsCO2e": 0,
+    "models": []
+   },
+   {
+    "date": "2026-09-05",
+    "ts": 1788559200000,
+    "tokens": {
+     "input": 0,
+     "output": 0,
+     "cacheWrite": 0,
+     "cacheWrite5m": 0,
+     "cacheWrite1h": 0,
+     "cacheRead": 0,
+     "thinking": 0,
+     "total": 0
+    },
+    "requests": 0,
+    "costUSD": 0,
+    "gramsCO2e": 0,
+    "models": []
+   },
+   {
+    "date": "2026-09-06",
+    "ts": 1788645600000,
+    "tokens": {
+     "input": 0,
+     "output": 0,
+     "cacheWrite": 0,
+     "cacheWrite5m": 0,
+     "cacheWrite1h": 0,
+     "cacheRead": 0,
+     "thinking": 0,
+     "total": 0
+    },
+    "requests": 0,
+    "costUSD": 0,
+    "gramsCO2e": 0,
+    "models": []
+   },
+   {
+    "date": "2026-09-07",
+    "ts": 1788732000000,
+    "tokens": {
+     "input": 0,
+     "output": 0,
+     "cacheWrite": 0,
+     "cacheWrite5m": 0,
+     "cacheWrite1h": 0,
+     "cacheRead": 0,
+     "thinking": 0,
+     "total": 0
+    },
+    "requests": 0,
+    "costUSD": 0,
+    "gramsCO2e": 0,
+    "models": []
+   },
+   {
+    "date": "2026-09-08",
+    "ts": 1788818400000,
+    "tokens": {
+     "input": 0,
+     "output": 0,
+     "cacheWrite": 0,
+     "cacheWrite5m": 0,
+     "cacheWrite1h": 0,
+     "cacheRead": 0,
+     "thinking": 0,
+     "total": 0
+    },
+    "requests": 0,
+    "costUSD": 0,
+    "gramsCO2e": 0,
+    "models": []
+   },
+   {
+    "date": "2026-09-09",
+    "ts": 1788904800000,
+    "tokens": {
+     "input": 0,
+     "output": 0,
+     "cacheWrite": 0,
+     "cacheWrite5m": 0,
+     "cacheWrite1h": 0,
+     "cacheRead": 0,
+     "thinking": 0,
+     "total": 0
+    },
+    "requests": 0,
+    "costUSD": 0,
+    "gramsCO2e": 0,
+    "models": []
+   },
+   {
+    "date": "2026-09-10",
+    "ts": 1788991200000,
+    "tokens": {
+     "input": 0,
+     "output": 0,
+     "cacheWrite": 0,
+     "cacheWrite5m": 0,
+     "cacheWrite1h": 0,
+     "cacheRead": 0,
+     "thinking": 0,
+     "total": 0
+    },
+    "requests": 0,
+    "costUSD": 0,
+    "gramsCO2e": 0,
+    "models": []
+   },
+   {
+    "date": "2026-09-11",
+    "ts": 1789077600000,
+    "tokens": {
+     "input": 0,
+     "output": 0,
+     "cacheWrite": 0,
+     "cacheWrite5m": 0,
+     "cacheWrite1h": 0,
+     "cacheRead": 0,
+     "thinking": 0,
+     "total": 0
+    },
+    "requests": 0,
+    "costUSD": 0,
+    "gramsCO2e": 0,
+    "models": []
+   },
+   {
+    "date": "2026-09-12",
+    "ts": 1789164000000,
+    "tokens": {
+     "input": 0,
+     "output": 0,
+     "cacheWrite": 0,
+     "cacheWrite5m": 0,
+     "cacheWrite1h": 0,
+     "cacheRead": 0,
+     "thinking": 0,
+     "total": 0
+    },
+    "requests": 0,
+    "costUSD": 0,
+    "gramsCO2e": 0,
+    "models": []
+   },
+   {
+    "date": "2026-09-13",
+    "ts": 1789250400000,
+    "tokens": {
+     "input": 0,
+     "output": 0,
+     "cacheWrite": 0,
+     "cacheWrite5m": 0,
+     "cacheWrite1h": 0,
+     "cacheRead": 0,
+     "thinking": 0,
+     "total": 0
+    },
+    "requests": 0,
+    "costUSD": 0,
+    "gramsCO2e": 0,
+    "models": []
+   },
+   {
+    "date": "2026-09-14",
+    "ts": 1789336800000,
+    "tokens": {
+     "input": 0,
+     "output": 0,
+     "cacheWrite": 0,
+     "cacheWrite5m": 0,
+     "cacheWrite1h": 0,
+     "cacheRead": 0,
+     "thinking": 0,
+     "total": 0
+    },
+    "requests": 0,
+    "costUSD": 0,
+    "gramsCO2e": 0,
+    "models": []
+   },
+   {
+    "date": "2026-09-15",
+    "ts": 1789423200000,
+    "tokens": {
+     "input": 0,
+     "output": 0,
+     "cacheWrite": 0,
+     "cacheWrite5m": 0,
+     "cacheWrite1h": 0,
+     "cacheRead": 0,
+     "thinking": 0,
+     "total": 0
+    },
+    "requests": 0,
+    "costUSD": 0,
+    "gramsCO2e": 0,
+    "models": []
+   },
+   {
+    "date": "2026-09-16",
+    "ts": 1789509600000,
+    "tokens": {
+     "input": 121034,
+     "output": 18330,
+     "cacheWrite": 0,
+     "cacheWrite5m": 0,
+     "cacheWrite1h": 0,
+     "cacheRead": 2429440,
+     "thinking": 5222,
+     "total": 2568804
+    },
+    "requests": 40,
+    "costUSD": 0.6382725,
+    "gramsCO2e": 353.04954665327534,
+    "models": [
+     {
+      "id": "codex",
+      "label": "Codex",
+      "total": 2568804
+     }
+    ]
+   },
+   {
+    "date": "2026-09-17",
+    "ts": 1789596000000,
+    "tokens": {
+     "input": 0,
+     "output": 0,
+     "cacheWrite": 0,
+     "cacheWrite5m": 0,
+     "cacheWrite1h": 0,
+     "cacheRead": 0,
+     "thinking": 0,
+     "total": 0
+    },
+    "requests": 0,
+    "costUSD": 0,
+    "gramsCO2e": 0,
+    "models": []
+   },
+   {
+    "date": "2026-09-18",
+    "ts": 1789682400000,
+    "tokens": {
+     "input": 0,
+     "output": 0,
+     "cacheWrite": 0,
+     "cacheWrite5m": 0,
+     "cacheWrite1h": 0,
+     "cacheRead": 0,
+     "thinking": 0,
+     "total": 0
+    },
+    "requests": 0,
+    "costUSD": 0,
+    "gramsCO2e": 0,
+    "models": []
+   },
+   {
+    "date": "2026-09-19",
+    "ts": 1789768800000,
+    "tokens": {
+     "input": 22,
+     "output": 4994,
+     "cacheWrite": 113443,
+     "cacheWrite5m": 0,
+     "cacheWrite1h": 113443,
+     "cacheRead": 544593,
+     "thinking": 2189,
+     "total": 663052
+    },
+    "requests": 11,
+    "costUSD": 0.6126746000000001,
+    "gramsCO2e": 32.22187745043454,
+    "models": [
+     {
+      "id": "claude-sonnet-5",
+      "label": "Claude Sonnet 5",
+      "total": 663052
+     }
+    ]
+   },
+   {
+    "date": "2026-09-20",
+    "ts": 1789855200000,
+    "tokens": {
+     "input": 0,
+     "output": 0,
+     "cacheWrite": 0,
+     "cacheWrite5m": 0,
+     "cacheWrite1h": 0,
+     "cacheRead": 0,
+     "thinking": 0,
+     "total": 0
+    },
+    "requests": 0,
+    "costUSD": 0,
+    "gramsCO2e": 0,
+    "models": []
+   },
+   {
+    "date": "2026-09-21",
+    "ts": 1789941600000,
+    "tokens": {
+     "input": 0,
+     "output": 0,
+     "cacheWrite": 0,
+     "cacheWrite5m": 0,
+     "cacheWrite1h": 0,
+     "cacheRead": 0,
+     "thinking": 0,
+     "total": 0
+    },
+    "requests": 0,
+    "costUSD": 0,
+    "gramsCO2e": 0,
+    "models": []
+   },
+   {
+    "date": "2026-09-22",
+    "ts": 1790028000000,
+    "tokens": {
+     "input": 760,
+     "output": 358181,
+     "cacheWrite": 862556,
+     "cacheWrite5m": 0,
+     "cacheWrite1h": 862556,
+     "cacheRead": 78839654,
+     "thinking": 103210,
+     "total": 80061151
+    },
+    "requests": 379,
+    "costUSD": 57.003712,
+    "gramsCO2e": 5116.678484103047,
+    "models": [
+     {
+      "id": "claude-opus-5",
+      "label": "Claude Opus 5",
+      "total": 80061151
+     }
+    ]
+   },
+   {
+    "date": "2026-09-23",
+    "ts": 1790114400000,
+    "tokens": {
+     "input": 72494,
+     "output": 106766,
+     "cacheWrite": 378632,
+     "cacheWrite5m": 0,
+     "cacheWrite1h": 378632,
+     "cacheRead": 16648275,
+     "thinking": 32943,
+     "total": 17206167
+    },
+    "requests": 151,
+    "costUSD": 13.0922339,
+    "gramsCO2e": 1391.0752420987726,
+    "models": [
+     {
+      "id": "claude-opus-5",
+      "label": "Claude Opus 5",
+      "total": 14557783
+     },
+     {
+      "id": "claude-sonnet-5",
+      "label": "Claude Sonnet 5",
+      "total": 1862650
+     },
+     {
+      "id": "codex",
+      "label": "Codex",
+      "total": 785734
+     }
+    ]
+   },
+   {
+    "date": "2026-09-24",
+    "ts": 1790200800000,
+    "tokens": {
+     "input": 522,
+     "output": 226521,
+     "cacheWrite": 618257,
+     "cacheWrite5m": 0,
+     "cacheWrite1h": 618257,
+     "cacheRead": 52017074,
+     "thinking": 58260,
+     "total": 52862374
+    },
+    "requests": 261,
+    "costUSD": 37.856742,
+    "gramsCO2e": 3299.861083528753,
+    "models": [
+     {
+      "id": "claude-opus-5",
+      "label": "Claude Opus 5",
+      "total": 52862374
+     }
+    ]
+   },
+   {
+    "date": "2026-09-25",
+    "ts": 1790287200000,
+    "tokens": {
+     "input": 16,
+     "output": 1468,
+     "cacheWrite": 31014,
+     "cacheWrite5m": 0,
+     "cacheWrite1h": 31014,
+     "cacheRead": 428274,
+     "thinking": 172,
+     "total": 460772
+    },
+    "requests": 8,
+    "costUSD": 0.5610569999999999,
+    "gramsCO2e": 31.031707409769066,
+    "models": [
+     {
+      "id": "claude-opus-5",
+      "label": "Claude Opus 5",
+      "total": 460772
+     }
+    ]
+   },
+   {
+    "date": "2026-09-26",
+    "ts": 1790373600000,
+    "tokens": {
+     "input": 0,
+     "output": 0,
+     "cacheWrite": 0,
+     "cacheWrite5m": 0,
+     "cacheWrite1h": 0,
+     "cacheRead": 0,
+     "thinking": 0,
+     "total": 0
+    },
+    "requests": 0,
+    "costUSD": 0,
+    "gramsCO2e": 0,
+    "models": []
+   },
+   {
+    "date": "2026-09-27",
+    "ts": 1790460000000,
+    "tokens": {
+     "input": 28,
+     "output": 6123,
+     "cacheWrite": 137476,
+     "cacheWrite5m": 0,
+     "cacheWrite1h": 137476,
+     "cacheRead": 1178251,
+     "thinking": 1454,
+     "total": 1321878
+    },
+    "requests": 14,
+    "costUSD": 2.1171005,
+    "gramsCO2e": 120.88677273551407,
+    "models": [
+     {
+      "id": "claude-opus-5",
+      "label": "Claude Opus 5",
+      "total": 1321878
+     }
+    ]
+   },
+   {
+    "date": "2026-09-28",
+    "ts": 1790546400000,
+    "tokens": {
+     "input": 448,
+     "output": 154074,
+     "cacheWrite": 555516,
+     "cacheWrite5m": 0,
+     "cacheWrite1h": 555516,
+     "cacheRead": 20815542,
+     "thinking": 33357,
+     "total": 21525580
+    },
+    "requests": 224,
+    "costUSD": 10.2558188,
+    "gramsCO2e": 903.9179765619565,
+    "models": [
+     {
+      "id": "claude-sonnet-5",
+      "label": "Claude Sonnet 5",
+      "total": 17276326
+     },
+     {
+      "id": "claude-opus-5",
+      "label": "Claude Opus 5",
+      "total": 4249254
+     }
+    ]
+   }
+  ],
+  "hours": [
+   {
+    "hour": 0,
+    "tokens": 0,
+    "requests": 0,
+    "costUSD": 0,
+    "gramsCO2e": 0
+   },
+   {
+    "hour": 1,
+    "tokens": 0,
+    "requests": 0,
+    "costUSD": 0,
+    "gramsCO2e": 0
+   },
+   {
+    "hour": 2,
+    "tokens": 0,
+    "requests": 0,
+    "costUSD": 0,
+    "gramsCO2e": 0
+   },
+   {
+    "hour": 3,
+    "tokens": 0,
+    "requests": 0,
+    "costUSD": 0,
+    "gramsCO2e": 0
+   },
+   {
+    "hour": 4,
+    "tokens": 0,
+    "requests": 0,
+    "costUSD": 0,
+    "gramsCO2e": 0
+   },
+   {
+    "hour": 5,
+    "tokens": 0,
+    "requests": 0,
+    "costUSD": 0,
+    "gramsCO2e": 0
+   },
+   {
+    "hour": 6,
+    "tokens": 0,
+    "requests": 0,
+    "costUSD": 0,
+    "gramsCO2e": 0
+   },
+   {
+    "hour": 7,
+    "tokens": 0,
+    "requests": 0,
+    "costUSD": 0,
+    "gramsCO2e": 0
+   },
+   {
+    "hour": 8,
+    "tokens": 38524930,
+    "requests": 238,
+    "costUSD": 29.199031799999997,
+    "gramsCO2e": 2693.5758816523107
+   },
+   {
+    "hour": 9,
+    "tokens": 29664213,
+    "requests": 134,
+    "costUSD": 21.2595416,
+    "gramsCO2e": 1869.1342402511327
+   },
+   {
+    "hour": 10,
+    "tokens": 0,
+    "requests": 0,
+    "costUSD": 0,
+    "gramsCO2e": 0
+   },
+   {
+    "hour": 11,
+    "tokens": 0,
+    "requests": 0,
+    "costUSD": 0,
+    "gramsCO2e": 0
+   },
+   {
+    "hour": 12,
+    "tokens": 3890682,
+    "requests": 54,
+    "costUSD": 2.7553729999999996,
+    "gramsCO2e": 473.9363193887894
+   },
+   {
+    "hour": 13,
+    "tokens": 0,
+    "requests": 0,
+    "costUSD": 0,
+    "gramsCO2e": 0
+   },
+   {
+    "hour": 14,
+    "tokens": 0,
+    "requests": 0,
+    "costUSD": 0,
+    "gramsCO2e": 0
+   },
+   {
+    "hour": 15,
+    "tokens": 460772,
+    "requests": 8,
+    "costUSD": 0.5610569999999999,
+    "gramsCO2e": 31.031707409769066
+   },
+   {
+    "hour": 16,
+    "tokens": 0,
+    "requests": 0,
+    "costUSD": 0,
+    "gramsCO2e": 0
+   },
+   {
+    "hour": 17,
+    "tokens": 0,
+    "requests": 0,
+    "costUSD": 0,
+    "gramsCO2e": 0
+   },
+   {
+    "hour": 18,
+    "tokens": 0,
+    "requests": 0,
+    "costUSD": 0,
+    "gramsCO2e": 0
+   },
+   {
+    "hour": 19,
+    "tokens": 0,
+    "requests": 0,
+    "costUSD": 0,
+    "gramsCO2e": 0
+   },
+   {
+    "hour": 20,
+    "tokens": 57362231,
+    "requests": 456,
+    "costUSD": 36.0903863,
+    "gramsCO2e": 3188.9914857362646
+   },
+   {
+    "hour": 21,
+    "tokens": 45363004,
+    "requests": 162,
+    "costUSD": 31.764331100000003,
+    "gramsCO2e": 2861.213887852104
+   },
+   {
+    "hour": 22,
+    "tokens": 1403946,
+    "requests": 36,
+    "costUSD": 0.5078905,
+    "gramsCO2e": 132.98760455950236
+   },
+   {
+    "hour": 23,
+    "tokens": 0,
+    "requests": 0,
+    "costUSD": 0,
+    "gramsCO2e": 0
+   }
+  ],
+  "eventCount": 1088,
+  "reconciliation": [],
+  "billedDaysDropped": 0
+ },
+ "gauges": [
+  {
+   "id": "anthropic-five_hour",
+   "provider": "anthropic",
+   "product": "Claude",
+   "label": "Session 5 h",
+   "fullLabel": "Claude — session 5 h",
+   "windowHours": 5,
+   "startsAt": 1790619000120,
+   "resetsAt": 1790637000120,
+   "rolling": false,
+   "tokens": {
+    "input": 448,
+    "output": 154074,
+    "cacheWrite": 555516,
+    "cacheWrite5m": 0,
+    "cacheWrite1h": 555516,
+    "cacheRead": 20815542,
+    "thinking": 33357,
+    "total": 21525580
+   },
+   "requests": 224,
+   "byModel": {
+    "claude-sonnet-5-5": {
+     "input": 358,
+     "output": 133798,
+     "cacheWrite": 422896,
+     "cacheWrite5m": 0,
+     "cacheWrite1h": 422896,
+     "cacheRead": 16719274,
+     "thinking": 28655,
+     "total": 17276326
+    },
+    "claude-opus-5-5": {
+     "input": 90,
+     "output": 20276,
+     "cacheWrite": 132620,
+     "cacheWrite5m": 0,
+     "cacheWrite1h": 132620,
+     "cacheRead": 4096268,
+     "thinking": 4702,
+     "total": 4249254
+    }
+   },
+   "used": 3546767.2,
+   "limit": null,
+   "limitSource": "live",
+   "calibration": {
+    "limit": 10753825.4,
+    "observedAt": 1790106711349,
+    "samples": 2
+   },
+   "calibratedAt": null,
+   "approximate": false,
+   "percent": 22,
+   "liveAge": 251,
+   "stale": false,
+   "reportedAt": 1790620849288,
+   "calibratable": false,
+   "projection": {
+    "at": 1790630422266,
+    "inMs": 9572727.272727273,
+    "ratePerHour": 4729022.933333334,
+    "beforeReset": true,
+    "throttled": false
+   },
+   "nextLiveIn": 900000
+  },
+  {
+   "id": "anthropic-weekly",
+   "provider": "anthropic",
+   "product": "Claude",
+   "label": "Hebdomadaire",
+   "fullLabel": "Claude — hebdomadaire",
+   "windowHours": 168,
+   "startsAt": 1790449200120,
+   "resetsAt": 1791054000120,
+   "rolling": false,
+   "tokens": {
+    "input": 476,
+    "output": 160197,
+    "cacheWrite": 692992,
+    "cacheWrite5m": 0,
+    "cacheWrite1h": 692992,
+    "cacheRead": 21993793,
+    "thinking": 34811,
+    "total": 22847458
+   },
+   "requests": 238,
+   "byModel": {
+    "claude-opus-5-5": {
+     "input": 118,
+     "output": 26399,
+     "cacheWrite": 270096,
+     "cacheWrite5m": 0,
+     "cacheWrite1h": 270096,
+     "cacheRead": 5274519,
+     "thinking": 6156,
+     "total": 5571132
+    },
+    "claude-sonnet-5-5": {
+     "input": 358,
+     "output": 133798,
+     "cacheWrite": 422896,
+     "cacheWrite5m": 0,
+     "cacheWrite1h": 422896,
+     "cacheRead": 16719274,
+     "thinking": 28655,
+     "total": 17276326
+    }
+   },
+   "used": 3867080.3000000003,
+   "limit": null,
+   "limitSource": "live",
+   "calibratedAt": null,
+   "approximate": false,
+   "percent": 14,
+   "liveAge": 251,
+   "stale": false,
+   "reportedAt": 1790620849288,
+   "calibratable": false,
+   "projection": {
+    "at": 1790645510984,
+    "inMs": 24661445.166743092,
+    "ratePerHour": 4729022.933333334,
+    "beforeReset": true,
+    "throttled": true
+   },
+   "nextLiveIn": 900000
+  },
+  {
+   "id": "codex-43200min",
+   "provider": "openai",
+   "product": "Codex",
+   "label": "Mensuelle",
+   "fullLabel": "Codex — mensuelle",
+   "windowHours": 720,
+   "startsAt": 1788291213000,
+   "resetsAt": 1790883213000,
+   "rolling": false,
+   "tokens": {
+    "input": 193280,
+    "output": 23722,
+    "cacheWrite": 0,
+    "cacheWrite5m": 0,
+    "cacheWrite1h": 0,
+    "cacheRead": 3137536,
+    "thinking": 6898,
+    "total": 3354538
+   },
+   "requests": 67,
+   "byModel": {},
+   "used": 625643.6000000001,
+   "limit": 906729.855072464,
+   "limitSource": "provider",
+   "calibratedAt": null,
+   "approximate": false,
+   "percent": 69,
+   "stale": false,
+   "reportedAt": 1790196906523,
+   "plan": "free",
+   "calibratable": false,
+   "projection": null
+  }
+ ],
+ "sources": [
+  {
+   "id": "claude-code",
+   "label": "Claude Code",
+   "providesTokens": true,
+   "enabled": true,
+   "available": true,
+   "events": 1021,
+   "newEvents": 1021,
+   "eventsInRange": 1021,
+   "quota": 2,
+   "error": null,
+   "note": null,
+   "stats": {
+    "files": 24,
+    "events": 1021,
+    "skippedDuplicates": 1334,
+    "unreadable": 0
+   }
+  },
+  {
+   "id": "anthropic-oauth",
+   "label": "Claude — usage en direct",
+   "providesTokens": false,
+   "enabled": true,
+   "available": true,
+   "events": 0,
+   "newEvents": 0,
+   "eventsInRange": 0,
+   "quota": 2,
+   "error": null,
+   "note": null,
+   "stats": {
+    "files": 0,
+    "events": 0,
+    "skippedDuplicates": 0,
+    "unreadable": 0
+   }
+  },
+  {
+   "id": "codex-cli",
+   "label": "Codex CLI",
+   "providesTokens": true,
+   "enabled": true,
+   "available": true,
+   "events": 67,
+   "newEvents": 67,
+   "eventsInRange": 67,
+   "quota": 67,
+   "error": null,
+   "note": null,
+   "stats": {
+    "files": 2,
+    "events": 67,
+    "skippedDuplicates": 0,
+    "unreadable": 0
+   }
+  },
+  {
+   "id": "anthropic-api",
+   "label": "API Anthropic (organisation)",
+   "providesTokens": true,
+   "enabled": true,
+   "available": false,
+   "events": 0,
+   "newEvents": 0,
+   "eventsInRange": 0,
+   "quota": 0,
+   "error": null,
+   "note": "Renseignez une clé Admin Anthropic (sk-ant-admin…) dans les réglages.",
+   "stats": {
+    "files": 0,
+    "events": 0,
+    "skippedDuplicates": 0,
+    "unreadable": 0
+   }
+  },
+  {
+   "id": "openai-api",
+   "label": "API OpenAI (organisation)",
+   "providesTokens": true,
+   "enabled": true,
+   "available": false,
+   "events": 0,
+   "newEvents": 0,
+   "eventsInRange": 0,
+   "quota": 0,
+   "error": null,
+   "note": "Renseignez une clé Admin OpenAI (sk-admin-…) dans les réglages.",
+   "stats": {
+    "files": 0,
+    "events": 0,
+    "skippedDuplicates": 0,
+    "unreadable": 0
+   }
+  }
+ ],
+ "config": {
+  "version": 1,
+  "disabledSources": [],
+  "apiLookbackDays": 30,
+  "carbon": {
+   "gridKey": "us-average",
+   "localGridKey": "france",
+   "pue": null
+  },
+  "limits": {},
+  "limitMeta": {},
+  "alerts": {
+   "enabled": true,
+   "thresholds": [
+    80,
+    95
+   ],
+   "projection": true
+  },
+  "budgetMonthlyUsd": 200,
+  "locale": "auto",
+  "shortcut": "CommandOrControl+Alt+T",
+  "launchAtLogin": false,
+  "checkUpdates": true,
+  "refreshIntervalSec": 60,
+  "trayMetric": "session",
+  "currency": "USD",
+  "defaultRangeDays": 30,
+  "retentionDays": 1095,
+  "compactAfterDays": 90,
+  "modelOverrides": {}
+ },
+ "hasKeys": {
+  "openai": false,
+  "anthropic": false
+ },
+ "methodology": {
+  "factors": [
+   {
+    "group": "Méthode d’inférence",
+    "key": "MODEL_QUANTIZATION_BITS",
+    "value": "4",
+    "unit": "bits",
+    "source": "ecologits",
+    "citation": "EcoLogits (GenAI Impact), Méthodologie d'inférence LLM, version et date de consultation NON RELEVÉES",
+    "pinned": false,
+    "note": "Hypothèse de service en production. Aucun fournisseur fermé ne publie sa quantification ; elle ne joue que sur le nombre de GPU nécessaires, donc sur la part serveur et la fabrication."
+   },
+   {
+    "group": "Méthode d’inférence",
+    "key": "GPU_ENERGY_ALPHA",
+    "value": "0.0000891",
+    "unit": "Wh/token/Md-paramètres",
+    "source": "ecologits",
+    "citation": "EcoLogits (GenAI Impact), Méthodologie d'inférence LLM, version et date de consultation NON RELEVÉES",
+    "pinned": false,
+    "note": "Régression EcoLogits sur modèles ouverts, extrapolée aux modèles fermés."
+   },
+   {
+    "group": "Méthode d’inférence",
+    "key": "GPU_ENERGY_BETA",
+    "value": "0.00143",
+    "unit": "Wh/token",
+    "source": "ecologits",
+    "citation": "EcoLogits (GenAI Impact), Méthodologie d'inférence LLM, version et date de consultation NON RELEVÉES",
+    "pinned": false,
+    "note": "L'URL pointe `latest` : elle suit les révisions de la méthode. À remplacer par une URL versionnée avant tout usage en livrable, sans quoi le calcul ne serait pas reproductible."
+   },
+   {
+    "group": "Méthode d’inférence",
+    "key": "GPU_LATENCY_ALPHA",
+    "value": "0.000802",
+    "unit": "s/token/Md-paramètres",
+    "source": "ecologits",
+    "citation": "EcoLogits (GenAI Impact), Méthodologie d'inférence LLM, version et date de consultation NON RELEVÉES",
+    "pinned": false,
+    "note": "L'URL pointe `latest` : elle suit les révisions de la méthode. À remplacer par une URL versionnée avant tout usage en livrable, sans quoi le calcul ne serait pas reproductible."
+   },
+   {
+    "group": "Méthode d’inférence",
+    "key": "GPU_LATENCY_BETA",
+    "value": "0.0223",
+    "unit": "s/token",
+    "source": "ecologits",
+    "citation": "EcoLogits (GenAI Impact), Méthodologie d'inférence LLM, version et date de consultation NON RELEVÉES",
+    "pinned": false,
+    "note": "L'URL pointe `latest` : elle suit les révisions de la méthode. À remplacer par une URL versionnée avant tout usage en livrable, sans quoi le calcul ne serait pas reproductible."
+   },
+   {
+    "group": "Méthode d’inférence",
+    "key": "GPU_MEMORY_GB",
+    "value": "80",
+    "unit": "Go",
+    "source": "ecologits",
+    "citation": "EcoLogits (GenAI Impact), Méthodologie d'inférence LLM, version et date de consultation NON RELEVÉES",
+    "pinned": false,
+    "note": "Serveur de référence A100 80 Go. Le matériel réellement employé par les fournisseurs est plus récent (H100/H200, TPU) et vraisemblablement plus efficace : le calcul est donc plutôt conservateur."
+   },
+   {
+    "group": "Méthode d’inférence",
+    "key": "SERVER_GPU_COUNT",
+    "value": "8",
+    "unit": "GPU",
+    "source": "ecologits",
+    "citation": "EcoLogits (GenAI Impact), Méthodologie d'inférence LLM, version et date de consultation NON RELEVÉES",
+    "pinned": false,
+    "note": "L'URL pointe `latest` : elle suit les révisions de la méthode. À remplacer par une URL versionnée avant tout usage en livrable, sans quoi le calcul ne serait pas reproductible."
+   },
+   {
+    "group": "Méthode d’inférence",
+    "key": "SERVER_POWER_W",
+    "value": "1000",
+    "unit": "W",
+    "source": "ecologits",
+    "citation": "EcoLogits (GenAI Impact), Méthodologie d'inférence LLM, version et date de consultation NON RELEVÉES",
+    "pinned": false,
+    "note": "Hors GPU."
+   },
+   {
+    "group": "Méthode d’inférence",
+    "key": "GPU_EMBODIED_GWP_KG",
+    "value": "143",
+    "unit": "kgCO2e/GPU",
+    "source": "boavizta",
+    "citation": "Boavizta, Facteurs d’impact de fabrication des serveurs et GPU, version et date de consultation NON RELEVÉES",
+    "pinned": false,
+    "note": "Repris par EcoLogits pour les impacts embarqués. Les valeurs retenues correspondent à un serveur 8 GPU A100 80 Go ; elles n'ont pas été reprises à la source Boavizta elle-même."
+   },
+   {
+    "group": "Méthode d’inférence",
+    "key": "SERVER_EMBODIED_GWP_KG",
+    "value": "3000",
+    "unit": "kgCO2e/serveur",
+    "source": "boavizta",
+    "citation": "Boavizta, Facteurs d’impact de fabrication des serveurs et GPU, version et date de consultation NON RELEVÉES",
+    "pinned": false,
+    "note": "Hors GPU."
+   },
+   {
+    "group": "Méthode d’inférence",
+    "key": "HARDWARE_LIFESPAN_S",
+    "value": "157680000",
+    "unit": "s",
+    "source": "boavizta",
+    "citation": "Boavizta, Facteurs d’impact de fabrication des serveurs et GPU, version et date de consultation NON RELEVÉES",
+    "pinned": false,
+    "note": "Amortissement sur 5 ans. Une durée de vie réelle plus courte en centre de données majorerait la part de fabrication."
+   },
+   {
+    "group": "Pondération par classe de token",
+    "key": "output",
+    "value": "1 – 1",
+    "unit": "équivalent-token de sortie",
+    "source": "traceDerived",
+    "citation": "TRACE, Dérivation interne TRACE (bilan de FLOPs), v0.1.0",
+    "pinned": true,
+    "note": "Référence, 1.0 par définition."
+   },
+   {
+    "group": "Pondération par classe de token",
+    "key": "input",
+    "value": "0.012 – 0.06",
+    "unit": "équivalent-token de sortie",
+    "source": "traceDerived",
+    "citation": "TRACE, Dérivation interne TRACE (bilan de FLOPs), v0.1.0",
+    "pinned": true,
+    "note": "Bilan de FLOPs du prefill, MFU 40 % (borne basse) à MFU faible (borne haute)."
+   },
+   {
+    "group": "Pondération par classe de token",
+    "key": "cacheWrite",
+    "value": "0.014 – 0.07",
+    "unit": "équivalent-token de sortie",
+    "source": "traceDerived",
+    "citation": "TRACE, Dérivation interne TRACE (bilan de FLOPs), v0.1.0",
+    "pinned": true,
+    "note": "Prefill + persistance du KV."
+   },
+   {
+    "group": "Pondération par classe de token",
+    "key": "cacheRead",
+    "value": "0.0006 – 0.005",
+    "unit": "équivalent-token de sortie",
+    "source": "traceDerived",
+    "citation": "TRACE, Dérivation interne TRACE (bilan de FLOPs), v0.1.0",
+    "pinned": true,
+    "note": "Lecture mémoire et attention seules ; projections et FFN économisés."
+   },
+   {
+    "group": "Mix électrique",
+    "key": "États-Unis (moyenne)",
+    "value": "369",
+    "unit": "gCO2e/kWh",
+    "source": "epaEgrid",
+    "citation": "U.S. Environmental Protection Agency, eGRID — Emissions & Generation Resource Integrated Database, version et date de consultation NON RELEVÉES",
+    "pinned": false,
+    "note": "Approche location-based."
+   },
+   {
+    "group": "Infrastructure du fournisseur",
+    "key": "Anthropic — PUE",
+    "value": "1.09 – 1.2",
+    "unit": "sans dimension",
+    "source": "providerInfra",
+    "citation": "Amazon Web Services, Google, Microsoft, Rapports environnementaux des exploitants de centres de données, version et date de consultation NON RELEVÉES",
+    "pinned": false,
+    "note": "Anthropic sert ses modèles depuis AWS (Trainium) et Google Cloud. La fourchette couvre les moyennes de flotte annoncées par ces deux exploitants, sans savoir laquelle sert une requête donnée."
+   },
+   {
+    "group": "Infrastructure du fournisseur",
+    "key": "Anthropic — eau sur site",
+    "value": "0.18 – 1.1",
+    "unit": "L/kWh",
+    "source": "waterFootprint",
+    "citation": "Li et al. (UC Riverside / UT Arlington), arXiv:2304.03271, Making AI Less Thirsty — empreinte eau de l’inférence, version et date de consultation NON RELEVÉES",
+    "pinned": false,
+    "note": "Hébergement : Amazon Web Services, Google Cloud."
+   },
+   {
+    "group": "Infrastructure du fournisseur",
+    "key": "OpenAI — PUE",
+    "value": "1.12 – 1.25",
+    "unit": "sans dimension",
+    "source": "providerInfra",
+    "citation": "Amazon Web Services, Google, Microsoft, Rapports environnementaux des exploitants de centres de données, version et date de consultation NON RELEVÉES",
+    "pinned": false,
+    "note": "OpenAI sert ses modèles depuis Azure. La fourchette couvre la moyenne de flotte annoncée par Microsoft et la dispersion entre régions, la région servant une requête donnée n'étant pas connue."
+   },
+   {
+    "group": "Infrastructure du fournisseur",
+    "key": "OpenAI — eau sur site",
+    "value": "0.3 – 0.5",
+    "unit": "L/kWh",
+    "source": "waterFootprint",
+    "citation": "Li et al. (UC Riverside / UT Arlington), arXiv:2304.03271, Making AI Less Thirsty — empreinte eau de l’inférence, version et date de consultation NON RELEVÉES",
+    "pinned": false,
+    "note": "Hébergement : Microsoft Azure."
+   },
+   {
+    "group": "Infrastructure du fournisseur",
+    "key": "Machine locale — PUE",
+    "value": "1 – 1.1",
+    "unit": "sans dimension",
+    "source": "traceDerived",
+    "citation": "TRACE, Dérivation interne TRACE (bilan de FLOPs), v0.1.0",
+    "pinned": true,
+    "note": "Pas de centre de données : ni refroidissement mécanique dédié (PUE ~ 1) ni consommation d'eau. Un seul GPU grand public de 24 Go, et le mix électrique du domicile et non celui du fournisseur."
+   },
+   {
+    "group": "Infrastructure du fournisseur",
+    "key": "Machine locale — eau sur site",
+    "value": "0 – 0",
+    "unit": "L/kWh",
+    "source": "traceDerived",
+    "citation": "TRACE, Dérivation interne TRACE (bilan de FLOPs), v0.1.0",
+    "pinned": true,
+    "note": "Hébergement : poste de l'utilisateur."
+   },
+   {
+    "group": "Infrastructure du fournisseur",
+    "key": "Fournisseur non identifié — PUE",
+    "value": "1.2 – 1.6",
+    "unit": "sans dimension",
+    "source": "providerInfra",
+    "citation": "Amazon Web Services, Google, Microsoft, Rapports environnementaux des exploitants de centres de données, version et date de consultation NON RELEVÉES",
+    "pinned": false,
+    "note": "Aucun rattachement connu : la fourchette s'ouvre du meilleur hyperscaler à un centre de données de colocation ordinaire (PUE ~ 1,5), et le mix électrique retenu est la moyenne mondiale plutôt qu'une hypothèse de localisation flatteuse."
+   },
+   {
+    "group": "Infrastructure du fournisseur",
+    "key": "Fournisseur non identifié — eau sur site",
+    "value": "0.2 – 1.8",
+    "unit": "L/kWh",
+    "source": "waterFootprint",
+    "citation": "Li et al. (UC Riverside / UT Arlington), arXiv:2304.03271, Making AI Less Thirsty — empreinte eau de l’inférence, version et date de consultation NON RELEVÉES",
+    "pinned": false,
+    "note": "Hébergement : inconnu."
+   },
+   {
+    "group": "Empreinte eau",
+    "key": "OFFSITE_L_PER_KWH",
+    "value": "1.2 – 3.1",
+    "unit": "L/kWh",
+    "source": "waterFootprint",
+    "citation": "Li et al. (UC Riverside / UT Arlington), arXiv:2304.03271, Making AI Less Thirsty — empreinte eau de l’inférence, version et date de consultation NON RELEVÉES",
+    "pinned": false,
+    "note": "Eau consommée pour produire l'électricité, hors site. Fourchette couvrant les mix électriques courants, faute d'un facteur par pays."
+   },
+   {
+    "group": "Équivalent de communication",
+    "key": "km en voiture",
+    "value": "120",
+    "unit": "gCO2e/unité",
+    "source": "ademe",
+    "citation": "ADEME, Base Carbone, version et date de consultation NON RELEVÉES",
+    "pinned": false,
+    "note": "Voiture particulière moyenne, usage seul (hors fabrication du véhicule)."
+   },
+   {
+    "group": "Équivalent de communication",
+    "key": "h de streaming vidéo",
+    "value": "36",
+    "unit": "gCO2e/unité",
+    "source": "ademe",
+    "citation": "ADEME, Base Carbone, version et date de consultation NON RELEVÉES",
+    "pinned": false,
+    "note": "Ordre de grandeur très dépendant du terminal, de la définition et du réseau."
+   },
+   {
+    "group": "Équivalent de communication",
+    "key": "charges de smartphone",
+    "value": "8",
+    "unit": "gCO2e/unité",
+    "source": "ademe",
+    "citation": "ADEME, Base Carbone, version et date de consultation NON RELEVÉES",
+    "pinned": false,
+    "note": "Une charge complète sur le mix français, hors fabrication de l’appareil."
+   },
+   {
+    "group": "Équivalent de communication",
+    "key": "km en TGV",
+    "value": "2.3",
+    "unit": "gCO2e/unité",
+    "source": "ademe",
+    "citation": "ADEME, Base Carbone, version et date de consultation NON RELEVÉES",
+    "pinned": false,
+    "note": "Par voyageur-kilomètre, sur le mix électrique français."
+   },
+   {
+    "group": "Équivalent de communication",
+    "key": "g de bœuf",
+    "value": "27",
+    "unit": "gCO2e/unité",
+    "source": "ademe",
+    "citation": "ADEME, Base Carbone, version et date de consultation NON RELEVÉES",
+    "pinned": false,
+    "note": "Viande bovine, du champ à l’assiette. Périmètre cycle de vie, contrairement aux autres équivalents."
+   }
+  ],
+  "unpinned": [
+   {
+    "id": "ecologits",
+    "label": "Méthodologie d'inférence LLM",
+    "publisher": "EcoLogits (GenAI Impact)",
+    "url": "https://ecologits.ai/latest/methodology/llm_inference/"
+   },
+   {
+    "id": "boavizta",
+    "label": "Facteurs d’impact de fabrication des serveurs et GPU",
+    "publisher": "Boavizta",
+    "url": "https://boavizta.org/"
+   },
+   {
+    "id": "ademe",
+    "label": "Base Carbone",
+    "publisher": "ADEME",
+    "url": "https://base-empreinte.ademe.fr/"
+   },
+   {
+    "id": "epaEgrid",
+    "label": "eGRID — Emissions & Generation Resource Integrated Database",
+    "publisher": "U.S. Environmental Protection Agency",
+    "url": "https://www.epa.gov/egrid"
+   },
+   {
+    "id": "ember",
+    "label": "Global Electricity Review / Yearly Electricity Data",
+    "publisher": "Ember",
+    "url": "https://ember-energy.org/data/yearly-electricity-data/"
+   },
+   {
+    "id": "providerInfra",
+    "label": "Rapports environnementaux des exploitants de centres de données",
+    "publisher": "Amazon Web Services, Google, Microsoft",
+    "url": "https://sustainability.aboutamazon.com/"
+   },
+   {
+    "id": "waterFootprint",
+    "label": "Making AI Less Thirsty — empreinte eau de l’inférence",
+    "publisher": "Li et al. (UC Riverside / UT Arlington), arXiv:2304.03271",
+    "url": "https://arxiv.org/abs/2304.03271"
+   },
+   {
+    "id": "providerPricing",
+    "label": "Grilles tarifaires publiques des fournisseurs",
+    "publisher": "Anthropic, OpenAI",
+    "url": "https://www.anthropic.com/pricing"
+   }
+  ],
+  "grids": {
+   "france": {
+    "label": "France",
+    "value": 56,
+    "source": "ademe",
+    "basis": "location-based"
+   },
+   "sweden": {
+    "label": "Suède / Nordique",
+    "value": 40,
+    "source": "ember",
+    "basis": "location-based"
+   },
+   "canada": {
+    "label": "Canada",
+    "value": 120,
+    "source": "ember",
+    "basis": "location-based"
+   },
+   "uk": {
+    "label": "Royaume-Uni",
+    "value": 210,
+    "source": "ember",
+    "basis": "location-based"
+   },
+   "eu-27": {
+    "label": "Union européenne",
+    "value": 250,
+    "source": "ember",
+    "basis": "location-based"
+   },
+   "us-west": {
+    "label": "États-Unis (Ouest)",
+    "value": 240,
+    "source": "epaEgrid",
+    "basis": "location-based"
+   },
+   "us-east": {
+    "label": "États-Unis (Est / Virginie)",
+    "value": 320,
+    "source": "epaEgrid",
+    "basis": "location-based"
+   },
+   "us-average": {
+    "label": "États-Unis (moyenne)",
+    "value": 369,
+    "source": "epaEgrid",
+    "basis": "location-based"
+   },
+   "germany": {
+    "label": "Allemagne",
+    "value": 380,
+    "source": "ember",
+    "basis": "location-based"
+   },
+   "world": {
+    "label": "Moyenne mondiale",
+    "value": 480,
+    "source": "ember",
+    "basis": "location-based"
+   },
+   "asia": {
+    "label": "Asie-Pacifique",
+    "value": 540,
+    "source": "ember",
+    "basis": "location-based"
+   }
+  },
+  "providers": {
+   "anthropic": {
+    "label": "Anthropic",
+    "hosts": "Amazon Web Services, Google Cloud",
+    "pue": {
+     "min": 1.09,
+     "max": 1.2
+    },
+    "wueL": {
+     "min": 0.18,
+     "max": 1.1
+    },
+    "gridKey": "us-average",
+    "source": "providerInfra",
+    "basis": "Anthropic sert ses modèles depuis AWS (Trainium) et Google Cloud. La fourchette couvre les moyennes de flotte annoncées par ces deux exploitants, sans savoir laquelle sert une requête donnée."
+   },
+   "openai": {
+    "label": "OpenAI",
+    "hosts": "Microsoft Azure",
+    "pue": {
+     "min": 1.12,
+     "max": 1.25
+    },
+    "wueL": {
+     "min": 0.3,
+     "max": 0.5
+    },
+    "gridKey": "us-average",
+    "source": "providerInfra",
+    "basis": "OpenAI sert ses modèles depuis Azure. La fourchette couvre la moyenne de flotte annoncée par Microsoft et la dispersion entre régions, la région servant une requête donnée n'étant pas connue."
+   },
+   "local": {
+    "label": "Machine locale",
+    "hosts": "poste de l'utilisateur",
+    "pue": {
+     "min": 1,
+     "max": 1.1
+    },
+    "wueL": {
+     "min": 0,
+     "max": 0
+    },
+    "gridKey": "france",
+    "gpuMemoryGb": 24,
+    "source": "traceDerived",
+    "basis": "Pas de centre de données : ni refroidissement mécanique dédié (PUE ~ 1) ni consommation d'eau. Un seul GPU grand public de 24 Go, et le mix électrique du domicile et non celui du fournisseur."
+   },
+   "unknown": {
+    "label": "Fournisseur non identifié",
+    "hosts": "inconnu",
+    "pue": {
+     "min": 1.2,
+     "max": 1.6
+    },
+    "wueL": {
+     "min": 0.2,
+     "max": 1.8
+    },
+    "gridKey": "world",
+    "source": "providerInfra",
+    "basis": "Aucun rattachement connu : la fourchette s'ouvre du meilleur hyperscaler à un centre de données de colocation ordinaire (PUE ~ 1,5), et le mix électrique retenu est la moyenne mondiale plutôt qu'une hypothèse de localisation flatteuse."
+   }
+  }
+ },
+ "staleError": null,
+ "budget": {
+  "limitUSD": 200,
+  "spentUSD": 122.13761129999999,
+  "percent": 61.06880564999999,
+  "projectedUSD": 159.0652991471377,
+  "projectedPercent": 79.53264957356885,
+  "costIncomplete": false,
+  "monthStart": 1788213600000,
+  "monthEnd": 1790805600000,
+  "state": "ok"
+ },
+ "extra": {}
+}

@@ -7,6 +7,7 @@
 mod commands;
 // Public pour que l'exemple de comparaison puisse le vider.
 pub mod icon;
+mod startup;
 mod state;
 mod windows;
 
@@ -65,6 +66,65 @@ fn default_shortcut() -> Shortcut {
     Shortcut::new(Some(mods), Code::KeyT)
 }
 
+/// Aligne l'entrée de démarrage du système sur le réglage.
+///
+/// On ne touche à rien quand l'état est déjà le bon : réécrire la clé Run à
+/// chaque lancement réveillerait inutilement l'antivirus, et effacerait une
+/// entrée que l'utilisateur aurait lui-même déplacée.
+pub(crate) fn apply_launch_at_login(app: &tauri::AppHandle, want: bool) {
+    use tauri_plugin_autostart::ManagerExt;
+    let launcher = app.autolaunch();
+    let current = match launcher.is_enabled() {
+        Ok(c) => c,
+        Err(e) => {
+            log::warn!("lecture du lancement à la connexion : {e}");
+            return;
+        }
+    };
+    if current == want {
+        return;
+    }
+    let done = if want {
+        launcher.enable()
+    } else {
+        launcher.disable()
+    };
+    if let Err(e) = done {
+        log::warn!("lancement à la connexion (activé : {want}) : {e}");
+    }
+}
+
+/// Le raccourci écrit dans les réglages, ou `None` si la chaîne est invalide.
+fn parse_shortcut(spec: &str) -> Option<Shortcut> {
+    spec.trim().parse().ok()
+}
+
+/// Remplace le raccourci global, sans jamais laisser l'utilisateur sans.
+///
+/// Le nouveau est essayé AVANT que l'ancien ne soit retiré à jamais : s'il est
+/// refusé — syntaxe invalide, ou déjà pris par une autre application — l'ancien
+/// est remis en place, et l'appelant en est informé.
+pub(crate) fn replace_shortcut(app: &tauri::AppHandle, old: &str, new: &str) -> bool {
+    use tauri_plugin_global_shortcut::GlobalShortcutExt;
+    let Some(next) = parse_shortcut(new) else {
+        log::warn!("raccourci invalide : {new:?}");
+        return false;
+    };
+    let gs = app.global_shortcut();
+    let previous = parse_shortcut(old).unwrap_or_else(default_shortcut);
+    let _ = gs.unregister(previous);
+    match gs.register(next) {
+        Ok(()) => true,
+        Err(e) => {
+            log::warn!("raccourci {new:?} refusé : {e}");
+            // Le rétablissement peut échouer à son tour ; l'icône reste
+            // cliquable dans tous les cas.
+            let _ = gs.register(previous);
+            false
+        }
+    }
+}
+
 /// Montre ou cache le popover.
 ///
 /// Un popover se comporte comme un popover : s'il est déjà là, le geste qui
@@ -97,8 +157,23 @@ fn tray_menu(app: &tauri::AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Avant tout : sans moteur web, rien de ce qui suit ne peut s'afficher, et
+    // l'échec doit se lire plutôt que de laisser un double-clic muet.
+    startup::ensure_webview();
+
     tauri::Builder::default()
-        // En premier : les autres greffons, et le cœur, journalisent dès leur
+        // Avant tout autre greffon, comme l'exige le sien. Une seconde
+        // instance — l'autostart de la session PUIS un double-clic — ne
+        // démarre pas : elle réveille celle qui tourne, puis se termine.
+        // Sans ce garde, elle plantait à la création du moteur web (le dossier
+        // de données est verrouillé par la première), et une application sans
+        // console ne dit rien de ce genre de panne.
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Err(e) = windows::show_dashboard(app) {
+                log::warn!("réveil de l'instance en cours : {e}");
+            }
+        }))
+        // Ensuite : les autres greffons, et le cœur, journalisent dès leur
         // initialisation. Une application empaquetée n'a pas de terminal, et
         // un `eprintln!` y partait dans le vide — le fichier tournant, dans
         // le dossier de journaux du système, est la seule trace qui reste.
@@ -116,6 +191,10 @@ pub fn run() {
                 .build(),
         )
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None,
+        ))
         .plugin(tauri_plugin_notification::init())
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
@@ -139,6 +218,7 @@ pub fn run() {
             commands::dashboard_open,
             commands::popover_close,
             commands::export_csv,
+            commands::export_report,
             commands::shortcut_status,
             commands::open_external,
             commands::renderer_log,
@@ -156,6 +236,11 @@ pub fn run() {
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
 
             windows::build_popover(&handle)?;
+
+            // Le réglage existait sans rien qui l'applique : la case se
+            // cochait, se sauvegardait, et ne changeait rien au démarrage.
+            let want = app.state::<state::AppState>().config().launch_at_login;
+            apply_launch_at_login(&handle, want);
 
             TrayIconBuilder::with_id(TRAY_ID)
                 .icon(tray_image(None)?)
@@ -189,7 +274,12 @@ pub fn run() {
             // Un raccourci déjà pris par une autre application n'est pas une
             // raison de refuser de démarrer : l'icône reste cliquable, et
             // `shortcut_status` le dit dans les réglages.
-            let registered = match app.global_shortcut().register(default_shortcut()) {
+            //
+            // Le raccourci des réglages, pas seulement celui par défaut : il
+            // s'enregistrait dans `config.json` sans jamais être appliqué.
+            let wanted = parse_shortcut(&app.state::<state::AppState>().config().shortcut)
+                .unwrap_or_else(default_shortcut);
+            let registered = match app.global_shortcut().register(wanted) {
                 Ok(()) => true,
                 Err(e) => {
                     log::warn!("raccourci global indisponible : {e}");

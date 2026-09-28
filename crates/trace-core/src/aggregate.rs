@@ -61,6 +61,46 @@ pub struct Group {
     pub cost_without_cache_usd: f64,
     pub carbon: carbon::Total,
     pub models: Vec<ModelSlice>,
+    /// Ce que ce même groupe valait sur la période précédente de même durée.
+    /// Absent quand le groupe n'existait pas alors : une variation « depuis
+    /// zéro » n'a pas de pourcentage défendable.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub versus_previous: Option<GroupChange>,
+}
+
+/// La comparaison d'un groupe (un modèle, un projet) à la période précédente.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GroupChange {
+    pub tokens: i64,
+    #[serde(rename = "costUSD")]
+    pub cost_usd: f64,
+    /// En pourcentage. `None` si la période précédente était vide, ou si un
+    /// prix inconnu rend le coût de l'un des deux côtés incomparable.
+    pub tokens_change: Option<f64>,
+    pub cost_change: Option<f64>,
+}
+
+/// Rattache à chaque groupe sa valeur de la période précédente.
+///
+/// Un groupe sans homologue reste sans comparaison plutôt que d'afficher
+/// « +∞ % » : un projet nouveau est une information, pas un pourcentage.
+fn attach_previous(groups: &mut [Group], previous: &[Group]) {
+    let by_key: HashMap<&str, &Group> = previous.iter().map(|g| (g.key.as_str(), g)).collect();
+    for g in groups {
+        let Some(p) = by_key.get(g.key.as_str()) else {
+            continue;
+        };
+        let comparable_cost = !g.cost_unknown && !p.cost_unknown;
+        g.versus_previous = Some(GroupChange {
+            tokens: p.tokens.total,
+            cost_usd: p.cost_usd,
+            tokens_change: pct_change(g.tokens.total as f64, p.tokens.total as f64),
+            cost_change: comparable_cost
+                .then(|| pct_change(g.cost_usd, p.cost_usd))
+                .flatten(),
+        });
+    }
 }
 
 /// Agrège des événements par une clé arbitraire, en conservant la ventilation
@@ -152,6 +192,7 @@ where
                 cost_without_cache_usd,
                 carbon: carbon_total,
                 models: slices.into_iter().map(|(m, _, _)| m).collect(),
+                versus_previous: None,
             }
         })
         .collect()
@@ -361,6 +402,14 @@ pub struct Report {
 /// avant qu'on soupçonne une plage aberrante.
 const PROJECT_ROWS: usize = 10;
 
+/// La clé de regroupement par projet, la même pour la période et sa
+/// précédente : sans cela, la comparaison ne rapprocherait rien.
+fn project_key(e: &Event) -> String {
+    e.project
+        .clone()
+        .unwrap_or_else(|| "sans projet".to_string())
+}
+
 fn pct_change(cur: f64, prev: f64) -> Option<f64> {
     if prev > 0.0 {
         Some(((cur - prev) / prev) * 100.0)
@@ -390,17 +439,7 @@ pub fn report(events: &[Event], opts: &Options) -> Report {
     let mut by_model = group_by(&in_range, |e| Some(e.model.clone()), opts);
     by_model.sort_by_key(|g| std::cmp::Reverse(g.tokens.total));
 
-    let mut by_project = group_by(
-        &in_range,
-        |e| {
-            Some(
-                e.project
-                    .clone()
-                    .unwrap_or_else(|| "sans projet".to_string()),
-            )
-        },
-        opts,
-    );
+    let mut by_project = group_by(&in_range, |e| Some(project_key(e)), opts);
     by_project.sort_by_key(|g| std::cmp::Reverse(g.tokens.total));
 
     let mut tokens = Tokens::empty();
@@ -475,6 +514,9 @@ pub fn report(events: &[Event], opts: &Options) -> Report {
         .cloned()
         .collect();
     let prev_by_model = group_by(&prev_events, |e| Some(e.model.clone()), opts);
+    let prev_by_project = group_by(&prev_events, |e| Some(project_key(e)), opts);
+    attach_previous(&mut by_model, &prev_by_model);
+    attach_previous(&mut by_project, &prev_by_project);
     let mut prev_tokens = Tokens::empty();
     let mut prev_cost = 0.0;
     for g in &prev_by_model {

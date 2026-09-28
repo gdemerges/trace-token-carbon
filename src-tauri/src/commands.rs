@@ -78,9 +78,35 @@ pub fn config_get(state: State<'_, AppState>) -> Value {
 }
 
 #[tauri::command]
-pub fn config_set(state: State<'_, AppState>, patch: Value) -> Value {
+pub fn config_set(app: AppHandle, state: State<'_, AppState>, mut patch: Value) -> Value {
+    // Le raccourci d'abord : s'il est refusé, on ne l'enregistre pas — le
+    // reste du correctif, lui, s'applique. Enregistrer une chaîne qu'on sait
+    // inopérante ferait mentir les réglages au prochain démarrage.
+    let old_shortcut = state.config().shortcut;
+    let mut shortcut_ok = true;
+    let requested = patch["shortcut"].as_str().map(|s| s.trim().to_string());
+    if let Some(new) = requested.filter(|n| *n != old_shortcut) {
+        shortcut_ok = crate::replace_shortcut(&app, &old_shortcut, &new);
+        state.set_shortcut_registered(shortcut_ok || state.shortcut_registered());
+        if !shortcut_ok {
+            if let Some(p) = patch.as_object_mut() {
+                p.remove("shortcut");
+            }
+        }
+    }
+
     match state.patch_config(patch) {
-        Ok(c) => to_value(&c),
+        Ok(c) => {
+            crate::apply_launch_at_login(&app, c.launch_at_login);
+            let mut v = to_value(&c);
+            // Absent quand rien n'a changé : l'interface ne teste que `false`.
+            if !shortcut_ok {
+                if let Some(o) = v.as_object_mut() {
+                    o.insert("shortcutOk".into(), json!(false));
+                }
+            }
+            v
+        }
         Err(e) => {
             log::error!("config_set : {e}");
             config_get(state)
@@ -166,13 +192,62 @@ pub fn popover_close(app: AppHandle) {
     }
 }
 
-/// Rend l'export CSV, données et annexe méthodologique.
+/// Écrit un export dans le dossier Téléchargements et rend son chemin.
+///
+/// Sans boîte de dialogue : un export doit atterrir quelque part de prévisible
+/// et se dire dans un message. L'heure est dans le nom, pour qu'un second
+/// export du jour n'écrase pas le premier.
+fn save_export(
+    stem: &str,
+    suffix: &str,
+    ext: &str,
+    content: &str,
+) -> Result<std::path::PathBuf, String> {
+    let dir =
+        dirs::download_dir().unwrap_or_else(|| trace_core::util::home_dir().join("Downloads"));
+    std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    let stamp = chrono::Local::now().format("%Y-%m-%d-%H%M%S");
+    let path = dir.join(format!("{stem}-{stamp}{suffix}.{ext}"));
+    std::fs::write(&path, content).map_err(|e| format!("{}: {e}", path.display()))?;
+    Ok(path)
+}
+
+fn export_result(res: Result<Value, String>) -> Value {
+    res.unwrap_or_else(|e| {
+        log::error!("export : {e}");
+        json!({ "ok": false, "error": e })
+    })
+}
+
+/// Exporte les données en CSV, plus l'annexe méthodologique à côté.
 ///
 /// Un tableau de grammes sans les facteurs qui l'ont produit n'est pas
-/// vérifiable : les deux partent ensemble, séparés par une ligne vide.
+/// vérifiable : les deux fichiers partent ensemble. Rend la forme qu'attend
+/// l'interface — `{ ok, rows, filePath }` — et non le texte brut : rendre le
+/// CSV sans l'écrire laissait le bouton d'export muet.
 #[tauri::command]
-pub fn export_csv(state: State<'_, AppState>, options: Option<Value>) -> String {
-    state.export_csv(&snapshot_options(options))
+pub fn export_csv(state: State<'_, AppState>, options: Option<Value>) -> Value {
+    export_result((|| {
+        let (data, method) = state.export_csv(&snapshot_options(options));
+        let path = save_export("trace-export", "", "csv", &data)?;
+        save_export("trace-export", "-methodology", "csv", &method)?;
+        Ok(json!({
+            "ok": true,
+            // Sans l'en-tête.
+            "rows": data.lines().count().saturating_sub(1),
+            "filePath": path.to_string_lossy(),
+        }))
+    })())
+}
+
+/// Exporte le rapport carbone en Markdown.
+#[tauri::command]
+pub fn export_report(state: State<'_, AppState>, options: Option<Value>) -> Value {
+    export_result((|| {
+        let md = state.report_markdown(&snapshot_options(options));
+        let path = save_export("trace-carbon-report", "", "md", &md)?;
+        Ok(json!({ "ok": true, "filePath": path.to_string_lossy() }))
+    })())
 }
 
 #[tauri::command]

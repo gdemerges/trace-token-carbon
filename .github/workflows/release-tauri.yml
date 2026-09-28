@@ -18,6 +18,10 @@ jobs:
   build:
     name: ${{ matrix.label }}
     runs-on: ${{ matrix.os }}
+    # Au niveau du job : le `if` d'une étape ne voit pas l'`env` de cette même
+    # étape, seulement celui du job.
+    env:
+      WIN_CERTIFICATE_P12: ${{ secrets.WIN_CERTIFICATE_P12 }}
     strategy:
       fail-fast: false
       matrix:
@@ -58,6 +62,32 @@ jobs:
       - name: Éprouver le cœur
         run: cargo test -p trace-core -p trace-cli
 
+      # Windows — Authenticode. `tauri-action` ne lit PAS `WINDOWS_CERTIFICATE` :
+      # Tauri signe avec le certificat trouvé, par son empreinte, dans le
+      # magasin du système. Il faut donc l'y importer, puis lui donner
+      # l'empreinte par une surcharge de configuration. Sans cette étape, la
+      # « signature » ne signait rien et les binaires sortaient non signés sans
+      # un mot. Absent le secret, l'étape est sautée et le build reste valide.
+      - name: Importer le certificat Windows
+        id: winsign
+        if: matrix.os == 'windows-latest' && env.WIN_CERTIFICATE_P12 != ''
+        shell: pwsh
+        env:
+          WIN_CERTIFICATE_PASSWORD: ${{ secrets.WIN_CERTIFICATE_PASSWORD }}
+        run: |
+          $pfx = Join-Path $env:RUNNER_TEMP 'certificate.pfx'
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WIN_CERTIFICATE_P12))
+          $cert = Import-PfxCertificate -FilePath $pfx -CertStoreLocation Cert:\CurrentUser\My `
+            -Password (ConvertTo-SecureString -String $env:WIN_CERTIFICATE_PASSWORD -Force -AsPlainText)
+          Remove-Item $pfx
+          $overlay = @{ bundle = @{ windows = @{
+            certificateThumbprint = $cert.Thumbprint
+            digestAlgorithm = 'sha256'
+            timestampUrl = 'http://timestamp.digicert.com'
+          } } } | ConvertTo-Json -Depth 5
+          Set-Content -Path (Join-Path $env:RUNNER_TEMP 'tauri.sign.conf.json') -Value $overlay
+          "config=--config $env:RUNNER_TEMP\tauri.sign.conf.json" >> $env:GITHUB_OUTPUT
+
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -69,11 +99,9 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          # Windows — signature Authenticode, même logique.
-          WINDOWS_CERTIFICATE: ${{ secrets.WIN_CERTIFICATE_P12 }}
-          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WIN_CERTIFICATE_PASSWORD }}
+          # Windows — voir l'étape « Importer le certificat Windows » ci-dessus.
         with:
-          args: --target ${{ matrix.target }}
+          args: --target ${{ matrix.target }} ${{ steps.winsign.outputs.config }}
           tagName: ${{ github.ref_name }}
           releaseName: TRACE ${{ github.ref_name }}
           releaseDraft: true

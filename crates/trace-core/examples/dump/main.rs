@@ -20,6 +20,7 @@ mod export;
 mod gauges;
 mod live;
 mod pricing;
+mod report;
 mod snapshot;
 
 /// Même rendu que `Number.prototype.toExponential(10)` de JS, qui écrit le
@@ -80,6 +81,7 @@ const DUMPS: &[(&str, &str, fn())] = &[
         "l'instantané JSON tel qu'il part vers l'interface",
         snapshot::run,
     ),
+    ("report", "le rapport carbone en Markdown", report::run),
 ];
 
 fn main() {

@@ -17,6 +17,9 @@ pub struct AppState {
     /// est un événement, pas un état : sans cette mémoire, la notification se
     /// répéterait à chaque cycle.
     fired: Mutex<Fired>,
+    /// La même mémoire pour le budget, à part : `alerts::evaluate` élague
+    /// tout ce qui n'est pas une fenêtre de jauge vivante.
+    budget_fired: Mutex<Fired>,
     shortcut_registered: AtomicBool,
 }
 
@@ -29,6 +32,7 @@ impl AppState {
         AppState {
             inner: Mutex::new(core::refresh(config, true)),
             fired: Mutex::new(Fired::new()),
+            budget_fired: Mutex::new(Fired::new()),
             shortcut_registered: AtomicBool::new(false),
         }
     }
@@ -57,7 +61,13 @@ impl AppState {
         let mut fired = self.fired.lock().unwrap_or_else(|e| e.into_inner());
         let out = alerts::evaluate(&snap.gauges, &config, &fired, trace_core::util::now_ms());
         *fired = out.state;
-        out.notifications
+        let mut notifications = out.notifications;
+
+        let mut budget_fired = self.budget_fired.lock().unwrap_or_else(|e| e.into_inner());
+        let budget = alerts::evaluate_budget(snap.budget.as_ref(), &config, &budget_fired);
+        *budget_fired = budget.state;
+        notifications.extend(budget.notifications);
+        notifications
     }
 
     pub fn snapshot(&self, opts: &SnapshotOptions) -> Snapshot {
@@ -127,7 +137,10 @@ impl AppState {
     }
 
     /// L'export, construit sur la MÊME période que ce qui est affiché.
-    pub fn export_csv(&self, opts: &SnapshotOptions) -> String {
+    ///
+    /// Rend les données et l'annexe méthodologique SÉPARÉES : deux tables aux
+    /// colonnes différentes dans un même CSV ne se lisent dans aucun tableur.
+    pub fn export_csv(&self, opts: &SnapshotOptions) -> (String, String) {
         use trace_core::aggregate::{export_rows, methodology_rows, to_csv, Options};
         let s = self.inner.lock().unwrap_or_else(|e| e.into_inner());
         let snap = core::snapshot(&s, opts);
@@ -143,7 +156,13 @@ impl AppState {
         };
         let data = to_csv(&export_rows(&s.events, &report_opts));
         let method = to_csv(&methodology_rows(Some(&s.config.carbon.grid_key)));
-        format!("{data}\n\n{method}")
+        (data, method)
+    }
+
+    /// Le rapport carbone, sur la même période que l'écran.
+    pub fn report_markdown(&self, opts: &SnapshotOptions) -> String {
+        let s = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        trace_core::report_md::carbon_report(&core::snapshot(&s, opts))
     }
 
     pub fn set_shortcut_registered(&self, ok: bool) {

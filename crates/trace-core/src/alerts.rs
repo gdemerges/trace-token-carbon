@@ -16,6 +16,7 @@
 //!  3. Une nouvelle fenêtre remet les compteurs à zéro. L'identité d'une
 //!     fenêtre inclut son instant de réinitialisation.
 
+use crate::budget::BudgetStatus;
 use crate::i18n::{t, tp};
 use crate::ratelimits::Gauge;
 use crate::store::Config;
@@ -221,6 +222,118 @@ pub fn evaluate(gauges: &[Gauge], config: &Config, state: &Fired, now: i64) -> O
         }
     }
 
+    Outcome {
+        notifications,
+        state: next,
+    }
+}
+
+/// Formate un montant en dollars pour une notification : sans décimales dès
+/// que les centimes ne changent plus rien à la lecture.
+fn dollars(v: f64) -> String {
+    if v >= 100.0 {
+        format!("${v:.0}")
+    } else {
+        format!("${v:.2}")
+    }
+}
+
+/// Décide des notifications de budget.
+///
+/// Mêmes règles que pour les jauges : un franchissement est un événement, on
+/// ne notifie que le seuil le PLUS HAUT franchi, et la projection ne parle
+/// qu'AVANT le premier seuil — plus tard, elle doublerait l'alerte de seuil.
+/// Le mois, lui, remplace la fenêtre : son début identifie l'état, donc un
+/// nouveau mois réarme tout.
+///
+/// `state` est la mémoire propre au budget, distincte de celle des jauges :
+/// `evaluate` élague tout ce qui n'est pas une fenêtre vivante.
+pub fn evaluate_budget(budget: Option<&BudgetStatus>, config: &Config, state: &Fired) -> Outcome {
+    let keep = |state: &Fired| Outcome {
+        notifications: Vec::new(),
+        state: state.clone(),
+    };
+    let Some(b) = budget else {
+        return Outcome {
+            notifications: Vec::new(),
+            state: HashMap::new(),
+        };
+    };
+    if !config.alerts.enabled {
+        return keep(state);
+    }
+
+    let mut thresholds: Vec<f64> = config
+        .alerts
+        .thresholds
+        .iter()
+        .copied()
+        .filter(|t| t.is_finite() && *t > 0.0 && *t <= 100.0)
+        .collect();
+    if thresholds.is_empty() {
+        thresholds = DEFAULT_THRESHOLDS.to_vec();
+    }
+    thresholds.sort_by(f64::total_cmp);
+
+    let key = format!("budget@{}", b.month_start);
+    let already: HashSet<&str> = state
+        .get(&key)
+        .map(|v| v.iter().map(String::as_str).collect())
+        .unwrap_or_default();
+    let mut fired: Vec<String> = already.iter().map(|s| s.to_string()).collect();
+    let mut notifications = Vec::new();
+    let limit = dollars(b.limit_usd);
+
+    if config.alerts.projection && !already.contains(TRAJECTORY) && b.percent < thresholds[0] {
+        if let Some(projected) = b.projected_usd.filter(|p| *p > b.limit_usd) {
+            notifications.push(Notification {
+                key: key.clone(),
+                gauge_id: "budget".to_string(),
+                threshold: TRAJECTORY.to_string(),
+                percent: b.percent,
+                projected_at: None,
+                title: tp("alert.budget.projected.title", &[("limit", limit.clone())]),
+                body: tp(
+                    "alert.budget.projected.body",
+                    &[
+                        ("projected", dollars(projected)),
+                        ("spent", dollars(b.spent_usd)),
+                    ],
+                ),
+                urgency: "normal",
+            });
+            fired.push(TRAJECTORY.to_string());
+        }
+    }
+
+    let crossed: Vec<f64> = thresholds
+        .iter()
+        .copied()
+        .filter(|t| b.percent >= *t && !already.contains(fmt_threshold(*t).as_str()))
+        .collect();
+    if let Some(top) = crossed.last().copied() {
+        notifications.push(Notification {
+            key: key.clone(),
+            gauge_id: "budget".to_string(),
+            threshold: fmt_threshold(top),
+            percent: b.percent,
+            projected_at: None,
+            title: tp(
+                "alert.budget.title",
+                &[("percent", b.percent.round().to_string()), ("limit", limit)],
+            ),
+            body: tp("alert.budget.body", &[("spent", dollars(b.spent_usd))]),
+            urgency: if top >= 95.0 { "critical" } else { "normal" },
+        });
+        fired.extend(crossed.into_iter().map(fmt_threshold));
+    }
+
+    let mut next = HashMap::new();
+    if !fired.is_empty() {
+        fired.sort();
+        fired.dedup();
+        next.insert(key, fired);
+    }
     Outcome {
         notifications,
         state: next,

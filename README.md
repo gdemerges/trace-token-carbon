@@ -53,13 +53,24 @@ The code layout is described under [Architecture](#architecture).
 | `Esc` | Closes the popover |
 | `⌘Tab` | Reaches the dashboard when it's open |
 | `⌘↩` | Opens the dashboard |
+| Export buttons (dashboard) | CSV data plus its methodology annex, or the carbon report in Markdown — written to your Downloads folder |
 | `trace --json` | Machine output, for a status bar or a script |
 | `trace --carbon` | Water, grid-mix sensitivity, uncertainty breakdown |
 | `trace --lang=en` | Forces the language (`fr`, `en`) |
 
-The shortcut, language, grid mix, refresh interval, menu-bar metric,
-retained level of detail, and version check are all configured from the
-dashboard's settings gear.
+The shortcut, language, grid mix, monthly budget, refresh interval,
+menu-bar metric, retained level of detail, launch at login, and version
+check are all configured from the dashboard's settings gear.
+
+**One instance at a time.** Launching TRACE while it already runs (login
+item, then a double-click) doesn't start a second process: it brings the
+dashboard of the first to the front and exits. Two processes would fight
+over the web engine's data folder, and the second used to crash without a
+word — an app with no console has no other way to say so.
+
+**If the web engine is missing** (Windows without the WebView2 runtime),
+TRACE says so in a dialog with the download link instead of failing
+silently.
 
 ### Language
 
@@ -352,6 +363,40 @@ A trajectory alert fires **at most once per window**, and only **before the
 first threshold**: any later, it would duplicate the threshold alert instead
 of anticipating it.
 
+## Monthly budget
+
+Set a monthly ceiling in the settings (USD, at published API rates — the
+same figures as the cost card) and the dashboard, the CLI (`trace`,
+`trace --json`) and the notifications track it. The budget always describes
+the **current calendar month**, whatever period the dashboard displays: a
+monthly ceiling set against a seven-day view means nothing.
+
+The projection is the same idea as the gauges' trajectory, with the same
+refusals:
+
+- **No pace, no projection.** It needs at least 3 days of history: extrapolating
+  a month from a morning would announce overruns that never happen.
+- **No recent activity, no projection.** A zero pace never exceeds anything;
+  "same amount at month-end" would only repeat the spend.
+- **A missing price is said.** If a model has no published rate, the spend is
+  a floor, and the card announces it.
+
+The pace is the spend of the last 7 days, divided by 7 (or by the actual
+history if shorter). Alerts follow the gauges' rules — once per threshold and
+per month, the highest threshold crossed only, and the projection only speaks
+*before* the first threshold. A new month re-arms everything.
+
+Amounts are in dollars because published rates are. Converting would need an
+exchange rate, hence one more outbound request that the [Privacy](#privacy)
+table doesn't have.
+
+### Comparison with the previous period
+
+Every model and every project carries its change against the previous period
+of the same length (the "vs. previous" column). A group that didn't exist
+then reads "new" instead of "+∞ %", and the arrow is hidden when the previous
+period is nearly empty — the same guard as the headline figures.
+
 ## Privacy
 
 Everything is local. The logs analyzed contain your code and your
@@ -370,6 +415,12 @@ The last one is the only one added without being asked for, and it's a
 one-click toggle in settings: nothing is downloaded or installed, it's a
 notification and a link.
 
+- **Exports** (CSV, methodology annex, carbon report) are written by the
+  main process to your Downloads folder, with the time in the file name so a
+  second export never overwrites the first. The renderer never picks a path.
+- **Launch at login** adds one entry to the system's startup list (registry
+  `Run` key on Windows, LaunchAgent on macOS, autostart entry on Linux), only
+  when the setting is on, and removes it when it's turned off.
 - The renderer has **no filesystem access**. It can only call the commands
   the app explicitly registers, under a Tauri capability file
   (`src-tauri/capabilities/default.json`) that grants window dragging and
@@ -552,10 +603,34 @@ triggered on a `v*` tag:
 |---|---|
 | `MAC_CERTIFICATE_P12` / `MAC_CERTIFICATE_PASSWORD` / `APPLE_SIGNING_IDENTITY` | "Developer ID Application" certificate |
 | `APPLE_ID` / `APPLE_APP_SPECIFIC_PASSWORD` / `APPLE_TEAM_ID` | notarization |
-| `WIN_CERTIFICATE_P12` / `WIN_CERTIFICATE_PASSWORD` | Authenticode signing |
+| `WIN_CERTIFICATE_P12` (base64 of the `.pfx`) / `WIN_CERTIFICATE_PASSWORD` | Authenticode signing |
 
 If absent, the workflow produces unsigned binaries and says so, rather than
 failing on a certificate a fork wouldn't have.
+
+**Windows signing needs its own step.** `tauri-action` doesn't read a
+certificate from the environment: Tauri signs with the certificate it finds,
+by thumbprint, in the system store. The workflow therefore imports the
+`.pfx` first and passes the thumbprint through a configuration overlay. An
+earlier version passed the secrets as environment variables and signed
+nothing. **This path has never run against a real certificate** — check the
+first signed release with `Get-AuthenticodeSignature` before trusting it.
+Until a certificate exists, Windows builds trigger SmartScreen.
+
+### Package managers
+
+There is no release yet, so no manifest is committed. Once a release is
+published (not a draft), generate them from its real files:
+
+```bash
+node scripts/package-manifests.mjs v0.1.0
+```
+
+The script reads the assets actually attached to the release, downloads each
+to compute its SHA-256, and writes a winget manifest, a Homebrew cask and an
+AUR `PKGBUILD` into `dist-packaging/<version>/` — only for the platforms it
+found a binary for. Submitting them to winget-pkgs, a Homebrew tap and the
+AUR is a manual step.
 
 **No auto-update**, and there won't be one: installing code in the
 background on someone's machine requires a trust chain that a serverless
@@ -565,6 +640,12 @@ version and reports it once (`crates/trace-core/src/update.rs`).
 ---
 
 ## Known limitations
+
+- **Cursor isn't covered.** Its local store (`state.vscdb`) holds
+  conversations, but token counts there aren't a documented, stable format,
+  and usage is metered server-side. A source that can't produce a measured
+  number stays out (see above) — TRACE won't estimate from character counts.
+- The budget is in USD (see [Monthly budget](#monthly-budget)).
 
 - Closed-model parameters are estimated: the carbon range spans roughly an
   order of magnitude. That's irreducible without provider disclosure.
